@@ -15,7 +15,6 @@ xcuserdata/
 # Swift Package Manager
 .build/
 greendot.app
-Status Menu.app
 UITests/*.xcodeproj
 .uitest-scratch/
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata

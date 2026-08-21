@@ -5,7 +5,6 @@ excluded:
   - .build
   - UITests
   - greendot.app
-  - Status Menu.app
 line_length: 120
 identifier_name:
   min_length: 3
