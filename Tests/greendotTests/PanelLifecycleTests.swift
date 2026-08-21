@@ -103,6 +103,60 @@ final class PanelLifecycleTests: XCTestCase {
         }
     }
 
+    func testShouldSeedOpenAIOnlyWhenLoadSucceededAndPagesEmpty() {
+        XCTAssertTrue(AppDelegate.shouldSeedOpenAI(loadSucceeded: true, pagesEmpty: true, skipSeed: false))
+        XCTAssertFalse(AppDelegate.shouldSeedOpenAI(loadSucceeded: false, pagesEmpty: true, skipSeed: false))
+        XCTAssertFalse(AppDelegate.shouldSeedOpenAI(loadSucceeded: true, pagesEmpty: false, skipSeed: false))
+        XCTAssertFalse(AppDelegate.shouldSeedOpenAI(loadSucceeded: true, pagesEmpty: true, skipSeed: true))
+    }
+
+    func testLoadMonitorPresentsCorruptStoreErrorAndLeavesFile() throws {
+        let (dir, configURL) = try writeTempConfig(Data("{".utf8))
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let monitor = Monitor(store: PageStore(directory: dir), client: MapHTTPClient())
+        let delegate = AppDelegate()
+        var presented: Error?
+        delegate.presentError = { presented = $0 }
+        XCTAssertFalse(delegate.loadMonitor(monitor))
+        XCTAssertEqual(presented as? StoreError, .corrupt)
+        XCTAssertTrue(monitor.pages.isEmpty)
+        XCTAssertEqual(try Data(contentsOf: configURL), Data("{".utf8))
+    }
+
+    func testLoadMonitorSucceedsWhenConfigIsMissing() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let monitor = Monitor(store: PageStore(directory: dir), client: MapHTTPClient())
+        let delegate = AppDelegate()
+        var presented: Error?
+        delegate.presentError = { presented = $0 }
+        XCTAssertTrue(delegate.loadMonitor(monitor))
+        XCTAssertNil(presented)
+        XCTAssertTrue(monitor.pages.isEmpty)
+    }
+
+    func testPerformStoreChangePresentsSaveError() throws {
+        let (dir, monitor) = try loadedMonitorWithPage()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try replaceConfigWithDirectory(in: dir)
+        let delegate = AppDelegate()
+        var presented = false
+        delegate.presentError = { _ in presented = true }
+        delegate.performStoreChange { try monitor.remove(id: monitor.pages[0].id) }
+        XCTAssertTrue(presented)
+    }
+
+    func testPerformStoreChangeDoesNotPresentOnSuccess() throws {
+        let (dir, monitor) = try loadedMonitorWithPage()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let delegate = AppDelegate()
+        var presented = false
+        delegate.presentError = { _ in presented = true }
+        delegate.performStoreChange { try monitor.remove(id: monitor.pages[0].id) }
+        XCTAssertFalse(presented)
+        XCTAssertTrue(monitor.pages.isEmpty)
+    }
+
     private static func checkboxes(in view: NSView?) -> [NSButton] {
         guard let view else { return [] }
         var found: [NSButton] = []
@@ -148,4 +202,29 @@ final class PanelLifecycleTests: XCTestCase {
             )
         )
     }
+}
+
+private func writeTempConfig(_ data: Data) throws -> (URL, URL) {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let configURL = dir.appendingPathComponent("config.json")
+    try data.write(to: configURL)
+    return (dir, configURL)
+}
+
+private func loadedMonitorWithPage() throws -> (URL, Monitor) {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let store = PageStore(directory: dir)
+    var config = AppConfig()
+    config.pages = [WatchedPage(url: URL(string: "https://www.githubstatus.com")!, name: "GitHub")]
+    try store.save(config)
+    let monitor = Monitor(store: store, client: MapHTTPClient())
+    try monitor.load()
+    return (dir, monitor)
+}
+
+private func replaceConfigWithDirectory(in directory: URL) throws {
+    let config = directory.appendingPathComponent("config.json")
+    try FileManager.default.removeItem(at: config)
+    try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
 }

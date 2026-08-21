@@ -8,6 +8,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pulseTimer: Timer?
     private var panel: PagePanelController?
     private var notifier: Notifier?
+    var presentError: (Error) -> Void = { error in
+        _ = NSAlert(error: error).runModal()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppEditMenu.install()
@@ -21,14 +24,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let monitor = Monitor(store: store, client: client)
         monitor.onLaunchAtLoginEnable = { LaunchAtLogin.enable() }
-        try? monitor.load()
+        let loadSucceeded = loadMonitor(monitor)
         self.monitor = monitor
 
         let notifier = Notifier()
         notifier.requestPermissionIfNeeded()
         self.notifier = notifier
 
-        if ProcessInfo.processInfo.environment["GREENDOT_SKIP_LOGIN_ITEM"] == nil {
+        if loadSucceeded, ProcessInfo.processInfo.environment["GREENDOT_SKIP_LOGIN_ITEM"] == nil {
             monitor.enableLaunchAtLoginOnFirstRun()
         }
 
@@ -41,11 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installUITestHooks()
 
         Task {
-            if ProcessInfo.processInfo.environment["GREENDOT_SKIP_SEED"] == nil,
-               monitor.pages.isEmpty,
-               let url = URL(string: "https://status.openai.com") {
-                try? await monitor.add(url: url, name: "OpenAI")
-            }
+            await self.maybeSeedOpenAI(monitor: monitor, loadSucceeded: loadSucceeded)
             await self.pollAndRefresh()
         }
 
@@ -58,6 +57,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pulseTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             self?.refreshIcon()
         }
+    }
+
+    func loadMonitor(_ monitor: Monitor) -> Bool {
+        do {
+            try monitor.load()
+            return true
+        } catch {
+            presentError(error)
+            return false
+        }
+    }
+
+    static func shouldSeedOpenAI(loadSucceeded: Bool, pagesEmpty: Bool, skipSeed: Bool) -> Bool {
+        loadSucceeded && pagesEmpty && !skipSeed
+    }
+
+    func performStoreChange(_ work: () throws -> Void) {
+        do {
+            try work()
+            rebuild()
+        } catch {
+            presentError(error)
+        }
+    }
+
+    private func maybeSeedOpenAI(monitor: Monitor, loadSucceeded: Bool) async {
+        let skipSeed = ProcessInfo.processInfo.environment["GREENDOT_SKIP_SEED"] != nil
+        guard Self.shouldSeedOpenAI(
+            loadSucceeded: loadSucceeded,
+            pagesEmpty: monitor.pages.isEmpty,
+            skipSeed: skipSeed
+        ), let url = URL(string: "https://status.openai.com") else { return }
+        try? await monitor.add(url: url, name: "OpenAI")
     }
 
     private func pollAndRefresh() async {
@@ -89,12 +121,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 onAdd: { [weak self] in self?.openPanel(editing: nil) },
                 onEdit: { [weak self] page in self?.openPanel(editing: page) },
                 onRemove: { [weak self] id in
-                    try? self?.monitor?.remove(id: id)
-                    self?.rebuild()
+                    self?.performStoreChange { try self?.monitor?.remove(id: id) }
                 },
                 onToggleNotifications: { [weak self] id in
-                    try? self?.monitor?.toggleNotifications(id: id)
-                    self?.rebuild()
+                    self?.performStoreChange { try self?.monitor?.toggleNotifications(id: id) }
                 },
                 onOpen: { url in
                     URLOpener.open(url)
@@ -127,29 +157,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         }
                         await MainActor.run { self.rebuild() }
                     } catch {
-                        await MainActor.run {
-                            let alert = NSAlert(error: error)
-                            _ = alert.runModal()
-                        }
+                        await MainActor.run { self.presentError(error) }
                     }
                 }
             },
             onToggleComponent: editing.map { page in
                 { [weak self] name in
-                    try? self?.monitor?.toggleComponent(id: page.id, name: name)
-                    self?.rebuild()
+                    self?.performStoreChange { try self?.monitor?.toggleComponent(id: page.id, name: name) }
                 }
             },
             onSetAll: editing.map { page in
                 { [weak self] enabled in
-                    try? self?.monitor?.setAllComponents(id: page.id, enabled: enabled)
-                    self?.rebuild()
+                    self?.performStoreChange { try self?.monitor?.setAllComponents(id: page.id, enabled: enabled) }
                 }
             },
             onRemove: editing.map { page in
                 { [weak self] in
-                    try? self?.monitor?.remove(id: page.id)
-                    self?.rebuild()
+                    self?.performStoreChange { try self?.monitor?.remove(id: page.id) }
                 }
             }
         )
