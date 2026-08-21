@@ -45,6 +45,7 @@ enum MenuBuilder {
 
         menu.addItem(.separator())
         menu.addItem(actionItem("Quit greendot", identifier: "quit", action: actions.onQuit))
+        MenuClickOpener.install(menu)
         return menu
     }
 
@@ -58,6 +59,8 @@ enum MenuBuilder {
         item.image = StatusDot.image(severity)
         item.identifier = NSUserInterfaceItemIdentifier("page-\(page.id.uuidString)")
         item.submenu = pageSubmenu(page, actions: actions)
+        let url = page.snapshot?.url ?? page.url
+        TargetAction.install(item) { actions.onOpen(url) }
         return item
     }
 
@@ -144,9 +147,8 @@ enum MenuBuilder {
                 sub.addItem(componentItem(child, url: url, onOpen: onOpen))
             }
             row.submenu = sub
-        } else {
-            TargetAction.install(row) { onOpen(url) }
         }
+        TargetAction.install(row) { onOpen(url) }
         return row
     }
 

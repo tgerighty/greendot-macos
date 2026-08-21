@@ -30,7 +30,16 @@ final class MenuBarController: NSObject {
         let menu = menuProvider?() ?? NSMenu()
         statusItem.menu = menu
         let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 800, height: 600)
-        let point = NSPoint(x: screen.midX, y: screen.maxY - 8)
+        let point = NSPoint(x: screen.midX, y: screen.midY)
         menu.popUp(positioning: nil, at: point, in: nil)
+    }
+
+    @discardableResult
+    func performMenuPath(_ path: String) -> Bool {
+        MenuCommands.perform(path: path, in: menuProvider?() ?? NSMenu())
+    }
+
+    func dumpMenu() -> String {
+        MenuCommands.dump(menuProvider?() ?? NSMenu())
     }
 }
