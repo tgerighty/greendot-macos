@@ -95,13 +95,12 @@ final class ComponentPicker: NSObject {
         }
     }
 
-    @objc private func allClicked(_ sender: NSButton) {
+    @objc private func allClicked(_: NSButton) {
         let nodes = rootComponents.flatMap(Self.collect)
         let allOn = nodes.allSatisfy { !isOff($0) }
         setEnabled(!allOn, nodes: nodes)
         refreshTreeStates()
         onSetAll(!allOn)
-        _ = sender
     }
 
     @objc private func componentClicked(_ sender: NSButton) {

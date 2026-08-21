@@ -23,12 +23,11 @@ final class MenuClickOpener: NSObject, NSMenuDelegate {
         }
     }
 
-    func menu(_ menu: NSMenu, willHighlight item: NSMenuItem?) {
+    func menu(_: NSMenu, willHighlight item: NSMenuItem?) {
         highlighted = item
-        _ = menu.title
     }
 
-    func menuWillOpen(_ menu: NSMenu) {
+    func menuWillOpen(_: NSMenu) {
         if openCount == 0 {
             isTracking = true
             monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [weak self] event in
@@ -36,10 +35,9 @@ final class MenuClickOpener: NSObject, NSMenuDelegate {
             }
         }
         openCount += 1
-        _ = menu.title
     }
 
-    func menuDidClose(_ menu: NSMenu) {
+    func menuDidClose(_: NSMenu) {
         openCount = max(openCount - 1, 0)
         if openCount == 0 {
             highlighted = nil
@@ -47,7 +45,6 @@ final class MenuClickOpener: NSObject, NSMenuDelegate {
             removeMonitor()
             onTrackingEnded?()
         }
-        _ = menu.title
     }
 
     private func removeMonitor() {
