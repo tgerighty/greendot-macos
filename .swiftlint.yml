@@ -8,7 +8,9 @@ excluded:
   - Status Menu.app
 line_length: 120
 identifier_name:
-  min_length: 2
+  min_length: 3
+  excluded:
+    - id
 disabled_rules:
   - trailing_comma
   - todo

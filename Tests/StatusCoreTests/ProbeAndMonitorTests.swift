@@ -115,10 +115,10 @@ final class ProbeAndMonitorTests: XCTestCase {
     func testPollFailureIsGreyAndDoesNotDriveGreenBar() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }
-        let ok = MapHTTPClient(byPath: [
+        let okClient = MapHTTPClient(byPath: [
             "/api/v2/summary.json": (Data(statuspageJSON.utf8), 200)
         ])
-        let monitor = Monitor(store: PageStore(directory: dir), client: ok)
+        let monitor = Monitor(store: PageStore(directory: dir), client: okClient)
         try await monitor.add(url: URL(string: "https://www.githubstatus.com")!, name: nil)
         XCTAssertEqual(monitor.barSeverity(), .green)
 
