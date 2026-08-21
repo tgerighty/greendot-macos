@@ -31,12 +31,12 @@ final class PanelLifecycleTests: XCTestCase {
             severity: .green,
             statusText: "Operational",
             id: "g1",
-            children: (1...20).map { i in
+            children: (1...20).map { index in
                 ComponentStatus(
-                    name: "Child \(i)",
-                    severity: i == 1 ? .red : .green,
+                    name: "Child \(index)",
+                    severity: index == 1 ? .red : .green,
                     statusText: "Operational",
-                    id: "c\(i)"
+                    id: "c\(index)"
                 )
             },
             isGroup: true

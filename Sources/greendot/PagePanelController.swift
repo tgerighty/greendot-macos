@@ -11,13 +11,8 @@ final class PagePanelController: NSObject, NSWindowDelegate {
     private let urlField = NSTextField(string: "")
     private let nameField = NSTextField(string: "")
     private let onSave: (URL, String?) -> Void
-    private let onToggleComponent: ((String) -> Void)?
-    private let onSetAll: ((Bool) -> Void)?
     private let onRemove: (() -> Void)?
-    private var disabledNames: Set<String>
-    private var checkboxes: [String: NSButton] = [:]
-    private var allCheckbox: NSButton?
-    private var rootComponents: [ComponentStatus] = []
+    private var picker: ComponentPicker?
 
     init(
         page: WatchedPage?,
@@ -27,13 +22,16 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         onRemove: (() -> Void)? = nil
     ) {
         self.onSave = onSave
-        self.onToggleComponent = onToggleComponent
-        self.onSetAll = onSetAll
         self.onRemove = onRemove
-        self.disabledNames = page?.disabledComponentNames ?? []
-        self.rootComponents = page?.snapshot?.components ?? []
+        if let page {
+            self.picker = ComponentPicker(
+                page: page,
+                onToggleComponent: onToggleComponent ?? { _ in },
+                onSetAll: onSetAll ?? { _ in }
+            )
+        }
         let editing = page != nil
-        let componentCount = Self.countComponents(page?.snapshot?.components ?? [])
+        let componentCount = ComponentPicker.count(page?.snapshot?.components ?? [])
         let listHeight = CGFloat(min(max(componentCount, 1), 12) * 24 + 8)
         let height: CGFloat = editing ? 200 + listHeight + 48 : 160
         window = KeyablePanel(
@@ -69,10 +67,36 @@ final class PagePanelController: NSObject, NSWindowDelegate {
     }
 
     private func buildView(page: WatchedPage?, listHeight: CGFloat) -> NSView {
-        let height = window.frame.height
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: height))
-        let urlLabel = NSTextField(labelWithString: "Status page URL")
-        let nameLabel = NSTextField(labelWithString: "Name")
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: window.frame.height))
+        configureFields(page: page)
+        let save = button(page == nil ? "Add" : "Save", id: "save-button", action: #selector(saveTapped))
+        save.keyEquivalent = "\r"
+        let cancel = button("Cancel", id: "cancel-button", action: #selector(cancelTapped))
+        [urlField, nameField, save, cancel].forEach {
+            $0.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview($0)
+        }
+        var constraints = fieldConstraints(in: view)
+        if page != nil, let picker {
+            constraints.append(contentsOf: picker.install(in: view, below: nameField, listHeight: listHeight))
+            let remove = button("Remove Status Page", id: "remove-page-button", action: #selector(removeTapped))
+            remove.bezelStyle = .rounded
+            remove.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(remove)
+            constraints.append(remove.leadingAnchor.constraint(equalTo: urlField.leadingAnchor))
+            constraints.append(remove.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12))
+        }
+        constraints.append(contentsOf: [
+            cancel.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12),
+            cancel.trailingAnchor.constraint(equalTo: save.leadingAnchor, constant: -8),
+            save.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12),
+            save.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16)
+        ])
+        NSLayoutConstraint.activate(constraints)
+        return view
+    }
+
+    private func configureFields(page: WatchedPage?) {
         urlField.placeholderString = "https://status.example.com"
         urlField.setAccessibilityIdentifier("url-field")
         urlField.setAccessibilityLabel("url-field")
@@ -81,20 +105,22 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         nameField.setAccessibilityIdentifier("name-field")
         nameField.setAccessibilityLabel("name-field")
         nameField.stringValue = page?.name ?? ""
+    }
 
-        let save = NSButton(title: page == nil ? "Add" : "Save", target: self, action: #selector(saveTapped))
-        save.setAccessibilityIdentifier("save-button")
-        save.keyEquivalent = "\r"
-        let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancelTapped))
-        cancel.setAccessibilityIdentifier("cancel-button")
+    private func button(_ title: String, id: String, action: Selector) -> NSButton {
+        let item = NSButton(title: title, target: self, action: action)
+        item.setAccessibilityIdentifier(id)
+        return item
+    }
 
-        let views: [NSView] = [urlLabel, urlField, nameLabel, nameField, save, cancel]
-        for item in views {
-            item.translatesAutoresizingMaskIntoConstraints = false
-            view.addSubview(item)
-        }
-
-        var constraints: [NSLayoutConstraint] = [
+    private func fieldConstraints(in view: NSView) -> [NSLayoutConstraint] {
+        let urlLabel = NSTextField(labelWithString: "Status page URL")
+        let nameLabel = NSTextField(labelWithString: "Name")
+        urlLabel.translatesAutoresizingMaskIntoConstraints = false
+        nameLabel.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(urlLabel)
+        view.addSubview(nameLabel)
+        return [
             urlLabel.topAnchor.constraint(equalTo: view.topAnchor, constant: 16),
             urlLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             urlField.topAnchor.constraint(equalTo: urlLabel.bottomAnchor, constant: 4),
@@ -106,188 +132,6 @@ final class PagePanelController: NSObject, NSWindowDelegate {
             nameField.leadingAnchor.constraint(equalTo: urlField.leadingAnchor),
             nameField.trailingAnchor.constraint(equalTo: urlField.trailingAnchor)
         ]
-
-        if let page, let components = page.snapshot?.components, !components.isEmpty {
-            let componentsLabel = NSTextField(labelWithString: "Components")
-            componentsLabel.translatesAutoresizingMaskIntoConstraints = false
-            view.addSubview(componentsLabel)
-            constraints.append(contentsOf: [
-                componentsLabel.topAnchor.constraint(equalTo: nameField.bottomAnchor, constant: 14),
-                componentsLabel.leadingAnchor.constraint(equalTo: urlField.leadingAnchor)
-            ])
-
-            let stack = NSStackView()
-            stack.orientation = .vertical
-            stack.alignment = .leading
-            stack.spacing = 2
-            stack.translatesAutoresizingMaskIntoConstraints = false
-
-            let all = NSButton(
-                checkboxWithTitle: "All",
-                target: self,
-                action: #selector(allClicked(_:))
-            )
-            all.setAccessibilityIdentifier("component-all")
-            all.imagePosition = .imageLeading
-            all.translatesAutoresizingMaskIntoConstraints = false
-            view.addSubview(all)
-            allCheckbox = all
-            constraints.append(contentsOf: [
-                all.topAnchor.constraint(equalTo: componentsLabel.bottomAnchor, constant: 6),
-                all.leadingAnchor.constraint(equalTo: urlField.leadingAnchor)
-            ])
-
-            addCheckboxes(components, page: page, indent: 0, stack: stack)
-            refreshTreeStates()
-
-            let scroll = NSScrollView()
-            scroll.translatesAutoresizingMaskIntoConstraints = false
-            scroll.hasVerticalScroller = true
-            scroll.drawsBackground = false
-            scroll.documentView = stack
-            scroll.setAccessibilityIdentifier("component-list")
-            view.addSubview(scroll)
-            constraints.append(contentsOf: [
-                scroll.topAnchor.constraint(equalTo: all.bottomAnchor, constant: 6),
-                scroll.leadingAnchor.constraint(equalTo: urlField.leadingAnchor),
-                scroll.trailingAnchor.constraint(equalTo: urlField.trailingAnchor),
-                scroll.heightAnchor.constraint(equalToConstant: listHeight),
-                stack.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
-                stack.trailingAnchor.constraint(equalTo: scroll.contentView.trailingAnchor),
-                stack.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
-                stack.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor)
-            ])
-        }
-
-        if page != nil {
-            let remove = NSButton(title: "Remove Status Page", target: self, action: #selector(removeTapped))
-            remove.setAccessibilityIdentifier("remove-page-button")
-            remove.bezelStyle = .rounded
-            remove.translatesAutoresizingMaskIntoConstraints = false
-            view.addSubview(remove)
-            constraints.append(contentsOf: [
-                remove.leadingAnchor.constraint(equalTo: urlField.leadingAnchor),
-                remove.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12)
-            ])
-        }
-
-        constraints.append(contentsOf: [
-            cancel.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12),
-            cancel.trailingAnchor.constraint(equalTo: save.leadingAnchor, constant: -8),
-            save.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12),
-            save.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16)
-        ])
-        NSLayoutConstraint.activate(constraints)
-        return view
-    }
-
-    private func addCheckboxes(
-        _ components: [ComponentStatus],
-        page: WatchedPage,
-        indent: Int,
-        stack: NSStackView
-    ) {
-        for component in components {
-            let pad = String(repeating: "    ", count: indent)
-            let title: String
-            if component.isGroup || !component.children.isEmpty {
-                title = "\(pad)\(component.name)"
-            } else {
-                title = "\(pad)\(component.name)  —  \(component.statusText)"
-            }
-            let button = NSButton(
-                checkboxWithTitle: title,
-                target: self,
-                action: #selector(componentClicked(_:))
-            )
-            button.identifier = NSUserInterfaceItemIdentifier(component.id)
-            button.setAccessibilityIdentifier("component-\(component.id)")
-            button.imagePosition = .imageLeading
-            checkboxes[component.id] = button
-            stack.addArrangedSubview(button)
-            addCheckboxes(component.children, page: page, indent: indent + 1, stack: stack)
-        }
-    }
-
-    private static func countComponents(_ items: [ComponentStatus]) -> Int {
-        items.reduce(0) { $0 + 1 + countComponents($1.children) }
-    }
-
-    @objc private func allClicked(_ sender: NSButton) {
-        let nodes = rootComponents.flatMap(Self.collect)
-        let allOn = nodes.allSatisfy { !isOff($0) }
-        setEnabled(!allOn, nodes: nodes)
-        refreshTreeStates()
-        onSetAll?(!allOn)
-        _ = sender
-    }
-
-    @objc private func componentClicked(_ sender: NSButton) {
-        let key = sender.identifier?.rawValue ?? sender.title
-        let node = Self.find(key, in: rootComponents)
-        let nodes = node.map(Self.collect) ?? []
-        let allOn = nodes.isEmpty ? !disabledNames.contains(key) : nodes.allSatisfy { !isOff($0) }
-        if nodes.isEmpty {
-            setEnabled(!allOn, keys: [key])
-        } else {
-            setEnabled(!allOn, nodes: nodes)
-        }
-        refreshTreeStates()
-        onToggleComponent?(key)
-    }
-
-    private func setEnabled(_ enabled: Bool, nodes: [ComponentStatus]) {
-        setEnabled(enabled, keys: nodes.flatMap { [$0.id, $0.name] })
-    }
-
-    private func setEnabled(_ enabled: Bool, keys: [String]) {
-        if enabled {
-            keys.forEach { disabledNames.remove($0) }
-        } else {
-            disabledNames.formUnion(keys)
-        }
-    }
-
-    private func isOff(_ component: ComponentStatus) -> Bool {
-        disabledNames.contains(component.id) || disabledNames.contains(component.name)
-    }
-
-    private func refreshTreeStates() {
-        let nodes = rootComponents.flatMap(Self.collect)
-        for component in nodes {
-            guard let button = checkboxes[component.id] else { continue }
-            applyState(button, nodes: Self.collect(component))
-        }
-        if let allCheckbox {
-            applyState(allCheckbox, nodes: nodes)
-        }
-    }
-
-    private func applyState(_ button: NSButton, nodes: [ComponentStatus]) {
-        let onCount = nodes.filter { !isOff($0) }.count
-        let mixed = onCount > 0 && onCount < nodes.count
-        if mixed {
-            button.allowsMixedState = true
-            button.state = .mixed
-            return
-        }
-        if button.state == .mixed {
-            button.state = .off
-        }
-        button.allowsMixedState = false
-        button.state = onCount == 0 ? .off : .on
-    }
-
-    private static func find(_ key: String, in items: [ComponentStatus]) -> ComponentStatus? {
-        for item in items {
-            if item.id == key || item.name == key { return item }
-            if let hit = find(key, in: item.children) { return hit }
-        }
-        return nil
-    }
-
-    private static func collect(_ item: ComponentStatus) -> [ComponentStatus] {
-        [item] + item.children.flatMap(collect)
     }
 
     @objc private func saveTapped() {

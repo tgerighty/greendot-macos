@@ -41,16 +41,28 @@ public enum StatuspageParser {
         )
     }
 
+    private struct Row {
+        let id: String
+        let name: String
+        let status: String
+        let isGroup: Bool
+        let groupID: String?
+    }
+
     private static func nest(_ raw: [[String: Any]]) -> [ComponentStatus] {
-        let parsed: [(id: String, name: String, status: String, isGroup: Bool, groupID: String?)] = raw.compactMap { item in
+        let parsed: [Row] = raw.compactMap { item in
             guard let name = item["name"] as? String else { return nil }
             let id = (item["id"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? name
-            let status = (item["status"] as? String) ?? "operational"
-            let isGroup = item["group"] as? Bool == true
-            let groupID = item["group_id"] as? String
-            return (id, name, status, isGroup, groupID)
+            return Row(
+                id: id,
+                name: name,
+                status: (item["status"] as? String) ?? "operational",
+                isGroup: item["group"] as? Bool == true,
+                groupID: item["group_id"] as? String
+            )
         }
-        let childrenByGroup = Dictionary(grouping: parsed.filter { $0.groupID != nil && !$0.isGroup }) { $0.groupID! }
+        let grouped = parsed.filter { $0.groupID != nil && !$0.isGroup }
+        let childrenByGroup = Dictionary(grouping: grouped) { $0.groupID! }
         return parsed.compactMap { item in
             if item.isGroup {
                 let kids = (childrenByGroup[item.id] ?? []).map { leaf($0) }
@@ -68,9 +80,7 @@ public enum StatuspageParser {
         }
     }
 
-    private static func leaf(
-        _ item: (id: String, name: String, status: String, isGroup: Bool, groupID: String?)
-    ) -> ComponentStatus {
+    private static func leaf(_ item: Row) -> ComponentStatus {
         ComponentStatus(
             name: item.name,
             severity: StatusMapping.statuspageComponent(item.status),

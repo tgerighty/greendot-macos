@@ -90,29 +90,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let monitor else { return NSMenu() }
         return MenuBuilder.build(
             pages: monitor.pages,
-            barSeverity: monitor.barSeverity(),
-            onAdd: { [weak self] in self?.openPanel(editing: nil) },
-            onEdit: { [weak self] page in self?.openPanel(editing: page) },
-            onRemove: { [weak self] id in
-                try? self?.monitor?.remove(id: id)
-                self?.rebuild()
-            },
-            onToggleNotifications: { [weak self] id in
-                try? self?.monitor?.toggleNotifications(id: id)
-                self?.rebuild()
-            },
-            onOpen: { url in
-                NSWorkspace.shared.open(url)
-            },
-            onRefresh: { [weak self] in
-                Task { await self?.pollAndRefresh() }
-            },
             launchAtLoginEnabled: LaunchAtLogin.isEnabled,
-            onToggleLaunchAtLogin: { [weak self] in
-                _ = LaunchAtLogin.toggle()
-                self?.rebuild()
-            },
-            onQuit: { NSApp.terminate(nil) }
+            actions: MenuActions(
+                onAdd: { [weak self] in self?.openPanel(editing: nil) },
+                onEdit: { [weak self] page in self?.openPanel(editing: page) },
+                onRemove: { [weak self] id in
+                    try? self?.monitor?.remove(id: id)
+                    self?.rebuild()
+                },
+                onToggleNotifications: { [weak self] id in
+                    try? self?.monitor?.toggleNotifications(id: id)
+                    self?.rebuild()
+                },
+                onOpen: { url in
+                    NSWorkspace.shared.open(url)
+                },
+                onRefresh: { [weak self] in
+                    Task { await self?.pollAndRefresh() }
+                },
+                onToggleLaunchAtLogin: { [weak self] in
+                    _ = LaunchAtLogin.toggle()
+                    self?.rebuild()
+                },
+                onQuit: { NSApp.terminate(nil) }
+            )
         )
     }
 

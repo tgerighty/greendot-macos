@@ -59,7 +59,8 @@ final class ProbeAndMonitorTests: XCTestCase {
     func testDirectoryClientReadsSummaryPath() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }
-        try FileManager.default.createDirectory(at: dir.appendingPathComponent("api/v2"), withIntermediateDirectories: true)
+        let api = dir.appendingPathComponent("api/v2")
+        try FileManager.default.createDirectory(at: api, withIntermediateDirectories: true)
         try Data(statuspageJSON.utf8).write(to: dir.appendingPathComponent("api/v2/summary.json"))
         let client = DirectoryHTTPClient(root: dir)
         let snap = try await ProviderProbe.probe(
