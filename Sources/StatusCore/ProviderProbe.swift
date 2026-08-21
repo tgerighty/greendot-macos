@@ -47,7 +47,7 @@ public enum ProviderProbe {
         )) {
             return snapshot
         }
-        if let snapshot = try await probeStatuspal(
+        if let snapshot = await probeStatuspal(
             base: base,
             client: client,
             flags: &sawHTTP,
@@ -103,7 +103,7 @@ public enum ProviderProbe {
         client: HTTPClient,
         flags sawHTTP: inout Bool,
         network sawNetworkError: inout Bool
-    ) async throws -> PageSnapshot? {
+    ) async -> PageSnapshot? {
         let host = base.host ?? ""
         var subdomains: [String] = []
         if host.hasSuffix(".statuspal.io") || host.hasSuffix(".statuspal.eu") {

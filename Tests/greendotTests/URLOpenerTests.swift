@@ -30,4 +30,22 @@ final class URLOpenerTests: XCTestCase {
         let body = (try? String(contentsOf: log, encoding: .utf8)) ?? ""
         XCTAssertEqual(body, "https://a.example\nhttps://b.example\n")
     }
+
+    func testRejectsNonHTTPSchemes() {
+        var workspaceCalls: [URL] = []
+        let log = FileManager.default.temporaryDirectory
+            .appendingPathComponent("opened-\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: log) }
+        URLOpener.open(URL(string: "file:///etc/passwd")!, logPath: log.path, workspace: { workspaceCalls.append($0) })
+        URLOpener.open(URL(string: "javascript:alert(1)")!, logPath: nil, workspace: { workspaceCalls.append($0) })
+        XCTAssertTrue(workspaceCalls.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: log.path))
+    }
+
+    func testAllowsHTTP() {
+        var workspaceCalls: [URL] = []
+        let url = URL(string: "http://status.example")!
+        URLOpener.open(url, logPath: nil, workspace: { workspaceCalls.append($0) })
+        XCTAssertEqual(workspaceCalls, [url])
+    }
 }

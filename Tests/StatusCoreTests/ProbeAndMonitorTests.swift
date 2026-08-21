@@ -93,6 +93,30 @@ final class ProbeAndMonitorTests: XCTestCase {
         XCTAssertEqual(boxSnap.name, "Box")
     }
 
+    func testDirectoryClientRejectsPathEscape() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let secretName = "secret-\(UUID().uuidString).txt"
+        let secret = dir.deletingLastPathComponent().appendingPathComponent(secretName)
+        try Data("secret".utf8).write(to: secret)
+        defer { try? FileManager.default.removeItem(at: secret) }
+        let client = DirectoryHTTPClient(root: dir)
+        let escaped = URL(string: "https://www.githubstatus.com/../../\(secretName)")!
+        let result = try await client.get(escaped)
+        XCTAssertEqual(result.1, 404)
+        XCTAssertTrue(result.0.isEmpty)
+    }
+
+    func testPathSafetyRejectsParentAndAcceptsChild() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let child = root.appendingPathComponent("www.example.com/api/v2/summary.json")
+        let parent = root.deletingLastPathComponent().appendingPathComponent("outside.txt")
+        XCTAssertNotNil(PathSafety.contained(child, under: root))
+        XCTAssertNil(PathSafety.contained(parent, under: root))
+        XCTAssertNil(PathSafety.contained(root.appendingPathComponent(".."), under: root))
+    }
+
     func testProbeUnknownFormat() async {
         let client = MapHTTPClient()
         do {

@@ -5,6 +5,8 @@ final class MenuBarController: NSObject {
     var menuProvider: (() -> NSMenu)?
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    private let clickOpener = MenuClickOpener()
+    private var needsReload = false
 
     override init() {
         super.init()
@@ -13,6 +15,11 @@ final class MenuBarController: NSObject {
         statusItem.button?.toolTip = "greendot"
         statusItem.button?.setAccessibilityLabel("greendot")
         statusItem.menu = NSMenu()
+        clickOpener.onTrackingEnded = { [weak self] in
+            guard let self, self.needsReload else { return }
+            self.needsReload = false
+            self.applyMenu()
+        }
     }
 
     func setSeverity(_ severity: Severity) {
@@ -21,14 +28,18 @@ final class MenuBarController: NSObject {
     }
 
     func reloadMenu() {
-        statusItem.menu = menuProvider?() ?? NSMenu()
+        if clickOpener.isTracking {
+            needsReload = true
+            return
+        }
+        applyMenu()
     }
 
     /// UI tests use this when a menu-bar manager parks the extra off-screen.
     func popMenuOnScreen() {
         NSApp.activate(ignoringOtherApps: true)
-        let menu = menuProvider?() ?? NSMenu()
-        statusItem.menu = menu
+        applyMenu()
+        let menu = statusItem.menu ?? NSMenu()
         let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 800, height: 600)
         let point = NSPoint(x: screen.midX, y: screen.midY)
         menu.popUp(positioning: nil, at: point, in: nil)
@@ -41,5 +52,11 @@ final class MenuBarController: NSObject {
 
     func dumpMenu() -> String {
         MenuCommands.dump(menuProvider?() ?? NSMenu())
+    }
+
+    private func applyMenu() {
+        let menu = menuProvider?() ?? NSMenu()
+        clickOpener.attach(menu)
+        statusItem.menu = menu
     }
 }

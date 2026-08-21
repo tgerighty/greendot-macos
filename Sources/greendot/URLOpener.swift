@@ -10,12 +10,18 @@ enum URLOpener {
     }
 
     static func open(_ url: URL, logPath: String?, workspace: (URL) -> Void) {
+        guard isAllowed(url) else { return }
         let path = logPath?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !path.isEmpty {
             append(url.absoluteString, to: path)
             return
         }
         workspace(url)
+    }
+
+    static func isAllowed(_ url: URL) -> Bool {
+        let scheme = url.scheme?.lowercased()
+        return scheme == "http" || scheme == "https"
     }
 
     private static func append(_ line: String, to path: String) {
