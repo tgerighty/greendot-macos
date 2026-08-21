@@ -4,6 +4,15 @@
 
 ### Added
 
+- Click a page row, a component row, or Open Status Page to open that page in the default browser.
+- UI tests exercise every Edit checkbox five times and switch Edit between two pages five times, without moving the pointer (avoids the bottom-left hot corner).
+
+### Changed
+
+- Add Status Page reports "Could not reach that URL" when the host is down, not a format error.
+
+### Added
+
 - greendot v1: macOS menu-bar monitor for Statuspage, Statuspal, and Instatus JSON status pages.
 - Add, edit, and remove watched pages.
 - First launch seeds https://status.openai.com/.

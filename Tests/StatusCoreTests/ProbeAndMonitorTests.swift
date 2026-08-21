@@ -70,6 +70,29 @@ final class ProbeAndMonitorTests: XCTestCase {
         XCTAssertEqual(snap.name, "GitHub")
     }
 
+    func testDirectoryClientPrefersHostFolder() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let github = dir.appendingPathComponent("www.githubstatus.com/api/v2")
+        let box = dir.appendingPathComponent("status.box.com/api/v2")
+        try FileManager.default.createDirectory(at: github, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: box, withIntermediateDirectories: true)
+        try Data(statuspageJSON.utf8).write(to: github.appendingPathComponent("summary.json"))
+        try Data(statuspageJSON.replacingOccurrences(of: "GitHub", with: "Box").utf8)
+            .write(to: box.appendingPathComponent("summary.json"))
+        let client = DirectoryHTTPClient(root: dir)
+        let githubSnap = try await ProviderProbe.probe(
+            pageURL: URL(string: "https://www.githubstatus.com")!,
+            client: client
+        )
+        let boxSnap = try await ProviderProbe.probe(
+            pageURL: URL(string: "https://status.box.com")!,
+            client: client
+        )
+        XCTAssertEqual(githubSnap.name, "GitHub")
+        XCTAssertEqual(boxSnap.name, "Box")
+    }
+
     func testProbeUnknownFormat() async {
         let client = MapHTTPClient()
         do {
@@ -80,6 +103,19 @@ final class ProbeAndMonitorTests: XCTestCase {
             XCTFail("expected unsupported")
         } catch {
             XCTAssertEqual(error as? ProbeError, .unsupported)
+        }
+    }
+
+    func testProbeNetworkFailureIsUnreachable() async {
+        let client = FailingHTTPClient()
+        do {
+            _ = try await ProviderProbe.probe(
+                pageURL: URL(string: "https://offline.example")!,
+                client: client
+            )
+            XCTFail("expected unreachable")
+        } catch {
+            XCTAssertEqual(error as? ProbeError, .unreachable)
         }
     }
 
@@ -130,5 +166,11 @@ final class ProbeAndMonitorTests: XCTestCase {
         XCTAssertEqual(retry.barSeverity(), .grey)
         XCTAssertEqual(toasts.count, 1)
         XCTAssertEqual(toasts[0].body, "Unreachable")
+    }
+}
+
+private struct FailingHTTPClient: HTTPClient {
+    func get(_ url: URL) async throws -> (Data, Int) {
+        throw URLError(.cannotConnectToHost)
     }
 }

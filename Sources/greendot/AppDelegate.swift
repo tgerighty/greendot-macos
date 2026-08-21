@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             self?.menuBar?.popMenuOnScreen()
         }
+        installUITestHooks()
 
         Task {
             if ProcessInfo.processInfo.environment["GREENDOT_SKIP_SEED"] == nil,
@@ -103,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.rebuild()
                 },
                 onOpen: { url in
-                    NSWorkspace.shared.open(url)
+                    URLOpener.open(url)
                 },
                 onRefresh: { [weak self] in
                     Task { await self?.pollAndRefresh() }
@@ -166,5 +167,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             _ = previous
             self?.panel?.show()
         }
+    }
+
+    private func installUITestHooks() {
+        guard ProcessInfo.processInfo.environment["GREENDOT_UI_TEST"] != nil else { return }
+        observe("clickMenu") { [weak self] path in
+            _ = self?.menuBar?.performMenuPath(path)
+        }
+        observe("dumpMenu") { [weak self] _ in
+            Self.writeDump("GREENDOT_MENU_DUMP", body: self?.menuBar?.dumpMenu() ?? "")
+        }
+        observe("clickIdentifier") { identifier in
+            _ = UITestDriver.clickIdentifier(identifier)
+        }
+        observe("dumpIdentifiers") { _ in
+            Self.writeDump("GREENDOT_ID_DUMP", body: UITestDriver.identifiers().joined(separator: "\n"))
+        }
+        observe("setField") { raw in
+            let parts = raw.split(separator: "\t", maxSplits: 1).map(String.init)
+            guard parts.count == 2 else { return }
+            _ = UITestDriver.setField(parts[0], value: parts[1])
+        }
+        observe("focusField") { identifier in
+            _ = UITestDriver.focusField(identifier)
+        }
+    }
+
+    private func observe(_ name: String, handle: @escaping (String) -> Void) {
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("com.tgerighty.greendot.\(name)"),
+            object: nil,
+            queue: .main
+        ) { note in
+            handle(note.object as? String ?? "")
+        }
+    }
+
+    private static func writeDump(_ key: String, body: String) {
+        guard let path = ProcessInfo.processInfo.environment[key], !path.isEmpty else { return }
+        try? body.write(toFile: path, atomically: true, encoding: .utf8)
     }
 }
