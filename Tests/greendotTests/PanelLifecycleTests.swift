@@ -84,6 +84,25 @@ final class PanelLifecycleTests: XCTestCase {
         panel.close()
     }
 
+    func testStatusDotImageIsNonNilAndHasSize() {
+        _ = NSApplication.shared
+        let image = StatusDot.image(.green, size: 12)
+        XCTAssertNotNil(image)
+        XCTAssertEqual(image.size, NSSize(width: 12, height: 12))
+        XCTAssertGreaterThan(image.size.width, 0)
+        XCTAssertGreaterThan(image.size.height, 0)
+    }
+
+    func testStatusDotImageUsesRequestedSize() {
+        _ = NSApplication.shared
+        for severity in [Severity.green, .yellow, .red, .grey] {
+            let image = StatusDot.image(severity, size: 14)
+            XCTAssertNotNil(image)
+            XCTAssertEqual(image.size.width, 14)
+            XCTAssertEqual(image.size.height, 14)
+        }
+    }
+
     private static func checkboxes(in view: NSView?) -> [NSButton] {
         guard let view else { return [] }
         var found: [NSButton] = []
