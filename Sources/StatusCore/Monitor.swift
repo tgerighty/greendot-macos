@@ -59,12 +59,49 @@ public final class Monitor: @unchecked Sendable {
 
     public func toggleComponent(id: UUID, name: String) throws {
         guard let index = config.pages.firstIndex(where: { $0.id == id }) else { return }
-        if config.pages[index].disabledComponentNames.contains(name) {
-            config.pages[index].disabledComponentNames.remove(name)
+        let tree = config.pages[index].snapshot?.components ?? []
+        let node = Self.find(name, in: tree)
+        let nodes = node.map(Self.collect) ?? []
+        let keys = nodes.isEmpty ? [name] : nodes.flatMap { [$0.id, $0.name] }
+        let allOn = nodes.isEmpty
+            ? !config.pages[index].disabledComponentNames.contains(name)
+            : nodes.allSatisfy { config.pages[index].isComponentEnabled($0) }
+        if allOn {
+            config.pages[index].disabledComponentNames.formUnion(keys)
         } else {
-            config.pages[index].disabledComponentNames.insert(name)
+            keys.forEach { config.pages[index].disabledComponentNames.remove($0) }
         }
         try store.save(config)
+    }
+
+    public func setAllComponents(id: UUID, enabled: Bool) throws {
+        guard let index = config.pages.firstIndex(where: { $0.id == id }) else { return }
+        if enabled {
+            config.pages[index].disabledComponentNames.removeAll()
+        } else {
+            config.pages[index].disabledComponentNames = Set(
+                Self.componentKeys(config.pages[index].snapshot?.components ?? [])
+            )
+        }
+        try store.save(config)
+    }
+
+    private static func componentKeys(_ items: [ComponentStatus]) -> [String] {
+        items.flatMap { item in
+            [item.id, item.name] + componentKeys(item.children)
+        }
+    }
+
+    private static func find(_ key: String, in items: [ComponentStatus]) -> ComponentStatus? {
+        for item in items {
+            if item.id == key || item.name == key { return item }
+            if let hit = find(key, in: item.children) { return hit }
+        }
+        return nil
+    }
+
+    private static func collect(_ item: ComponentStatus) -> [ComponentStatus] {
+        [item] + item.children.flatMap(collect)
     }
 
     public func pollAll() async -> [Toast] {

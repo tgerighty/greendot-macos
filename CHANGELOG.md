@@ -12,6 +12,7 @@
 - Edit dialog lists components; click a component to include or hide it. Remove Status Page sits at the bottom of that dialog.
 
 - Status page groups (for example Box Web Application → Login/SSO) show as a nested menu and as indented checkboxes in Edit.
+- Edit dialog has an All checkbox. Turning a group on or off turns every child on or off.
 
 ### Fixed
 

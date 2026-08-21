@@ -61,6 +61,65 @@ final class ComponentToggleTests: XCTestCase {
         XCTAssertEqual(loaded.pages[0].disabledComponentNames, ["Git"])
     }
 
+    func testSetAllComponentsOffThenOn() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let json = """
+        {
+          "page": {"name": "GitHub", "url": "https://www.githubstatus.com"},
+          "status": {"indicator": "none"},
+          "components": [
+            {"name": "API", "status": "operational", "group": false},
+            {"name": "Git", "status": "major_outage", "group": false}
+          ],
+          "incidents": []
+        }
+        """
+        let client = MapHTTPClient(byPath: ["/api/v2/summary.json": (Data(json.utf8), 200)])
+        let monitor = Monitor(store: PageStore(directory: dir), client: client)
+        try await monitor.add(url: URL(string: "https://www.githubstatus.com")!, name: nil)
+        let id = monitor.pages[0].id
+        XCTAssertEqual(monitor.pages[0].displaySeverity, .red)
+
+        try monitor.setAllComponents(id: id, enabled: false)
+        XCTAssertTrue(monitor.pages[0].enabledComponents.isEmpty)
+        XCTAssertEqual(monitor.pages[0].displaySeverity, .green)
+
+        try monitor.setAllComponents(id: id, enabled: true)
+        XCTAssertFalse(monitor.pages[0].enabledComponents.isEmpty)
+        XCTAssertEqual(monitor.pages[0].displaySeverity, .red)
+    }
+
+    func testToggleGroupTurnsChildrenOffAndOn() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let json = """
+        {
+          "page": {"name": "Box", "url": "https://status.box.com"},
+          "status": {"indicator": "none"},
+          "components": [
+            {"id": "g1", "name": "Box Web Application", "status": "operational", "group": true},
+            {"id": "c1", "name": "Login/SSO", "status": "major_outage", "group": false, "group_id": "g1"},
+            {"id": "c2", "name": "Search", "status": "operational", "group": false, "group_id": "g1"}
+          ],
+          "incidents": []
+        }
+        """
+        let client = MapHTTPClient(byPath: ["/api/v2/summary.json": (Data(json.utf8), 200)])
+        let monitor = Monitor(store: PageStore(directory: dir), client: client)
+        try await monitor.add(url: URL(string: "https://status.box.com")!, name: nil)
+        let id = monitor.pages[0].id
+        XCTAssertEqual(monitor.pages[0].displaySeverity, .red)
+
+        try monitor.toggleComponent(id: id, name: "g1")
+        XCTAssertTrue(monitor.pages[0].enabledComponents.isEmpty)
+        XCTAssertEqual(monitor.pages[0].displaySeverity, .green)
+
+        try monitor.toggleComponent(id: id, name: "g1")
+        XCTAssertEqual(monitor.pages[0].enabledComponents.first?.children.count, 2)
+        XCTAssertEqual(monitor.pages[0].displaySeverity, .red)
+    }
+
     func testDisablingAGroupHidesItsChildren() {
         var page = pageWith(components: [
             ComponentStatus(

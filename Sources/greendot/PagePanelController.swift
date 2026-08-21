@@ -12,20 +12,26 @@ final class PagePanelController: NSObject, NSWindowDelegate {
     private let nameField = NSTextField(string: "")
     private let onSave: (URL, String?) -> Void
     private let onToggleComponent: ((String) -> Void)?
+    private let onSetAll: ((Bool) -> Void)?
     private let onRemove: (() -> Void)?
     private var disabledNames: Set<String>
     private var checkboxes: [String: NSButton] = [:]
+    private var allCheckbox: NSButton?
+    private var rootComponents: [ComponentStatus] = []
 
     init(
         page: WatchedPage?,
         onSave: @escaping (URL, String?) -> Void,
         onToggleComponent: ((String) -> Void)? = nil,
+        onSetAll: ((Bool) -> Void)? = nil,
         onRemove: (() -> Void)? = nil
     ) {
         self.onSave = onSave
         self.onToggleComponent = onToggleComponent
+        self.onSetAll = onSetAll
         self.onRemove = onRemove
         self.disabledNames = page?.disabledComponentNames ?? []
+        self.rootComponents = page?.snapshot?.components ?? []
         let editing = page != nil
         let componentCount = Self.countComponents(page?.snapshot?.components ?? [])
         let listHeight = CGFloat(min(max(componentCount, 1), 12) * 24 + 8)
@@ -105,7 +111,23 @@ final class PagePanelController: NSObject, NSWindowDelegate {
             stack.spacing = 2
             stack.translatesAutoresizingMaskIntoConstraints = false
 
+            let all = NSButton(
+                checkboxWithTitle: "All",
+                target: self,
+                action: #selector(allClicked(_:))
+            )
+            all.setAccessibilityIdentifier("component-all")
+            all.imagePosition = .imageLeading
+            all.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(all)
+            allCheckbox = all
+            constraints.append(contentsOf: [
+                all.topAnchor.constraint(equalTo: componentsLabel.bottomAnchor, constant: 6),
+                all.leadingAnchor.constraint(equalTo: urlField.leadingAnchor)
+            ])
+
             addCheckboxes(components, page: page, indent: 0, stack: stack)
+            refreshTreeStates()
 
             let scroll = NSScrollView()
             scroll.translatesAutoresizingMaskIntoConstraints = false
@@ -115,7 +137,7 @@ final class PagePanelController: NSObject, NSWindowDelegate {
             scroll.setAccessibilityIdentifier("component-list")
             view.addSubview(scroll)
             constraints.append(contentsOf: [
-                scroll.topAnchor.constraint(equalTo: componentsLabel.bottomAnchor, constant: 6),
+                scroll.topAnchor.constraint(equalTo: all.bottomAnchor, constant: 6),
                 scroll.leadingAnchor.constraint(equalTo: urlField.leadingAnchor),
                 scroll.trailingAnchor.constraint(equalTo: urlField.trailingAnchor),
                 scroll.heightAnchor.constraint(equalToConstant: listHeight),
@@ -168,7 +190,6 @@ final class PagePanelController: NSObject, NSWindowDelegate {
                 action: #selector(componentClicked(_:))
             )
             button.identifier = NSUserInterfaceItemIdentifier(component.id)
-            button.state = page.isComponentEnabled(component) ? .on : .off
             button.setAccessibilityIdentifier("component-\(component.id)")
             button.imagePosition = .imageLeading
             checkboxes[component.id] = button
@@ -181,16 +202,78 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         items.reduce(0) { $0 + 1 + countComponents($1.children) }
     }
 
+    @objc private func allClicked(_ sender: NSButton) {
+        let nodes = rootComponents.flatMap(Self.collect)
+        let allOn = nodes.allSatisfy { !isOff($0) }
+        setEnabled(!allOn, nodes: nodes)
+        refreshTreeStates()
+        onSetAll?(!allOn)
+        _ = sender
+    }
+
     @objc private func componentClicked(_ sender: NSButton) {
-        let name = sender.identifier?.rawValue ?? sender.title
-        if disabledNames.contains(name) {
-            disabledNames.remove(name)
-            sender.state = .on
+        let key = sender.identifier?.rawValue ?? sender.title
+        let node = Self.find(key, in: rootComponents)
+        let nodes = node.map(Self.collect) ?? []
+        let allOn = nodes.isEmpty ? !disabledNames.contains(key) : nodes.allSatisfy { !isOff($0) }
+        if nodes.isEmpty {
+            setEnabled(!allOn, keys: [key])
         } else {
-            disabledNames.insert(name)
-            sender.state = .off
+            setEnabled(!allOn, nodes: nodes)
         }
-        onToggleComponent?(name)
+        refreshTreeStates()
+        onToggleComponent?(key)
+    }
+
+    private func setEnabled(_ enabled: Bool, nodes: [ComponentStatus]) {
+        setEnabled(enabled, keys: nodes.flatMap { [$0.id, $0.name] })
+    }
+
+    private func setEnabled(_ enabled: Bool, keys: [String]) {
+        if enabled {
+            keys.forEach { disabledNames.remove($0) }
+        } else {
+            disabledNames.formUnion(keys)
+        }
+    }
+
+    private func isOff(_ component: ComponentStatus) -> Bool {
+        disabledNames.contains(component.id) || disabledNames.contains(component.name)
+    }
+
+    private func refreshTreeStates() {
+        let nodes = rootComponents.flatMap(Self.collect)
+        for component in nodes {
+            guard let button = checkboxes[component.id] else { continue }
+            applyState(button, nodes: Self.collect(component))
+        }
+        if let allCheckbox {
+            applyState(allCheckbox, nodes: nodes)
+        }
+    }
+
+    private func applyState(_ button: NSButton, nodes: [ComponentStatus]) {
+        let onCount = nodes.filter { !isOff($0) }.count
+        button.allowsMixedState = onCount > 0 && onCount < nodes.count
+        if onCount == 0 {
+            button.state = .off
+        } else if onCount == nodes.count {
+            button.state = .on
+        } else {
+            button.state = .mixed
+        }
+    }
+
+    private static func find(_ key: String, in items: [ComponentStatus]) -> ComponentStatus? {
+        for item in items {
+            if item.id == key || item.name == key { return item }
+            if let hit = find(key, in: item.children) { return hit }
+        }
+        return nil
+    }
+
+    private static func collect(_ item: ComponentStatus) -> [ComponentStatus] {
+        [item] + item.children.flatMap(collect)
     }
 
     @objc private func saveTapped() {

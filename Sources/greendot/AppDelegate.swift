@@ -143,6 +143,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.rebuild()
                 }
             },
+            onSetAll: editing.map { page in
+                { [weak self] enabled in
+                    try? self?.monitor?.setAllComponents(id: page.id, enabled: enabled)
+                    self?.rebuild()
+                }
+            },
             onRemove: editing.map { page in
                 { [weak self] in
                     try? self?.monitor?.remove(id: page.id)
