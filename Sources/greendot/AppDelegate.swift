@@ -81,12 +81,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadSucceeded
     }
 
-    func performStoreChange(_ work: () throws -> Void) {
+    @discardableResult
+    func performStoreChange(_ work: () throws -> Void) -> Bool {
         do {
             try work()
             rebuild()
+            return true
         } catch {
             presentError(error)
+            return false
         }
     }
 
@@ -171,12 +174,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onToggleComponent: editing.map { page in
                 { [weak self] name in
-                    self?.performStoreChange { try self?.monitor?.toggleComponent(id: page.id, name: name) }
+                    self?.performStoreChange { try self?.monitor?.toggleComponent(id: page.id, name: name) } ?? false
                 }
             },
             onSetAll: editing.map { page in
                 { [weak self] enabled in
-                    self?.performStoreChange { try self?.monitor?.setAllComponents(id: page.id, enabled: enabled) }
+                    self?.performStoreChange {
+                        try self?.monitor?.setAllComponents(id: page.id, enabled: enabled)
+                    } ?? false
                 }
             },
             onRemove: editing.map { page in

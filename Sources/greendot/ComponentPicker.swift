@@ -2,8 +2,8 @@ import AppKit
 import StatusCore
 
 final class ComponentPicker: NSObject {
-    private let onToggleComponent: (String) -> Void
-    private let onSetAll: (Bool) -> Void
+    private let onToggleComponent: (String) -> Bool
+    private let onSetAll: (Bool) -> Bool
     private var disabledNames: Set<String>
     private var checkboxes: [String: NSButton] = [:]
     private var allCheckbox: NSButton?
@@ -11,8 +11,8 @@ final class ComponentPicker: NSObject {
 
     init(
         page: WatchedPage,
-        onToggleComponent: @escaping (String) -> Void,
-        onSetAll: @escaping (Bool) -> Void
+        onToggleComponent: @escaping (String) -> Bool,
+        onSetAll: @escaping (Bool) -> Bool
     ) {
         self.onToggleComponent = onToggleComponent
         self.onSetAll = onSetAll
@@ -98,13 +98,21 @@ final class ComponentPicker: NSObject {
     @objc private func allClicked(_: NSButton) {
         let nodes = rootComponents.flatMap(ComponentTree.collect)
         let allOn = nodes.allSatisfy { !isOff($0) }
-        setEnabled(!allOn, nodes: nodes)
+        let enabled = !allOn
+        guard onSetAll(enabled) else {
+            refreshTreeStates()
+            return
+        }
+        setEnabled(enabled, nodes: nodes)
         refreshTreeStates()
-        onSetAll(!allOn)
     }
 
     @objc private func componentClicked(_ sender: NSButton) {
         let key = sender.identifier?.rawValue ?? sender.title
+        guard onToggleComponent(key) else {
+            refreshTreeStates()
+            return
+        }
         let node = ComponentTree.find(key, in: rootComponents)
         let nodes = node.map(ComponentTree.collect) ?? []
         let allOn = nodes.isEmpty ? !disabledNames.contains(key) : nodes.allSatisfy { !isOff($0) }
@@ -114,7 +122,6 @@ final class ComponentPicker: NSObject {
             setEnabled(!allOn, nodes: nodes)
         }
         refreshTreeStates()
-        onToggleComponent(key)
     }
 
     private func setEnabled(_ enabled: Bool, nodes: [ComponentStatus]) {

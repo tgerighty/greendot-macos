@@ -269,9 +269,9 @@ private func assertSaveThrows(json: String, _ work: (Monitor) throws -> Void) as
     let config = dir.appendingPathComponent("config.json")
     try FileManager.default.removeItem(at: config)
     try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
-    let count = monitor.pages.count
+    let before = monitor.pages
     XCTAssertThrowsError(try work(monitor))
-    XCTAssertEqual(monitor.pages.count, count)
+    XCTAssertEqual(monitor.pages, before)
 }
 
 private struct FailingHTTPClient: HTTPClient {

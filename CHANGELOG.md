@@ -15,6 +15,7 @@
 ### Fixed
 
 - Menu and Edit store errors no longer leave memory changed when the file write fails.
+- Edit checkboxes stay in the last saved state when a store write fails.
 
 ### Security
 

@@ -48,8 +48,8 @@ final class PanelLifecycleTests: XCTestCase {
         let panel = PagePanelController(
             page: page,
             onSave: { _, _ in },
-            onToggleComponent: { _ in },
-            onSetAll: { _ in }
+            onToggleComponent: { _ in true },
+            onSetAll: { _ in true }
         )
         panel.show()
         let ids = UITestDriver.identifiers().filter { $0.hasPrefix("component-") && $0 != "component-list" }
@@ -68,8 +68,8 @@ final class PanelLifecycleTests: XCTestCase {
         let panel = PagePanelController(
             page: page,
             onSave: { _, _ in },
-            onToggleComponent: { _ in },
-            onSetAll: { _ in }
+            onToggleComponent: { _ in true },
+            onSetAll: { _ in true }
         )
         panel.show()
         let window = NSApp.windows.first { $0.title == "Edit Status Page" }
@@ -81,6 +81,27 @@ final class PanelLifecycleTests: XCTestCase {
                 box.performClick(nil)
             }
         }
+        panel.close()
+    }
+
+    func testFailedPersistLeavesCheckboxesUnchanged() {
+        _ = NSApplication.shared
+        let page = Self.nestedPage()
+        let panel = PagePanelController(
+            page: page,
+            onSave: { _, _ in },
+            onToggleComponent: { _ in false },
+            onSetAll: { _ in false }
+        )
+        panel.show()
+        let window = NSApp.windows.first { $0.title == "Edit Status Page" }
+        let boxes = Self.checkboxes(in: window?.contentView)
+        XCTAssertGreaterThanOrEqual(boxes.count, 21)
+        let before = boxes.map(\.state)
+        for box in boxes {
+            box.performClick(nil)
+        }
+        XCTAssertEqual(boxes.map(\.state), before)
         panel.close()
     }
 
@@ -145,7 +166,7 @@ final class PanelLifecycleTests: XCTestCase {
         var presented = false
         delegate.presentError = { _ in presented = true }
         let id = monitor.pages[0].id
-        delegate.performStoreChange { try monitor.remove(id: id) }
+        XCTAssertFalse(delegate.performStoreChange { try monitor.remove(id: id) })
         XCTAssertTrue(presented)
         XCTAssertEqual(monitor.pages.count, 1)
     }
@@ -156,7 +177,7 @@ final class PanelLifecycleTests: XCTestCase {
         let delegate = AppDelegate()
         var presented = false
         delegate.presentError = { _ in presented = true }
-        delegate.performStoreChange { try monitor.remove(id: monitor.pages[0].id) }
+        XCTAssertTrue(delegate.performStoreChange { try monitor.remove(id: monitor.pages[0].id) })
         XCTAssertFalse(presented)
         XCTAssertTrue(monitor.pages.isEmpty)
     }
