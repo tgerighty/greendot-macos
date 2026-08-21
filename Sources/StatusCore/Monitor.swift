@@ -33,57 +33,66 @@ public final class Monitor: @unchecked Sendable {
             notificationsEnabled: true,
             snapshot: snapshot
         )
-        config.pages.append(page)
-        try store.save(config)
+        try commit { $0.pages.append(page) }
     }
 
     public func edit(id: UUID, url: URL, name: String?) async throws {
-        guard let index = config.pages.firstIndex(where: { $0.id == id }) else { return }
         let snapshot = try await ProviderProbe.probe(pageURL: url, client: client)
-        config.pages[index].url = ProviderProbe.normalizedBase(url)
-        config.pages[index].name = trimmed(name) ?? snapshot.name
-        config.pages[index].snapshot = snapshot
-        try store.save(config)
+        try commit { next in
+            guard let index = next.pages.firstIndex(where: { $0.id == id }) else { return }
+            next.pages[index].url = ProviderProbe.normalizedBase(url)
+            next.pages[index].name = trimmed(name) ?? snapshot.name
+            next.pages[index].snapshot = snapshot
+        }
     }
 
     public func remove(id: UUID) throws {
-        config.pages.removeAll { $0.id == id }
-        try store.save(config)
+        try commit { $0.pages.removeAll { $0.id == id } }
     }
 
     public func toggleNotifications(id: UUID) throws {
-        guard let index = config.pages.firstIndex(where: { $0.id == id }) else { return }
-        config.pages[index].notificationsEnabled.toggle()
-        try store.save(config)
+        try commit { next in
+            guard let index = next.pages.firstIndex(where: { $0.id == id }) else { return }
+            next.pages[index].notificationsEnabled.toggle()
+        }
     }
 
     public func toggleComponent(id: UUID, name: String) throws {
-        guard let index = config.pages.firstIndex(where: { $0.id == id }) else { return }
-        let tree = config.pages[index].snapshot?.components ?? []
-        let node = ComponentTree.find(name, in: tree)
-        let nodes = node.map(ComponentTree.collect) ?? []
-        let keys = nodes.isEmpty ? [name] : nodes.flatMap { [$0.id, $0.name] }
-        let allOn = nodes.isEmpty
-            ? !config.pages[index].disabledComponentNames.contains(name)
-            : nodes.allSatisfy { config.pages[index].isComponentEnabled($0) }
-        if allOn {
-            config.pages[index].disabledComponentNames.formUnion(keys)
-        } else {
-            keys.forEach { config.pages[index].disabledComponentNames.remove($0) }
+        try commit { next in
+            guard let index = next.pages.firstIndex(where: { $0.id == id }) else { return }
+            let tree = next.pages[index].snapshot?.components ?? []
+            let node = ComponentTree.find(name, in: tree)
+            let nodes = node.map(ComponentTree.collect) ?? []
+            let keys = nodes.isEmpty ? [name] : nodes.flatMap { [$0.id, $0.name] }
+            let allOn = nodes.isEmpty
+                ? !next.pages[index].disabledComponentNames.contains(name)
+                : nodes.allSatisfy { next.pages[index].isComponentEnabled($0) }
+            if allOn {
+                next.pages[index].disabledComponentNames.formUnion(keys)
+            } else {
+                keys.forEach { next.pages[index].disabledComponentNames.remove($0) }
+            }
         }
-        try store.save(config)
     }
 
     public func setAllComponents(id: UUID, enabled: Bool) throws {
-        guard let index = config.pages.firstIndex(where: { $0.id == id }) else { return }
-        if enabled {
-            config.pages[index].disabledComponentNames.removeAll()
-        } else {
-            config.pages[index].disabledComponentNames = Set(
-                ComponentTree.componentKeys(config.pages[index].snapshot?.components ?? [])
-            )
+        try commit { next in
+            guard let index = next.pages.firstIndex(where: { $0.id == id }) else { return }
+            if enabled {
+                next.pages[index].disabledComponentNames.removeAll()
+            } else {
+                next.pages[index].disabledComponentNames = Set(
+                    ComponentTree.componentKeys(next.pages[index].snapshot?.components ?? [])
+                )
+            }
         }
-        try store.save(config)
+    }
+
+    private func commit(_ body: (inout AppConfig) throws -> Void) throws {
+        var next = config
+        try body(&next)
+        try store.save(next)
+        config = next
     }
 
     public func pollAll() async -> [Toast] {

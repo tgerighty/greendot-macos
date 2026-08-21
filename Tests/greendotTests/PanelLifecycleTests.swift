@@ -108,6 +108,8 @@ final class PanelLifecycleTests: XCTestCase {
         XCTAssertFalse(AppDelegate.shouldSeedOpenAI(loadSucceeded: false, pagesEmpty: true, skipSeed: false))
         XCTAssertFalse(AppDelegate.shouldSeedOpenAI(loadSucceeded: true, pagesEmpty: false, skipSeed: false))
         XCTAssertFalse(AppDelegate.shouldSeedOpenAI(loadSucceeded: true, pagesEmpty: true, skipSeed: true))
+        XCTAssertTrue(AppDelegate.shouldPoll(loadSucceeded: true))
+        XCTAssertFalse(AppDelegate.shouldPoll(loadSucceeded: false))
     }
 
     func testLoadMonitorPresentsCorruptStoreErrorAndLeavesFile() throws {
@@ -142,8 +144,10 @@ final class PanelLifecycleTests: XCTestCase {
         let delegate = AppDelegate()
         var presented = false
         delegate.presentError = { _ in presented = true }
-        delegate.performStoreChange { try monitor.remove(id: monitor.pages[0].id) }
+        let id = monitor.pages[0].id
+        delegate.performStoreChange { try monitor.remove(id: id) }
         XCTAssertTrue(presented)
+        XCTAssertEqual(monitor.pages.count, 1)
     }
 
     func testPerformStoreChangeDoesNotPresentOnSuccess() throws {

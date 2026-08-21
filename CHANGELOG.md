@@ -10,6 +10,11 @@
 ### Changed
 
 - Add Status Page reports "Could not reach that URL" when the host is down, not a format error.
+- A corrupt saved page list shows an alert and is not overwritten by first-run seed or poll.
+
+### Fixed
+
+- Menu and Edit store errors no longer leave memory changed when the file write fails.
 
 ### Security
 

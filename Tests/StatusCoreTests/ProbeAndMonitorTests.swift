@@ -239,6 +239,10 @@ final class ProbeAndMonitorTests: XCTestCase {
         try await assertSaveThrows(json: statuspageJSON) { try $0.toggleComponent(id: $0.pages[0].id, name: "API") }
         try await assertSaveThrows(json: statuspageJSON) { try $0.setAllComponents(id: $0.pages[0].id, enabled: false) }
     }
+
+    func testStoreErrorCorruptHasUserFacingText() {
+        XCTAssertEqual(StoreError.corrupt.errorDescription, "The saved status list could not be read.")
+    }
 }
 
 private func writeConfig(_ data: Data) throws -> URL {
@@ -265,7 +269,9 @@ private func assertSaveThrows(json: String, _ work: (Monitor) throws -> Void) as
     let config = dir.appendingPathComponent("config.json")
     try FileManager.default.removeItem(at: config)
     try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
+    let count = monitor.pages.count
     XCTAssertThrowsError(try work(monitor))
+    XCTAssertEqual(monitor.pages.count, count)
 }
 
 private struct FailingHTTPClient: HTTPClient {

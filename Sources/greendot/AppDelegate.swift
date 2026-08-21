@@ -45,14 +45,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         Task {
             await self.maybeSeedOpenAI(monitor: monitor, loadSucceeded: loadSucceeded)
-            await self.pollAndRefresh()
+            if Self.shouldPoll(loadSucceeded: loadSucceeded) {
+                await self.pollAndRefresh()
+            }
         }
 
-        let poll = TimeInterval(
-            ProcessInfo.processInfo.environment["GREENDOT_POLL_SECONDS"].flatMap(Double.init) ?? 60
-        )
-        pollTimer = Timer.scheduledTimer(withTimeInterval: poll, repeats: true) { [weak self] _ in
-            Task { await self?.pollAndRefresh() }
+        if Self.shouldPoll(loadSucceeded: loadSucceeded) {
+            let poll = TimeInterval(
+                ProcessInfo.processInfo.environment["GREENDOT_POLL_SECONDS"].flatMap(Double.init) ?? 60
+            )
+            pollTimer = Timer.scheduledTimer(withTimeInterval: poll, repeats: true) { [weak self] _ in
+                Task { await self?.pollAndRefresh() }
+            }
         }
         pulseTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             self?.refreshIcon()
@@ -71,6 +75,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     static func shouldSeedOpenAI(loadSucceeded: Bool, pagesEmpty: Bool, skipSeed: Bool) -> Bool {
         loadSucceeded && pagesEmpty && !skipSeed
+    }
+
+    static func shouldPoll(loadSucceeded: Bool) -> Bool {
+        loadSucceeded
     }
 
     func performStoreChange(_ work: () throws -> Void) {
