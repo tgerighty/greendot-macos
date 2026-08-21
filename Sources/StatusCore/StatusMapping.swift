@@ -1,5 +1,3 @@
-import Foundation
-
 enum StatusMapping {
     static func statuspageIndicator(_ indicator: String) -> Severity {
         switch indicator.lowercased() {

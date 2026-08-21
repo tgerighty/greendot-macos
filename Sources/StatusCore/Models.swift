@@ -118,10 +118,6 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
         return Aggregator.severity(from: leaves(enabledComponents))
     }
 
-    public func isComponentEnabled(_ name: String) -> Bool {
-        !disabledComponentNames.contains(name)
-    }
-
     public func isComponentEnabled(_ component: ComponentStatus) -> Bool {
         !disabledComponentNames.contains(component.id) && !disabledComponentNames.contains(component.name)
     }

@@ -1,5 +1,3 @@
-import Foundation
-
 public struct Toast: Equatable, Sendable {
     public var pageName: String
     public var body: String

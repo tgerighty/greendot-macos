@@ -1,5 +1,3 @@
-import Foundation
-
 public enum Severity: String, Codable, Equatable, Sendable {
     case red
     case yellow
