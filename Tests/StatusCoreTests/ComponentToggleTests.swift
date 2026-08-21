@@ -173,6 +173,25 @@ final class ComponentToggleTests: XCTestCase {
         XCTAssertEqual(page.displaySeverity, .green)
     }
 
+    func testComponentTreeFindMatchesIdOrNameAndWalksChildren() {
+        let tree = boxTree()
+        XCTAssertEqual(ComponentTree.find("c1", in: tree)?.name, "Login/SSO")
+        XCTAssertEqual(ComponentTree.find("Login/SSO", in: tree)?.id, "c1")
+        XCTAssertEqual(ComponentTree.find("Box Web Application", in: tree)?.id, "g1")
+        XCTAssertNil(ComponentTree.find("missing", in: tree))
+    }
+
+    func testComponentTreeCollectIncludesSelfAndDescendants() {
+        XCTAssertEqual(ComponentTree.collect(boxTree()[0]).map(\.id), ["g1", "c1", "c2"])
+    }
+
+    func testComponentTreeKeysIncludeIdAndName() {
+        XCTAssertEqual(
+            ComponentTree.componentKeys(boxTree()),
+            ["g1", "Box Web Application", "c1", "Login/SSO", "c2", "Search"]
+        )
+    }
+
     func testToggleComponentByNameDisablesIdAndDescendantKeys() async throws {
         let (directory, monitor) = try await boxOutageMonitor()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -208,6 +227,22 @@ final class ComponentToggleTests: XCTestCase {
         let store = PageStore(directory: dir)
         let config = try store.load()
         XCTAssertTrue(config.pages.isEmpty)
+    }
+
+    private func boxTree() -> [ComponentStatus] {
+        [
+            ComponentStatus(
+                name: "Box Web Application",
+                severity: .green,
+                statusText: "Operational",
+                id: "g1",
+                children: [
+                    ComponentStatus(name: "Login/SSO", severity: .red, statusText: "Major outage", id: "c1"),
+                    ComponentStatus(name: "Search", severity: .green, statusText: "Operational", id: "c2")
+                ],
+                isGroup: true
+            )
+        ]
     }
 
     private func boxOutageMonitor() async throws -> (directory: URL, monitor: Monitor) {
