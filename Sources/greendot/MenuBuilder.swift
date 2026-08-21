@@ -45,7 +45,6 @@ enum MenuBuilder {
 
         menu.addItem(.separator())
         menu.addItem(actionItem("Quit greendot", identifier: "quit", action: actions.onQuit))
-        MenuClickOpener.install(menu)
         return menu
     }
 
@@ -174,7 +173,7 @@ enum MenuBuilder {
 }
 
 /// Keeps a closure alive as the menu item target. NSMenuItem retains its target.
-private final class TargetAction: NSObject {
+final class TargetAction: NSObject {
     let action: () -> Void
 
     init(_ action: @escaping () -> Void) {

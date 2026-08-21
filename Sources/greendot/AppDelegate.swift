@@ -38,13 +38,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.menuBar = menuBar
         rebuild()
-        DistributedNotificationCenter.default().addObserver(
-            forName: Notification.Name("com.tgerighty.greendot.showMenu"),
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.menuBar?.popMenuOnScreen()
-        }
         installUITestHooks()
 
         Task {
@@ -171,6 +164,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func installUITestHooks() {
         guard ProcessInfo.processInfo.environment["GREENDOT_UI_TEST"] != nil else { return }
+        guard let configDir = ProcessInfo.processInfo.environment["GREENDOT_CONFIG_DIR"],
+              !configDir.isEmpty else { return }
+        observe("showMenu") { [weak self] _ in
+            self?.menuBar?.popMenuOnScreen()
+        }
         observe("clickMenu") { [weak self] path in
             _ = self?.menuBar?.performMenuPath(path)
         }
@@ -205,6 +203,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private static func writeDump(_ key: String, body: String) {
         guard let path = ProcessInfo.processInfo.environment[key], !path.isEmpty else { return }
-        try? body.write(toFile: path, atomically: true, encoding: .utf8)
+        guard let configDir = ProcessInfo.processInfo.environment["GREENDOT_CONFIG_DIR"],
+              !configDir.isEmpty else { return }
+        let file = URL(fileURLWithPath: path)
+        let root = URL(fileURLWithPath: configDir, isDirectory: true)
+        guard PathSafety.contained(file, under: root) != nil else { return }
+        try? body.write(to: file, atomically: true, encoding: .utf8)
     }
 }

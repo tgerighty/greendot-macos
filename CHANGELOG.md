@@ -11,6 +11,12 @@
 
 - Add Status Page reports "Could not reach that URL" when the host is down, not a format error.
 
+### Security
+
+- Open Status Page and row clicks open only http and https URLs.
+- Fixture HTTP client rejects paths that leave the fixture directory.
+- UI-test notifications require a config directory; dump files must stay inside it.
+
 ### Added
 
 - greendot v1: macOS menu-bar monitor for Statuspage, Statuspal, and Instatus JSON status pages.

@@ -38,8 +38,8 @@ enum MenuCommands {
     }
 
     private static func invoke(_ item: NSMenuItem) -> Bool {
-        guard let box = item.representedObject as AnyObject? else { return false }
-        _ = box.perform(NSSelectorFromString("invoke"))
+        guard let box = item.representedObject as? TargetAction else { return false }
+        box.invoke()
         return true
     }
 
