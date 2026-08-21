@@ -103,7 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Task { await self?.pollAndRefresh() }
                 },
                 onToggleLaunchAtLogin: { [weak self] in
-                    _ = LaunchAtLogin.toggle()
+                    LaunchAtLogin.toggle()
                     self?.rebuild()
                 },
                 onQuit: { NSApp.terminate(nil) }
@@ -170,13 +170,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.menuBar?.popMenuOnScreen()
         }
         observe("clickMenu") { [weak self] path in
-            _ = self?.menuBar?.performMenuPath(path)
+            self?.menuBar?.performMenuPath(path)
         }
         observe("dumpMenu") { [weak self] _ in
             Self.writeDump("GREENDOT_MENU_DUMP", body: self?.menuBar?.dumpMenu() ?? "")
         }
         observe("clickIdentifier") { identifier in
-            _ = UITestDriver.clickIdentifier(identifier)
+            UITestDriver.clickIdentifier(identifier)
         }
         observe("dumpIdentifiers") { _ in
             Self.writeDump("GREENDOT_ID_DUMP", body: UITestDriver.identifiers().joined(separator: "\n"))
@@ -184,10 +184,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         observe("setField") { raw in
             let parts = raw.split(separator: "\t", maxSplits: 1).map(String.init)
             guard parts.count == 2 else { return }
-            _ = UITestDriver.setField(parts[0], value: parts[1])
+            UITestDriver.setField(parts[0], value: parts[1])
         }
         observe("focusField") { identifier in
-            _ = UITestDriver.focusField(identifier)
+            UITestDriver.focusField(identifier)
         }
     }
 
