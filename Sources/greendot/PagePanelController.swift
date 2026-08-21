@@ -27,7 +27,7 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         self.onRemove = onRemove
         self.disabledNames = page?.disabledComponentNames ?? []
         let editing = page != nil
-        let componentCount = page?.snapshot?.components.count ?? 0
+        let componentCount = Self.countComponents(page?.snapshot?.components ?? [])
         let listHeight = CGFloat(min(max(componentCount, 1), 12) * 24 + 8)
         let height: CGFloat = editing ? 200 + listHeight + 48 : 160
         window = KeyablePanel(
@@ -105,19 +105,7 @@ final class PagePanelController: NSObject, NSWindowDelegate {
             stack.spacing = 2
             stack.translatesAutoresizingMaskIntoConstraints = false
 
-            for component in components {
-                let button = NSButton(
-                    checkboxWithTitle: "\(component.name)  —  \(component.statusText)",
-                    target: self,
-                    action: #selector(componentClicked(_:))
-                )
-                button.identifier = NSUserInterfaceItemIdentifier(component.name)
-                button.state = page.isComponentEnabled(component.name) ? .on : .off
-                button.setAccessibilityIdentifier("component-\(component.name)")
-                button.imagePosition = .imageLeading
-                checkboxes[component.name] = button
-                stack.addArrangedSubview(button)
-            }
+            addCheckboxes(components, page: page, indent: 0, stack: stack)
 
             let scroll = NSScrollView()
             scroll.translatesAutoresizingMaskIntoConstraints = false
@@ -158,6 +146,39 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         ])
         NSLayoutConstraint.activate(constraints)
         return view
+    }
+
+    private func addCheckboxes(
+        _ components: [ComponentStatus],
+        page: WatchedPage,
+        indent: Int,
+        stack: NSStackView
+    ) {
+        for component in components {
+            let pad = String(repeating: "    ", count: indent)
+            let title: String
+            if component.isGroup || !component.children.isEmpty {
+                title = "\(pad)\(component.name)"
+            } else {
+                title = "\(pad)\(component.name)  —  \(component.statusText)"
+            }
+            let button = NSButton(
+                checkboxWithTitle: title,
+                target: self,
+                action: #selector(componentClicked(_:))
+            )
+            button.identifier = NSUserInterfaceItemIdentifier(component.id)
+            button.state = page.isComponentEnabled(component) ? .on : .off
+            button.setAccessibilityIdentifier("component-\(component.id)")
+            button.imagePosition = .imageLeading
+            checkboxes[component.id] = button
+            stack.addArrangedSubview(button)
+            addCheckboxes(component.children, page: page, indent: indent + 1, stack: stack)
+        }
+    }
+
+    private static func countComponents(_ items: [ComponentStatus]) -> Int {
+        items.reduce(0) { $0 + 1 + countComponents($1.children) }
     }
 
     @objc private func componentClicked(_ sender: NSButton) {

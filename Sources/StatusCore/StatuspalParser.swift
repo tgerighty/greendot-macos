@@ -11,7 +11,7 @@ public enum StatuspalParser {
         let pageURL = (statusPage["url"] as? String).flatMap(URL.init(string:)) ?? sourceURL
         let type = json["current_status_type"] as? String ?? statusPage["current_incident_type"] as? String
         let services = json["services"] as? [[String: Any]] ?? []
-        let components = flatten(services)
+        let components = services.compactMap(node)
         let incidentsJSON = json["incidents"] as? [[String: Any]] ?? []
         let incidents = incidentsJSON.compactMap { item -> Incident? in
             guard let title = item["title"] as? String else { return nil }
@@ -28,23 +28,34 @@ public enum StatuspalParser {
         )
     }
 
-    private static func flatten(_ services: [[String: Any]]) -> [ComponentStatus] {
-        services.flatMap { service -> [ComponentStatus] in
-            let children = service["children"] as? [[String: Any]] ?? []
-            if !children.isEmpty {
-                return flatten(children)
-            }
-            guard let name = service["name"] as? String else { return [] }
-            let type = service["current_incident_type"] as? String
-            let severity = StatusMapping.statuspal(type)
-            let text: String
-            switch severity {
-            case .green: text = "Operational"
-            case .yellow: text = type == "scheduled" ? "Maintenance" : "Degraded"
-            case .red: text = "Major outage"
-            case .grey: text = "Unreachable"
-            }
-            return [ComponentStatus(name: name, severity: severity, statusText: text)]
+    private static func node(_ service: [String: Any]) -> ComponentStatus? {
+        guard let name = service["name"] as? String else { return nil }
+        let rawID = service["id"]
+        let id: String
+        if let number = rawID as? Int {
+            id = String(number)
+        } else if let string = rawID as? String, !string.isEmpty {
+            id = string
+        } else {
+            id = name
         }
+        let type = service["current_incident_type"] as? String
+        let severity = StatusMapping.statuspal(type)
+        let text: String
+        switch severity {
+        case .green: text = "Operational"
+        case .yellow: text = type == "scheduled" ? "Maintenance" : "Degraded"
+        case .red: text = "Major outage"
+        case .grey: text = "Unreachable"
+        }
+        let nested = (service["children"] as? [[String: Any]] ?? []).compactMap(node)
+        return ComponentStatus(
+            name: name,
+            severity: severity,
+            statusText: text,
+            id: id,
+            children: nested,
+            isGroup: !nested.isEmpty
+        )
     }
 }

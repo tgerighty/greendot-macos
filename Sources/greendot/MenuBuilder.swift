@@ -88,19 +88,9 @@ enum MenuBuilder {
 
         let components = page.enabledComponents
         if !components.isEmpty {
+            let url = snapshot?.url ?? page.url
             for component in components {
-                let row = NSMenuItem(
-                    title: "\(component.name)    \(component.statusText)",
-                    action: nil,
-                    keyEquivalent: ""
-                )
-                row.image = StatusDot.image(component.severity)
-                row.isEnabled = snapshot?.url != nil
-                if let url = snapshot?.url ?? Optional(page.url) {
-                    row.representedObject = url
-                    TargetAction.install(row) { onOpen(url) }
-                }
-                menu.addItem(row)
+                menu.addItem(componentItem(component, url: url, onOpen: onOpen))
             }
         } else if snapshot?.isUnreachable != true {
             let row = NSMenuItem(
@@ -138,6 +128,30 @@ enum MenuBuilder {
             onOpen(snapshot?.url ?? page.url)
         })
         return menu
+    }
+
+    private static func componentItem(
+        _ component: ComponentStatus,
+        url: URL,
+        onOpen: @escaping (URL) -> Void
+    ) -> NSMenuItem {
+        let title = component.isGroup || !component.children.isEmpty
+            ? component.name
+            : "\(component.name)    \(component.statusText)"
+        let row = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        row.image = StatusDot.image(component.severity)
+        row.identifier = NSUserInterfaceItemIdentifier(component.id)
+        if !component.children.isEmpty {
+            let sub = NSMenu()
+            sub.autoenablesItems = false
+            for child in component.children {
+                sub.addItem(componentItem(child, url: url, onOpen: onOpen))
+            }
+            row.submenu = sub
+        } else {
+            TargetAction.install(row) { onOpen(url) }
+        }
+        return row
     }
 
     private static func overallText(_ severity: Severity) -> String {

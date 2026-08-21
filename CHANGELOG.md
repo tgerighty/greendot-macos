@@ -11,6 +11,8 @@
 - App icon is a plain green status dot.
 - Edit dialog lists components; click a component to include or hide it. Remove Status Page sits at the bottom of that dialog.
 
+- Status page groups (for example Box Web Application → Login/SSO) show as a nested menu and as indented checkboxes in Edit.
+
 ### Fixed
 
 - Cut, copy, and paste work in the Add/Edit Status Page fields (Cmd+C / Cmd+V).

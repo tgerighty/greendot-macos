@@ -17,8 +17,33 @@ final class ParserTests: XCTestCase {
         let snap = try StatuspageParser.parse(data: data, sourceURL: URL(string: "https://www.githubstatus.com")!)
         XCTAssertEqual(snap.provider, .statuspage)
         XCTAssertEqual(snap.overall, .green)
-        XCTAssertEqual(snap.components.map(\.name), ["API"])
+        XCTAssertEqual(snap.components.map(\.name), ["API", "Group"])
         XCTAssertEqual(snap.components.first?.statusText, "Operational")
+        XCTAssertTrue(snap.components[1].isGroup)
+        XCTAssertTrue(snap.components[1].children.isEmpty)
+    }
+
+    func testStatuspageNestsGroupChildren() throws {
+        let data = Data("""
+        {
+          "page": {"name": "Box", "url": "https://status.box.com"},
+          "status": {"indicator": "none"},
+          "components": [
+            {"id": "g1", "name": "Box Web Application", "status": "operational", "group": true},
+            {"id": "c1", "name": "Login/SSO", "status": "operational", "group": false, "group_id": "g1"},
+            {"id": "c2", "name": "Search", "status": "degraded_performance", "group": false, "group_id": "g1"},
+            {"id": "c3", "name": "Content API", "status": "operational", "group": false}
+          ],
+          "incidents": []
+        }
+        """.utf8)
+        let snap = try StatuspageParser.parse(data: data, sourceURL: URL(string: "https://status.box.com")!)
+        XCTAssertEqual(snap.components.map(\.name), ["Box Web Application", "Content API"])
+        XCTAssertTrue(snap.components[0].isGroup)
+        XCTAssertEqual(snap.components[0].children.map(\.name), ["Login/SSO", "Search"])
+        XCTAssertEqual(snap.components[0].children[1].severity, .yellow)
+        XCTAssertEqual(snap.components[1].name, "Content API")
+        XCTAssertTrue(snap.components[1].children.isEmpty)
     }
 
     func testStatuspageCriticalIsRed() throws {
@@ -86,7 +111,9 @@ final class ParserTests: XCTestCase {
         let snap = try StatuspalParser.parse(data: data, sourceURL: URL(string: "https://status.example")!)
         XCTAssertEqual(snap.provider, .statuspal)
         XCTAssertEqual(snap.overall, .green)
-        XCTAssertEqual(snap.components.map(\.name), ["Object Storage"])
+        XCTAssertEqual(snap.components.map(\.name), ["IaaS"])
+        XCTAssertTrue(snap.components[0].isGroup)
+        XCTAssertEqual(snap.components[0].children.map(\.name), ["Object Storage"])
     }
 
     func testStatuspalMajorIsRed() throws {

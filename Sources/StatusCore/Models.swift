@@ -6,15 +6,44 @@ public enum StatusProvider: String, Codable, Equatable, Sendable {
     case instatus
 }
 
-public struct ComponentStatus: Codable, Equatable, Sendable {
+public struct ComponentStatus: Equatable, Sendable {
+    public var id: String
     public var name: String
     public var severity: Severity
     public var statusText: String
+    public var children: [ComponentStatus]
+    public var isGroup: Bool
 
-    public init(name: String, severity: Severity, statusText: String) {
+    public init(
+        name: String,
+        severity: Severity,
+        statusText: String,
+        id: String? = nil,
+        children: [ComponentStatus] = [],
+        isGroup: Bool = false
+    ) {
+        self.id = id ?? name
         self.name = name
         self.severity = severity
         self.statusText = statusText
+        self.children = children
+        self.isGroup = isGroup
+    }
+}
+
+extension ComponentStatus: Codable {
+    enum CodingKeys: String, CodingKey {
+        case id, name, severity, statusText, children, isGroup
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        severity = try container.decode(Severity.self, forKey: .severity)
+        statusText = try container.decode(String.self, forKey: .statusText)
+        id = try container.decodeIfPresent(String.self, forKey: .id) ?? name
+        children = try container.decodeIfPresent([ComponentStatus].self, forKey: .children) ?? []
+        isGroup = try container.decodeIfPresent(Bool.self, forKey: .isGroup) ?? false
     }
 }
 
@@ -81,16 +110,37 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
     }
 
     public var enabledComponents: [ComponentStatus] {
-        snapshot?.components.filter { !disabledComponentNames.contains($0.name) } ?? []
+        filterEnabled(snapshot?.components ?? [])
     }
 
     public var displaySeverity: Severity {
         if snapshot?.isUnreachable == true { return .grey }
-        return Aggregator.severity(from: enabledComponents)
+        return Aggregator.severity(from: leaves(enabledComponents))
     }
 
     public func isComponentEnabled(_ name: String) -> Bool {
         !disabledComponentNames.contains(name)
+    }
+
+    public func isComponentEnabled(_ component: ComponentStatus) -> Bool {
+        !disabledComponentNames.contains(component.id) && !disabledComponentNames.contains(component.name)
+    }
+
+    private func filterEnabled(_ items: [ComponentStatus]) -> [ComponentStatus] {
+        items.compactMap { item in
+            guard isComponentEnabled(item) else { return nil }
+            var copy = item
+            copy.children = filterEnabled(item.children)
+            return copy
+        }
+    }
+
+    private func leaves(_ items: [ComponentStatus]) -> [ComponentStatus] {
+        items.flatMap { item in
+            if item.children.isEmpty { return [item] }
+            let childLeaves = leaves(item.children)
+            return childLeaves.isEmpty && !item.isGroup ? [item] : childLeaves
+        }
     }
 }
 

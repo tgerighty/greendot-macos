@@ -61,6 +61,45 @@ final class ComponentToggleTests: XCTestCase {
         XCTAssertEqual(loaded.pages[0].disabledComponentNames, ["Git"])
     }
 
+    func testDisablingAGroupHidesItsChildren() {
+        var page = pageWith(components: [
+            ComponentStatus(
+                name: "Box Web Application",
+                severity: .green,
+                statusText: "Operational",
+                id: "g1",
+                children: [
+                    ComponentStatus(name: "Login/SSO", severity: .red, statusText: "Major outage", id: "c1"),
+                    ComponentStatus(name: "Search", severity: .green, statusText: "Operational", id: "c2")
+                ],
+                isGroup: true
+            )
+        ])
+        XCTAssertEqual(page.displaySeverity, .red)
+        page.disabledComponentNames.insert("g1")
+        XCTAssertEqual(page.enabledComponents, [])
+        XCTAssertEqual(page.displaySeverity, .green)
+    }
+
+    func testDisablingOneChildLeavesSiblings() {
+        var page = pageWith(components: [
+            ComponentStatus(
+                name: "Box Web Application",
+                severity: .green,
+                statusText: "Operational",
+                id: "g1",
+                children: [
+                    ComponentStatus(name: "Login/SSO", severity: .red, statusText: "Major outage", id: "c1"),
+                    ComponentStatus(name: "Search", severity: .green, statusText: "Operational", id: "c2")
+                ],
+                isGroup: true
+            )
+        ])
+        page.disabledComponentNames.insert("c1")
+        XCTAssertEqual(page.enabledComponents.first?.children.map(\.name), ["Search"])
+        XCTAssertEqual(page.displaySeverity, .green)
+    }
+
     func testOldConfigWithoutDisabledNamesStillLoads() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }
