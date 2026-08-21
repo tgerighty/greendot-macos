@@ -17,3 +17,4 @@
 ### Fixed
 
 - Cut, copy, and paste work in the Add/Edit Status Page fields (Cmd+C / Cmd+V).
+- Opening Edit for a second page no longer crashes (the previous dialog was released while the menu was still tracking).

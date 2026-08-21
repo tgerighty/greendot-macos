@@ -117,6 +117,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func openPanel(editing: WatchedPage?) {
+        let previous = panel
+        previous?.close()
         let panel = PagePanelController(
             page: editing,
             onSave: { [weak self] url, name in
@@ -157,6 +159,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
         self.panel = panel
-        panel.show()
+        // Releasing the previous dialog inside the status-item menu action
+        // over-releases AppKit view arrays (SIGSEGV in NSArray dealloc).
+        DispatchQueue.main.async { [weak self] in
+            _ = previous
+            self?.panel?.show()
+        }
     }
 }

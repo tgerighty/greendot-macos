@@ -57,6 +57,12 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         window.makeFirstResponder(urlField)
     }
 
+    func close() {
+        window.delegate = nil
+        window.contentView = nil
+        window.orderOut(nil)
+    }
+
     private func buildView(page: WatchedPage?, listHeight: CGFloat) -> NSView {
         let height = window.frame.height
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: height))
@@ -254,14 +260,17 @@ final class PagePanelController: NSObject, NSWindowDelegate {
 
     private func applyState(_ button: NSButton, nodes: [ComponentStatus]) {
         let onCount = nodes.filter { !isOff($0) }.count
-        button.allowsMixedState = onCount > 0 && onCount < nodes.count
-        if onCount == 0 {
-            button.state = .off
-        } else if onCount == nodes.count {
-            button.state = .on
-        } else {
+        let mixed = onCount > 0 && onCount < nodes.count
+        if mixed {
+            button.allowsMixedState = true
             button.state = .mixed
+            return
         }
+        if button.state == .mixed {
+            button.state = .off
+        }
+        button.allowsMixedState = false
+        button.state = onCount == 0 ? .off : .on
     }
 
     private static func find(_ key: String, in items: [ComponentStatus]) -> ComponentStatus? {

@@ -13,6 +13,10 @@ let package = Package(
         .testTarget(
             name: "StatusCoreTests",
             dependencies: ["StatusCore"]
+        ),
+        .testTarget(
+            name: "greendotTests",
+            dependencies: ["greendot", "StatusCore"]
         )
     ]
 )
