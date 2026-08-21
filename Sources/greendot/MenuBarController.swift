@@ -34,7 +34,7 @@ final class MenuBarController: NSObject {
         applyMenu()
     }
 
-    /// UI tests use this when a menu-bar manager parks the extra off-screen.
+    /// UI tests use this when a menu-bar manager parks the NSStatusItem off-screen.
     func popMenuOnScreen() {
         NSApp.activate(ignoringOtherApps: true)
         if clickOpener.isTracking {
