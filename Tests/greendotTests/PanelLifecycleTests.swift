@@ -16,6 +16,15 @@ final class PanelLifecycleTests: XCTestCase {
         panel = nil
     }
 
+    func testCloseAfterWindowCloseDoesNotCrash() {
+        _ = NSApplication.shared
+        let page = Self.nestedPage()
+        let panel = PagePanelController(page: page, onSave: { _, _ in })
+        panel.show()
+        panel.closeWindow()
+        panel.close()
+    }
+
     private static func nestedPage() -> WatchedPage {
         let group = ComponentStatus(
             name: "Box Web Application",

@@ -44,6 +44,7 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         )
         window.title = editing ? "Edit Status Page" : "Add Status Page"
         window.level = .floating
+        window.isReleasedWhenClosed = false
         super.init()
         window.delegate = self
         window.contentView = buildView(page: page, listHeight: listHeight)
@@ -59,8 +60,12 @@ final class PagePanelController: NSObject, NSWindowDelegate {
 
     func close() {
         window.delegate = nil
-        window.contentView = nil
         window.orderOut(nil)
+    }
+
+    /// Same path as the window close button / Save / Cancel.
+    func closeWindow() {
+        window.close()
     }
 
     private func buildView(page: WatchedPage?, listHeight: CGFloat) -> NSView {
