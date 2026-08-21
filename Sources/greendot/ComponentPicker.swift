@@ -96,7 +96,7 @@ final class ComponentPicker: NSObject {
     }
 
     @objc private func allClicked(_: NSButton) {
-        let nodes = rootComponents.flatMap(Self.collect)
+        let nodes = rootComponents.flatMap(ComponentTree.collect)
         let allOn = nodes.allSatisfy { !isOff($0) }
         setEnabled(!allOn, nodes: nodes)
         refreshTreeStates()
@@ -105,8 +105,8 @@ final class ComponentPicker: NSObject {
 
     @objc private func componentClicked(_ sender: NSButton) {
         let key = sender.identifier?.rawValue ?? sender.title
-        let node = Self.find(key, in: rootComponents)
-        let nodes = node.map(Self.collect) ?? []
+        let node = ComponentTree.find(key, in: rootComponents)
+        let nodes = node.map(ComponentTree.collect) ?? []
         let allOn = nodes.isEmpty ? !disabledNames.contains(key) : nodes.allSatisfy { !isOff($0) }
         if nodes.isEmpty {
             setEnabled(!allOn, keys: [key])
@@ -134,10 +134,10 @@ final class ComponentPicker: NSObject {
     }
 
     private func refreshTreeStates() {
-        let nodes = rootComponents.flatMap(Self.collect)
+        let nodes = rootComponents.flatMap(ComponentTree.collect)
         for component in nodes {
             guard let button = checkboxes[component.id] else { continue }
-            applyState(button, nodes: Self.collect(component))
+            applyState(button, nodes: ComponentTree.collect(component))
         }
         if let allCheckbox {
             applyState(allCheckbox, nodes: nodes)
@@ -157,17 +157,5 @@ final class ComponentPicker: NSObject {
         }
         button.allowsMixedState = false
         button.state = onCount == 0 ? .off : .on
-    }
-
-    private static func find(_ key: String, in items: [ComponentStatus]) -> ComponentStatus? {
-        for item in items {
-            if item.id == key || item.name == key { return item }
-            if let hit = find(key, in: item.children) { return hit }
-        }
-        return nil
-    }
-
-    private static func collect(_ item: ComponentStatus) -> [ComponentStatus] {
-        [item] + item.children.flatMap(collect)
     }
 }
