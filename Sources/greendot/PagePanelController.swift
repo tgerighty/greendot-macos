@@ -1,6 +1,11 @@
 import AppKit
 import StatusCore
 
+private final class KeyablePanel: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
 final class PagePanelController: NSObject, NSWindowDelegate {
     private let window: NSWindow
     private let urlField = NSTextField(string: "")
@@ -25,7 +30,7 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         let componentCount = page?.snapshot?.components.count ?? 0
         let listHeight = CGFloat(min(max(componentCount, 1), 12) * 24 + 8)
         let height: CGFloat = editing ? 200 + listHeight + 48 : 160
-        window = NSWindow(
+        window = KeyablePanel(
             contentRect: NSRect(x: 0, y: 0, width: 440, height: height),
             styleMask: [.titled, .closable],
             backing: .buffered,
@@ -43,6 +48,7 @@ final class PagePanelController: NSObject, NSWindowDelegate {
     func show() {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(urlField)
     }
 
     private func buildView(page: WatchedPage?, listHeight: CGFloat) -> NSView {

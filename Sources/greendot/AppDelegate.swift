@@ -10,6 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var notifier: Notifier?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppEditMenu.install()
+
         let store = PageStore(directory: PageStore.defaultDirectory)
         let client: HTTPClient
         if let fixture = ProcessInfo.processInfo.environment["GREENDOT_FIXTURE_DIR"], !fixture.isEmpty {
