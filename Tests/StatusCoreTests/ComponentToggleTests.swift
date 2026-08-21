@@ -173,6 +173,30 @@ final class ComponentToggleTests: XCTestCase {
         XCTAssertEqual(page.displaySeverity, .green)
     }
 
+    func testToggleComponentByNameDisablesIdAndDescendantKeys() async throws {
+        let (directory, monitor) = try await boxOutageMonitor()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let id = monitor.pages[0].id
+
+        try monitor.toggleComponent(id: id, name: "Box Web Application")
+        XCTAssertEqual(
+            monitor.pages[0].disabledComponentNames,
+            ["g1", "Box Web Application", "c1", "Login/SSO", "c2", "Search"]
+        )
+    }
+
+    func testSetAllComponentsRecordsEveryIdAndName() async throws {
+        let (directory, monitor) = try await boxOutageMonitor()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let id = monitor.pages[0].id
+
+        try monitor.setAllComponents(id: id, enabled: false)
+        XCTAssertEqual(
+            monitor.pages[0].disabledComponentNames,
+            ["g1", "Box Web Application", "c1", "Login/SSO", "c2", "Search"]
+        )
+    }
+
     func testOldConfigWithoutDisabledNamesStillLoads() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -184,6 +208,26 @@ final class ComponentToggleTests: XCTestCase {
         let store = PageStore(directory: dir)
         let config = try store.load()
         XCTAssertTrue(config.pages.isEmpty)
+    }
+
+    private func boxOutageMonitor() async throws -> (directory: URL, monitor: Monitor) {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let json = """
+        {
+          "page": {"name": "Box", "url": "https://status.box.com"},
+          "status": {"indicator": "none"},
+          "components": [
+            {"id": "g1", "name": "Box Web Application", "status": "operational", "group": true},
+            {"id": "c1", "name": "Login/SSO", "status": "major_outage", "group": false, "group_id": "g1"},
+            {"id": "c2", "name": "Search", "status": "operational", "group": false, "group_id": "g1"}
+          ],
+          "incidents": []
+        }
+        """
+        let client = MapHTTPClient(byPath: ["/api/v2/summary.json": (Data(json.utf8), 200)])
+        let monitor = Monitor(store: PageStore(directory: directory), client: client)
+        try await monitor.add(url: URL(string: "https://status.box.com")!, name: nil)
+        return (directory, monitor)
     }
 
     private func pageWith(components: [ComponentStatus], unreachable: Bool = false) -> WatchedPage {
