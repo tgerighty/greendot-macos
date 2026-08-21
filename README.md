@@ -1,28 +1,37 @@
-# status-app
+# greendot
 
-A macOS menu bar app. You add a status-page URL. The app polls that page on an interval and shows the status in the menu bar.
+A macOS menu-bar app. You add a status-page URL. The app polls the page and shows a green, yellow, or red dot in the menu bar.
 
-## What the app does
+On first launch it adds [OpenAI Status](https://status.openai.com/) so you can see it working.
 
-- You enter the URL of a software or SaaS status page.
-- The app adds that page to the menu bar with a status icon.
-- The menu has one item for the app and a submenu for each added page.
-- The app polls each page on a regular interval.
-- If a page goes yellow or red, the menu-bar icon goes yellow or red.
-- Optional notifications fire when a status changes and when it clears.
-- The app can monitor internal status pages.
+## What it does
 
-## Status page formats
+- Add the public URL of a SaaS or internal status page.
+- The menu lists each page. The submenu lists that page's components.
+- The app polls every 60 seconds.
+- The menu-bar icon uses the worst real status (red > yellow > green).
+- A fetch failure is grey. If any page is grey, the icon flashes grey for one second every 30 seconds.
+- Optional per-page notifications when overall status changes, including recovery.
+- Launch at login is on by default.
 
-The app will support common public JSON status APIs, including:
+v1 parsers: Atlassian Statuspage, Statuspal, Instatus. HTML scrape is next.
 
-- Atlassian Statuspage (`/api/v2/summary.json`)
-- Statuspal
-- Other common status-page products that expose a JSON summary
+## Build
 
-## Status
+```bash
+make test
+make app
+make install
+make uitest    # local GUI session; needs Accessibility for the test runner
+```
 
-This repository is new. Design and implementation are in progress.
+Requires macOS 13+ and Xcode.
+
+## Config
+
+Pages are stored in `~/Library/Application Support/greendot/config.json`.
+
+Set `GREENDOT_CONFIG_DIR` to use another directory (UI tests do this).
 
 ## License
 

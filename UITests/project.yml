@@ -1,0 +1,27 @@
+name: GreenDotUITests
+options:
+  bundleIdPrefix: com.tgerighty
+  deploymentTarget:
+    macOS: "14.0"
+targets:
+  GreenDotUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - GreenDotUITests
+    info:
+      path: GreenDotUITests/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tgerighty.greendot.uitests
+        SWIFT_VERSION: "5.9"
+        ENABLE_APP_SANDBOX: "NO"
+        CODE_SIGN_IDENTITY: "-"
+schemes:
+  GreenDotUITests:
+    build:
+      targets:
+        GreenDotUITests: [test]
+    test:
+      targets:
+        - GreenDotUITests
