@@ -140,6 +140,20 @@ final class ComponentToggleTests: XCTestCase {
         XCTAssertEqual(page.displaySeverity, .green)
     }
 
+    func testIsComponentEnabledChecksIdAndName() {
+        var page = pageWith(components: [
+            ComponentStatus(name: "Login/SSO", severity: .red, statusText: "Major outage", id: "c1")
+        ])
+        let component = ComponentStatus(name: "Login/SSO", severity: .red, statusText: "Major outage", id: "c1")
+        XCTAssertTrue(page.isComponentEnabled(component))
+
+        page.disabledComponentNames = ["c1"]
+        XCTAssertFalse(page.isComponentEnabled(component))
+
+        page.disabledComponentNames = ["Login/SSO"]
+        XCTAssertFalse(page.isComponentEnabled(component))
+    }
+
     func testDisablingOneChildLeavesSiblings() {
         var page = pageWith(components: [
             ComponentStatus(

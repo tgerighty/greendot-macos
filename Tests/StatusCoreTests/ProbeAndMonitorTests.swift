@@ -37,6 +37,15 @@ final class ProbeAndMonitorTests: XCTestCase {
         XCTAssertEqual(snap.provider, .instatus)
     }
 
+    func testMapHTTPClientUsesMutatedByURLProperty() async throws {
+        var client = MapHTTPClient()
+        let url = URL(string: "https://statuspal.io/api/v2/status_pages/acme/summary")!
+        client.byURL[url.absoluteString] = (Data("ok".utf8), 200)
+        let result = try await client.get(url)
+        XCTAssertEqual(result.1, 200)
+        XCTAssertEqual(result.0, Data("ok".utf8))
+    }
+
     func testProbeFindsStatuspalFromHost() async throws {
         let json = """
         {
