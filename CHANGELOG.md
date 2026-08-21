@@ -9,3 +9,4 @@
 - First launch seeds https://status.openai.com/.
 - Per-page notifications and launch-at-login.
 - App icon is a plain green status dot.
+- Edit dialog lists components; click a component to include or hide it. Remove Status Page sits at the bottom of that dialog.

@@ -115,24 +115,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func openPanel(editing: WatchedPage?) {
-        let panel = PagePanelController(page: editing) { [weak self] url, name in
-            guard let self, let monitor = self.monitor else { return }
-            Task {
-                do {
-                    if let editing {
-                        try await monitor.edit(id: editing.id, url: url, name: name)
-                    } else {
-                        try await monitor.add(url: url, name: name)
-                    }
-                    await MainActor.run { self.rebuild() }
-                } catch {
-                    await MainActor.run {
-                        let alert = NSAlert(error: error)
-                        _ = alert.runModal()
+        let panel = PagePanelController(
+            page: editing,
+            onSave: { [weak self] url, name in
+                guard let self, let monitor = self.monitor else { return }
+                Task {
+                    do {
+                        if let editing {
+                            try await monitor.edit(id: editing.id, url: url, name: name)
+                        } else {
+                            try await monitor.add(url: url, name: name)
+                        }
+                        await MainActor.run { self.rebuild() }
+                    } catch {
+                        await MainActor.run {
+                            let alert = NSAlert(error: error)
+                            _ = alert.runModal()
+                        }
                     }
                 }
+            },
+            onToggleComponent: editing.map { page in
+                { [weak self] name in
+                    try? self?.monitor?.toggleComponent(id: page.id, name: name)
+                    self?.rebuild()
+                }
+            },
+            onRemove: editing.map { page in
+                { [weak self] in
+                    try? self?.monitor?.remove(id: page.id)
+                    self?.rebuild()
+                }
             }
-        }
+        )
         self.panel = panel
         panel.show()
     }

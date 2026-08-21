@@ -56,11 +56,12 @@ public struct PageSnapshot: Codable, Equatable, Sendable {
     }
 }
 
-public struct WatchedPage: Codable, Equatable, Sendable, Identifiable {
+public struct WatchedPage: Equatable, Sendable, Identifiable {
     public var id: UUID
     public var url: URL
     public var name: String
     public var notificationsEnabled: Bool
+    public var disabledComponentNames: Set<String>
     public var snapshot: PageSnapshot?
 
     public init(
@@ -68,12 +69,43 @@ public struct WatchedPage: Codable, Equatable, Sendable, Identifiable {
         url: URL,
         name: String,
         notificationsEnabled: Bool = true,
+        disabledComponentNames: Set<String> = [],
         snapshot: PageSnapshot? = nil
     ) {
         self.id = id
         self.url = url
         self.name = name
         self.notificationsEnabled = notificationsEnabled
+        self.disabledComponentNames = disabledComponentNames
         self.snapshot = snapshot
+    }
+
+    public var enabledComponents: [ComponentStatus] {
+        snapshot?.components.filter { !disabledComponentNames.contains($0.name) } ?? []
+    }
+
+    public var displaySeverity: Severity {
+        if snapshot?.isUnreachable == true { return .grey }
+        return Aggregator.severity(from: enabledComponents)
+    }
+
+    public func isComponentEnabled(_ name: String) -> Bool {
+        !disabledComponentNames.contains(name)
+    }
+}
+
+extension WatchedPage: Codable {
+    enum CodingKeys: String, CodingKey {
+        case id, url, name, notificationsEnabled, disabledComponentNames, snapshot
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        url = try container.decode(URL.self, forKey: .url)
+        name = try container.decode(String.self, forKey: .name)
+        notificationsEnabled = try container.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true
+        disabledComponentNames = try container.decodeIfPresent(Set<String>.self, forKey: .disabledComponentNames) ?? []
+        snapshot = try container.decodeIfPresent(PageSnapshot.self, forKey: .snapshot)
     }
 }

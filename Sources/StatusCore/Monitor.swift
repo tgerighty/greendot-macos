@@ -57,11 +57,22 @@ public final class Monitor: @unchecked Sendable {
         try store.save(config)
     }
 
+    public func toggleComponent(id: UUID, name: String) throws {
+        guard let index = config.pages.firstIndex(where: { $0.id == id }) else { return }
+        if config.pages[index].disabledComponentNames.contains(name) {
+            config.pages[index].disabledComponentNames.remove(name)
+        } else {
+            config.pages[index].disabledComponentNames.insert(name)
+        }
+        try store.save(config)
+    }
+
     public func pollAll() async -> [Toast] {
         var toasts: [Toast] = []
         for index in config.pages.indices {
             let page = config.pages[index]
             let previous = page.snapshot
+            let previousDisplay = page.displaySeverity
             let snapshot: PageSnapshot
             do {
                 snapshot = try await ProviderProbe.probe(pageURL: page.url, client: client)
@@ -77,12 +88,23 @@ public final class Monitor: @unchecked Sendable {
                 )
             }
             config.pages[index].snapshot = snapshot
-            if let toast = ToastPolicy.toast(
-                previous: previous,
-                current: snapshot,
+            if previous != nil,
+               previousDisplay != config.pages[index].displaySeverity,
+               let toast = ToastPolicy.toast(
+                previous: previous.map { prev in
+                    var copy = prev
+                    copy.overall = previousDisplay
+                    return copy
+                },
+                current: {
+                    var copy = snapshot
+                    copy.overall = config.pages[index].displaySeverity
+                    copy.isUnreachable = snapshot.isUnreachable
+                    return copy
+                }(),
                 notificationsEnabled: page.notificationsEnabled,
                 pageName: page.name
-            ) {
+               ) {
                 toasts.append(toast)
             }
         }
@@ -91,7 +113,7 @@ public final class Monitor: @unchecked Sendable {
     }
 
     public func barSeverity() -> Severity {
-        Aggregator.barSeverity(from: config.pages.compactMap(\.snapshot))
+        Aggregator.fromSeverities(config.pages.map(\.displaySeverity))
     }
 
     public func displayedSeverity(at now: Date) -> Severity {

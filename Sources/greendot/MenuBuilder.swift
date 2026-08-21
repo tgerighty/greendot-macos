@@ -50,7 +50,7 @@ enum MenuBuilder {
         onToggleNotifications: @escaping (UUID) -> Void,
         onOpen: @escaping (URL) -> Void
     ) -> NSMenuItem {
-        let severity = page.snapshot?.overall ?? .grey
+        let severity = page.displaySeverity
         let item = NSMenuItem(
             title: page.name,
             action: nil,
@@ -86,7 +86,8 @@ enum MenuBuilder {
             menu.addItem(row)
         }
 
-        if let components = snapshot?.components, !components.isEmpty {
+        let components = page.enabledComponents
+        if !components.isEmpty {
             for component in components {
                 let row = NSMenuItem(
                     title: "\(component.name)    \(component.statusText)",
@@ -103,12 +104,12 @@ enum MenuBuilder {
             }
         } else if snapshot?.isUnreachable != true {
             let row = NSMenuItem(
-                title: snapshot.map { overallText($0.overall) } ?? "Unknown",
+                title: overallText(page.displaySeverity),
                 action: nil,
                 keyEquivalent: ""
             )
             row.isEnabled = false
-            row.image = StatusDot.image(snapshot?.overall ?? .grey)
+            row.image = StatusDot.image(page.displaySeverity)
             menu.addItem(row)
         }
 
