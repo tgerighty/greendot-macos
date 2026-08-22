@@ -17,8 +17,8 @@ final class PagePanelController: NSObject, NSWindowDelegate {
     init(
         page: WatchedPage?,
         onSave: @escaping (URL, String?) -> Void,
-        onToggleComponent: ((String) -> Void)? = nil,
-        onSetAll: ((Bool) -> Void)? = nil,
+        onToggleComponent: ((String) -> Bool)? = nil,
+        onSetAll: ((Bool) -> Bool)? = nil,
         onRemove: (() -> Void)? = nil
     ) {
         self.onSave = onSave
@@ -26,8 +26,8 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         if let page {
             self.picker = ComponentPicker(
                 page: page,
-                onToggleComponent: onToggleComponent ?? { _ in },
-                onSetAll: onSetAll ?? { _ in }
+                onToggleComponent: onToggleComponent ?? { _ in true },
+                onSetAll: onSetAll ?? { _ in true }
             )
         }
         let editing = page != nil

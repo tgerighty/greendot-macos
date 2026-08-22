@@ -8,6 +8,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pulseTimer: Timer?
     private var panel: PagePanelController?
     private var notifier: Notifier?
+    var presentError: (Error) -> Void = { error in
+        _ = NSAlert(error: error).runModal()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppEditMenu.install()
@@ -21,14 +24,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let monitor = Monitor(store: store, client: client)
         monitor.onLaunchAtLoginEnable = { LaunchAtLogin.enable() }
-        try? monitor.load()
+        let loadSucceeded = loadMonitor(monitor)
         self.monitor = monitor
 
         let notifier = Notifier()
         notifier.requestPermissionIfNeeded()
         self.notifier = notifier
 
-        if ProcessInfo.processInfo.environment["GREENDOT_SKIP_LOGIN_ITEM"] == nil {
+        if loadSucceeded, ProcessInfo.processInfo.environment["GREENDOT_SKIP_LOGIN_ITEM"] == nil {
             monitor.enableLaunchAtLoginOnFirstRun()
         }
 
@@ -41,23 +44,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installUITestHooks()
 
         Task {
-            if ProcessInfo.processInfo.environment["GREENDOT_SKIP_SEED"] == nil,
-               monitor.pages.isEmpty,
-               let url = URL(string: "https://status.openai.com") {
-                try? await monitor.add(url: url, name: "OpenAI")
+            await self.maybeSeedOpenAI(monitor: monitor, loadSucceeded: loadSucceeded)
+            if Self.shouldPoll(loadSucceeded: loadSucceeded) {
+                await self.pollAndRefresh()
             }
-            await self.pollAndRefresh()
         }
 
-        let poll = TimeInterval(
-            ProcessInfo.processInfo.environment["GREENDOT_POLL_SECONDS"].flatMap(Double.init) ?? 60
-        )
-        pollTimer = Timer.scheduledTimer(withTimeInterval: poll, repeats: true) { [weak self] _ in
-            Task { await self?.pollAndRefresh() }
+        if Self.shouldPoll(loadSucceeded: loadSucceeded) {
+            let poll = TimeInterval(
+                ProcessInfo.processInfo.environment["GREENDOT_POLL_SECONDS"].flatMap(Double.init) ?? 60
+            )
+            pollTimer = Timer.scheduledTimer(withTimeInterval: poll, repeats: true) { [weak self] _ in
+                Task { await self?.pollAndRefresh() }
+            }
         }
         pulseTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             self?.refreshIcon()
         }
+    }
+
+    func loadMonitor(_ monitor: Monitor) -> Bool {
+        do {
+            try monitor.load()
+            return true
+        } catch {
+            presentError(error)
+            return false
+        }
+    }
+
+    static func shouldSeedOpenAI(loadSucceeded: Bool, pagesEmpty: Bool, skipSeed: Bool) -> Bool {
+        loadSucceeded && pagesEmpty && !skipSeed
+    }
+
+    static func shouldPoll(loadSucceeded: Bool) -> Bool {
+        loadSucceeded
+    }
+
+    @discardableResult
+    func performStoreChange(_ work: () throws -> Void) -> Bool {
+        do {
+            try work()
+            rebuild()
+            return true
+        } catch {
+            presentError(error)
+            return false
+        }
+    }
+
+    private func maybeSeedOpenAI(monitor: Monitor, loadSucceeded: Bool) async {
+        let skipSeed = ProcessInfo.processInfo.environment["GREENDOT_SKIP_SEED"] != nil
+        guard Self.shouldSeedOpenAI(
+            loadSucceeded: loadSucceeded,
+            pagesEmpty: monitor.pages.isEmpty,
+            skipSeed: skipSeed
+        ), let url = URL(string: "https://status.openai.com") else { return }
+        try? await monitor.add(url: url, name: "OpenAI")
     }
 
     private func pollAndRefresh() async {
@@ -89,12 +132,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 onAdd: { [weak self] in self?.openPanel(editing: nil) },
                 onEdit: { [weak self] page in self?.openPanel(editing: page) },
                 onRemove: { [weak self] id in
-                    try? self?.monitor?.remove(id: id)
-                    self?.rebuild()
+                    self?.performStoreChange { try self?.monitor?.remove(id: id) }
                 },
                 onToggleNotifications: { [weak self] id in
-                    try? self?.monitor?.toggleNotifications(id: id)
-                    self?.rebuild()
+                    self?.performStoreChange { try self?.monitor?.toggleNotifications(id: id) }
                 },
                 onOpen: { url in
                     URLOpener.open(url)
@@ -103,7 +144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Task { await self?.pollAndRefresh() }
                 },
                 onToggleLaunchAtLogin: { [weak self] in
-                    _ = LaunchAtLogin.toggle()
+                    LaunchAtLogin.toggle()
                     self?.rebuild()
                 },
                 onQuit: { NSApp.terminate(nil) }
@@ -127,29 +168,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         }
                         await MainActor.run { self.rebuild() }
                     } catch {
-                        await MainActor.run {
-                            let alert = NSAlert(error: error)
-                            _ = alert.runModal()
-                        }
+                        await MainActor.run { self.presentError(error) }
                     }
                 }
             },
             onToggleComponent: editing.map { page in
                 { [weak self] name in
-                    try? self?.monitor?.toggleComponent(id: page.id, name: name)
-                    self?.rebuild()
+                    self?.performStoreChange { try self?.monitor?.toggleComponent(id: page.id, name: name) } ?? false
                 }
             },
             onSetAll: editing.map { page in
                 { [weak self] enabled in
-                    try? self?.monitor?.setAllComponents(id: page.id, enabled: enabled)
-                    self?.rebuild()
+                    self?.performStoreChange {
+                        try self?.monitor?.setAllComponents(id: page.id, enabled: enabled)
+                    } ?? false
                 }
             },
             onRemove: editing.map { page in
                 { [weak self] in
-                    try? self?.monitor?.remove(id: page.id)
-                    self?.rebuild()
+                    self?.performStoreChange { try self?.monitor?.remove(id: page.id) }
                 }
             }
         )
@@ -170,13 +207,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.menuBar?.popMenuOnScreen()
         }
         observe("clickMenu") { [weak self] path in
-            _ = self?.menuBar?.performMenuPath(path)
+            self?.menuBar?.performMenuPath(path)
         }
         observe("dumpMenu") { [weak self] _ in
             Self.writeDump("GREENDOT_MENU_DUMP", body: self?.menuBar?.dumpMenu() ?? "")
         }
         observe("clickIdentifier") { identifier in
-            _ = UITestDriver.clickIdentifier(identifier)
+            UITestDriver.clickIdentifier(identifier)
         }
         observe("dumpIdentifiers") { _ in
             Self.writeDump("GREENDOT_ID_DUMP", body: UITestDriver.identifiers().joined(separator: "\n"))
@@ -184,10 +221,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         observe("setField") { raw in
             let parts = raw.split(separator: "\t", maxSplits: 1).map(String.init)
             guard parts.count == 2 else { return }
-            _ = UITestDriver.setField(parts[0], value: parts[1])
+            UITestDriver.setField(parts[0], value: parts[1])
         }
         observe("focusField") { identifier in
-            _ = UITestDriver.focusField(identifier)
+            UITestDriver.focusField(identifier)
         }
     }
 

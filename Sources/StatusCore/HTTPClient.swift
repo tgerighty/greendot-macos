@@ -22,13 +22,9 @@ public struct MapHTTPClient: HTTPClient, Sendable {
     public var byPath: [String: (Data, Int)]
     public var byURL: [String: (Data, Int)]
 
-    public init(byPath: [String: (Data, Int)] = [:], byURL: [String: (String, Int)] = [:]) {
+    public init(byPath: [String: (Data, Int)] = [:]) {
         self.byPath = byPath
-        var mapped: [String: (Data, Int)] = [:]
-        for (key, value) in byURL {
-            mapped[key] = (Data(value.0.utf8), value.1)
-        }
-        self.byURL = mapped
+        self.byURL = [:]
     }
 
     public func get(_ url: URL) async throws -> (Data, Int) {

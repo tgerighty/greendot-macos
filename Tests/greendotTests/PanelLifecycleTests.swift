@@ -48,8 +48,8 @@ final class PanelLifecycleTests: XCTestCase {
         let panel = PagePanelController(
             page: page,
             onSave: { _, _ in },
-            onToggleComponent: { _ in },
-            onSetAll: { _ in }
+            onToggleComponent: { _ in true },
+            onSetAll: { _ in true }
         )
         panel.show()
         let ids = UITestDriver.identifiers().filter { $0.hasPrefix("component-") && $0 != "component-list" }
@@ -68,8 +68,8 @@ final class PanelLifecycleTests: XCTestCase {
         let panel = PagePanelController(
             page: page,
             onSave: { _, _ in },
-            onToggleComponent: { _ in },
-            onSetAll: { _ in }
+            onToggleComponent: { _ in true },
+            onSetAll: { _ in true }
         )
         panel.show()
         let window = NSApp.windows.first { $0.title == "Edit Status Page" }
@@ -82,6 +82,104 @@ final class PanelLifecycleTests: XCTestCase {
             }
         }
         panel.close()
+    }
+
+    func testFailedPersistLeavesCheckboxesUnchanged() {
+        _ = NSApplication.shared
+        let page = Self.nestedPage()
+        let panel = PagePanelController(
+            page: page,
+            onSave: { _, _ in },
+            onToggleComponent: { _ in false },
+            onSetAll: { _ in false }
+        )
+        panel.show()
+        let window = NSApp.windows.first { $0.title == "Edit Status Page" }
+        let boxes = Self.checkboxes(in: window?.contentView)
+        XCTAssertGreaterThanOrEqual(boxes.count, 21)
+        let before = boxes.map(\.state)
+        for box in boxes {
+            box.performClick(nil)
+        }
+        XCTAssertEqual(boxes.map(\.state), before)
+        panel.close()
+    }
+
+    func testStatusDotImageIsNonNilAndHasSize() {
+        _ = NSApplication.shared
+        let image = StatusDot.image(.green, size: 12)
+        XCTAssertNotNil(image)
+        XCTAssertEqual(image.size, NSSize(width: 12, height: 12))
+        XCTAssertGreaterThan(image.size.width, 0)
+        XCTAssertGreaterThan(image.size.height, 0)
+    }
+
+    func testStatusDotImageUsesRequestedSize() {
+        _ = NSApplication.shared
+        for severity in [Severity.green, .yellow, .red, .grey] {
+            let image = StatusDot.image(severity, size: 14)
+            XCTAssertNotNil(image)
+            XCTAssertEqual(image.size.width, 14)
+            XCTAssertEqual(image.size.height, 14)
+        }
+    }
+
+    func testShouldSeedOpenAIOnlyWhenLoadSucceededAndPagesEmpty() {
+        XCTAssertTrue(AppDelegate.shouldSeedOpenAI(loadSucceeded: true, pagesEmpty: true, skipSeed: false))
+        XCTAssertFalse(AppDelegate.shouldSeedOpenAI(loadSucceeded: false, pagesEmpty: true, skipSeed: false))
+        XCTAssertFalse(AppDelegate.shouldSeedOpenAI(loadSucceeded: true, pagesEmpty: false, skipSeed: false))
+        XCTAssertFalse(AppDelegate.shouldSeedOpenAI(loadSucceeded: true, pagesEmpty: true, skipSeed: true))
+        XCTAssertTrue(AppDelegate.shouldPoll(loadSucceeded: true))
+        XCTAssertFalse(AppDelegate.shouldPoll(loadSucceeded: false))
+    }
+
+    func testLoadMonitorPresentsCorruptStoreErrorAndLeavesFile() throws {
+        let (dir, configURL) = try writeTempConfig(Data("{".utf8))
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let monitor = Monitor(store: PageStore(directory: dir), client: MapHTTPClient())
+        let delegate = AppDelegate()
+        var presented: Error?
+        delegate.presentError = { presented = $0 }
+        XCTAssertFalse(delegate.loadMonitor(monitor))
+        XCTAssertEqual(presented as? StoreError, .corrupt)
+        XCTAssertTrue(monitor.pages.isEmpty)
+        XCTAssertEqual(try Data(contentsOf: configURL), Data("{".utf8))
+    }
+
+    func testLoadMonitorSucceedsWhenConfigIsMissing() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let monitor = Monitor(store: PageStore(directory: dir), client: MapHTTPClient())
+        let delegate = AppDelegate()
+        var presented: Error?
+        delegate.presentError = { presented = $0 }
+        XCTAssertTrue(delegate.loadMonitor(monitor))
+        XCTAssertNil(presented)
+        XCTAssertTrue(monitor.pages.isEmpty)
+    }
+
+    func testPerformStoreChangePresentsSaveError() throws {
+        let (dir, monitor) = try loadedMonitorWithPage()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try replaceConfigWithDirectory(in: dir)
+        let delegate = AppDelegate()
+        var presented = false
+        delegate.presentError = { _ in presented = true }
+        let id = monitor.pages[0].id
+        XCTAssertFalse(delegate.performStoreChange { try monitor.remove(id: id) })
+        XCTAssertTrue(presented)
+        XCTAssertEqual(monitor.pages.count, 1)
+    }
+
+    func testPerformStoreChangeDoesNotPresentOnSuccess() throws {
+        let (dir, monitor) = try loadedMonitorWithPage()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let delegate = AppDelegate()
+        var presented = false
+        delegate.presentError = { _ in presented = true }
+        XCTAssertTrue(delegate.performStoreChange { try monitor.remove(id: monitor.pages[0].id) })
+        XCTAssertFalse(presented)
+        XCTAssertTrue(monitor.pages.isEmpty)
     }
 
     private static func checkboxes(in view: NSView?) -> [NSButton] {
@@ -129,4 +227,29 @@ final class PanelLifecycleTests: XCTestCase {
             )
         )
     }
+}
+
+private func writeTempConfig(_ data: Data) throws -> (URL, URL) {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let configURL = dir.appendingPathComponent("config.json")
+    try data.write(to: configURL)
+    return (dir, configURL)
+}
+
+private func loadedMonitorWithPage() throws -> (URL, Monitor) {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let store = PageStore(directory: dir)
+    var config = AppConfig()
+    config.pages = [WatchedPage(url: URL(string: "https://www.githubstatus.com")!, name: "GitHub")]
+    try store.save(config)
+    let monitor = Monitor(store: store, client: MapHTTPClient())
+    try monitor.load()
+    return (dir, monitor)
+}
+
+private func replaceConfigWithDirectory(in directory: URL) throws {
+    let config = directory.appendingPathComponent("config.json")
+    try FileManager.default.removeItem(at: config)
+    try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
 }

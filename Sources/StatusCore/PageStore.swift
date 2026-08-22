@@ -13,8 +13,15 @@ public struct AppConfig: Codable, Equatable, Sendable {
     }
 }
 
-public enum StoreError: Error, Equatable {
+public enum StoreError: Error, Equatable, LocalizedError {
     case corrupt
+
+    public var errorDescription: String? {
+        switch self {
+        case .corrupt:
+            return "The saved status list could not be read."
+        }
+    }
 }
 
 public final class PageStore: @unchecked Sendable {

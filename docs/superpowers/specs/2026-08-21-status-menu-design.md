@@ -121,4 +121,4 @@ Canonical rules: `~/coding/sonarcubeguide.md` (this file replaces `sonarqube.md`
 
 ## UI test on this Mac
 
-`make uitest` builds the `.app`, starts a local fixture HTTP server, and runs XCUITest against the real menu bar. Tests must cover: launch with no dock icon, add, submenu components, edit name/URL, notification toggle, remove, launch-at-login menu item, quit. They use a scratch config directory.
+`make uitest` builds the `.app` and runs XCUITest against the real menu bar. Tests set `GREENDOT_FIXTURE_DIR`. The app then uses `DirectoryHTTPClient` to read fixture files. The tests do not start an HTTP server. Tests must cover: launch with no dock icon, add, submenu components, edit name/URL, notification toggle, remove, launch-at-login menu item, quit. They use a scratch config directory.

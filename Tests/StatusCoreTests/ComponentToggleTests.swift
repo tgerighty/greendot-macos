@@ -32,23 +32,8 @@ final class ComponentToggleTests: XCTestCase {
     }
 
     func testToggleComponentPersists() async throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let json = """
-        {
-          "page": {"name": "GitHub", "url": "https://www.githubstatus.com"},
-          "status": {"indicator": "none"},
-          "components": [
-            {"name": "API", "status": "operational", "group": false},
-            {"name": "Git", "status": "major_outage", "group": false}
-          ],
-          "incidents": []
-        }
-        """
-        let client = MapHTTPClient(byPath: ["/api/v2/summary.json": (Data(json.utf8), 200)])
-        let monitor = Monitor(store: PageStore(directory: dir), client: client)
-        try monitor.load()
-        try await monitor.add(url: URL(string: "https://www.githubstatus.com")!, name: nil)
+        let (directory, monitor) = try await monitorWithGitHubOutage()
+        defer { try? FileManager.default.removeItem(at: directory) }
         let id = monitor.pages[0].id
         XCTAssertEqual(monitor.pages[0].displaySeverity, .red)
 
@@ -56,28 +41,14 @@ final class ComponentToggleTests: XCTestCase {
         XCTAssertTrue(monitor.pages[0].disabledComponentNames.contains("Git"))
         XCTAssertEqual(monitor.pages[0].displaySeverity, .green)
 
-        let loaded = Monitor(store: PageStore(directory: dir), client: client)
+        let loaded = Monitor(store: PageStore(directory: directory), client: MapHTTPClient())
         try loaded.load()
         XCTAssertEqual(loaded.pages[0].disabledComponentNames, ["Git"])
     }
 
     func testSetAllComponentsOffThenOn() async throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let json = """
-        {
-          "page": {"name": "GitHub", "url": "https://www.githubstatus.com"},
-          "status": {"indicator": "none"},
-          "components": [
-            {"name": "API", "status": "operational", "group": false},
-            {"name": "Git", "status": "major_outage", "group": false}
-          ],
-          "incidents": []
-        }
-        """
-        let client = MapHTTPClient(byPath: ["/api/v2/summary.json": (Data(json.utf8), 200)])
-        let monitor = Monitor(store: PageStore(directory: dir), client: client)
-        try await monitor.add(url: URL(string: "https://www.githubstatus.com")!, name: nil)
+        let (directory, monitor) = try await monitorWithGitHubOutage()
+        defer { try? FileManager.default.removeItem(at: directory) }
         let id = monitor.pages[0].id
         XCTAssertEqual(monitor.pages[0].displaySeverity, .red)
 
@@ -140,6 +111,20 @@ final class ComponentToggleTests: XCTestCase {
         XCTAssertEqual(page.displaySeverity, .green)
     }
 
+    func testIsComponentEnabledChecksIdAndName() {
+        var page = pageWith(components: [
+            ComponentStatus(name: "Login/SSO", severity: .red, statusText: "Major outage", id: "c1")
+        ])
+        let component = ComponentStatus(name: "Login/SSO", severity: .red, statusText: "Major outage", id: "c1")
+        XCTAssertTrue(page.isComponentEnabled(component))
+
+        page.disabledComponentNames = ["c1"]
+        XCTAssertFalse(page.isComponentEnabled(component))
+
+        page.disabledComponentNames = ["Login/SSO"]
+        XCTAssertFalse(page.isComponentEnabled(component))
+    }
+
     func testDisablingOneChildLeavesSiblings() {
         var page = pageWith(components: [
             ComponentStatus(
@@ -159,6 +144,49 @@ final class ComponentToggleTests: XCTestCase {
         XCTAssertEqual(page.displaySeverity, .green)
     }
 
+    func testComponentTreeFindMatchesIdOrNameAndWalksChildren() {
+        let tree = boxTree()
+        XCTAssertEqual(ComponentTree.find("c1", in: tree)?.name, "Login/SSO")
+        XCTAssertEqual(ComponentTree.find("Login/SSO", in: tree)?.id, "c1")
+        XCTAssertEqual(ComponentTree.find("Box Web Application", in: tree)?.id, "g1")
+        XCTAssertNil(ComponentTree.find("missing", in: tree))
+    }
+
+    func testComponentTreeCollectIncludesSelfAndDescendants() {
+        XCTAssertEqual(ComponentTree.collect(boxTree()[0]).map(\.id), ["g1", "c1", "c2"])
+    }
+
+    func testComponentTreeKeysIncludeIdAndName() {
+        XCTAssertEqual(
+            ComponentTree.componentKeys(boxTree()),
+            ["g1", "Box Web Application", "c1", "Login/SSO", "c2", "Search"]
+        )
+    }
+
+    func testToggleComponentByNameDisablesIdAndDescendantKeys() async throws {
+        let (directory, monitor) = try await boxOutageMonitor()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let id = monitor.pages[0].id
+
+        try monitor.toggleComponent(id: id, name: "Box Web Application")
+        XCTAssertEqual(
+            monitor.pages[0].disabledComponentNames,
+            ["g1", "Box Web Application", "c1", "Login/SSO", "c2", "Search"]
+        )
+    }
+
+    func testSetAllComponentsRecordsEveryIdAndName() async throws {
+        let (directory, monitor) = try await boxOutageMonitor()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let id = monitor.pages[0].id
+
+        try monitor.setAllComponents(id: id, enabled: false)
+        XCTAssertEqual(
+            monitor.pages[0].disabledComponentNames,
+            ["g1", "Box Web Application", "c1", "Login/SSO", "c2", "Search"]
+        )
+    }
+
     func testOldConfigWithoutDisabledNamesStillLoads() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -170,6 +198,62 @@ final class ComponentToggleTests: XCTestCase {
         let store = PageStore(directory: dir)
         let config = try store.load()
         XCTAssertTrue(config.pages.isEmpty)
+    }
+
+    private func boxTree() -> [ComponentStatus] {
+        [
+            ComponentStatus(
+                name: "Box Web Application",
+                severity: .green,
+                statusText: "Operational",
+                id: "g1",
+                children: [
+                    ComponentStatus(name: "Login/SSO", severity: .red, statusText: "Major outage", id: "c1"),
+                    ComponentStatus(name: "Search", severity: .green, statusText: "Operational", id: "c2")
+                ],
+                isGroup: true
+            )
+        ]
+    }
+
+    private func monitorWithGitHubOutage() async throws -> (directory: URL, monitor: Monitor) {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let json = """
+        {
+          "page": {"name": "GitHub", "url": "https://www.githubstatus.com"},
+          "status": {"indicator": "none"},
+          "components": [
+            {"name": "API", "status": "operational", "group": false},
+            {"name": "Git", "status": "major_outage", "group": false}
+          ],
+          "incidents": []
+        }
+        """
+        let client = MapHTTPClient(byPath: ["/api/v2/summary.json": (Data(json.utf8), 200)])
+        let monitor = Monitor(store: PageStore(directory: directory), client: client)
+        try monitor.load()
+        try await monitor.add(url: URL(string: "https://www.githubstatus.com")!, name: nil)
+        return (directory, monitor)
+    }
+
+    private func boxOutageMonitor() async throws -> (directory: URL, monitor: Monitor) {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let json = """
+        {
+          "page": {"name": "Box", "url": "https://status.box.com"},
+          "status": {"indicator": "none"},
+          "components": [
+            {"id": "g1", "name": "Box Web Application", "status": "operational", "group": true},
+            {"id": "c1", "name": "Login/SSO", "status": "major_outage", "group": false, "group_id": "g1"},
+            {"id": "c2", "name": "Search", "status": "operational", "group": false, "group_id": "g1"}
+          ],
+          "incidents": []
+        }
+        """
+        let client = MapHTTPClient(byPath: ["/api/v2/summary.json": (Data(json.utf8), 200)])
+        let monitor = Monitor(store: PageStore(directory: directory), client: client)
+        try await monitor.add(url: URL(string: "https://status.box.com")!, name: nil)
+        return (directory, monitor)
     }
 
     private func pageWith(components: [ComponentStatus], unreachable: Bool = false) -> WatchedPage {

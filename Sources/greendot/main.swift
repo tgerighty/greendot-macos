@@ -1,5 +1,4 @@
 import AppKit
-import StatusCore
 
 let application = NSApplication.shared
 let delegate = AppDelegate()

@@ -37,6 +37,15 @@ final class ProbeAndMonitorTests: XCTestCase {
         XCTAssertEqual(snap.provider, .instatus)
     }
 
+    func testMapHTTPClientUsesMutatedByURLProperty() async throws {
+        var client = MapHTTPClient()
+        let url = URL(string: "https://statuspal.io/api/v2/status_pages/acme/summary")!
+        client.byURL[url.absoluteString] = (Data("ok".utf8), 200)
+        let result = try await client.get(url)
+        XCTAssertEqual(result.1, 200)
+        XCTAssertEqual(result.0, Data("ok".utf8))
+    }
+
     func testProbeFindsStatuspalFromHost() async throws {
         let json = """
         {
@@ -191,6 +200,78 @@ final class ProbeAndMonitorTests: XCTestCase {
         XCTAssertEqual(toasts.count, 1)
         XCTAssertEqual(toasts[0].body, "Unreachable")
     }
+
+    func testPageStoreLoadMissingFileReturnsEmptyConfigAndDoesNotWrite() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        let config = try store.load()
+        XCTAssertTrue(config.pages.isEmpty)
+        XCTAssertEqual(config.version, AppConfig.currentVersion)
+        XCTAssertFalse(config.didSetLaunchAtLogin)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.configURL.path))
+    }
+
+    func testPageStoreLoadCorruptJSONThrows() throws {
+        try assertLoadThrows(Data("{".utf8), StoreError.corrupt)
+    }
+
+    func testPageStoreLoadUnsupportedVersionThrows() throws {
+        try assertLoadThrows(
+            Data(#"{"version":99,"pages":[],"didSetLaunchAtLogin":false}"#.utf8),
+            StoreError.corrupt
+        )
+    }
+
+    func testMonitorLoadThrowsOnCorruptStoreAndLeavesPagesEmpty() throws {
+        let dir = try writeConfig(Data("not-json".utf8))
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let monitor = Monitor(store: PageStore(directory: dir), client: MapHTTPClient())
+        XCTAssertThrowsError(try monitor.load()) { error in
+            XCTAssertEqual(error as? StoreError, .corrupt)
+        }
+        XCTAssertTrue(monitor.pages.isEmpty)
+    }
+
+    func testMonitorMutationsThrowWhenStoreCannotSave() async throws {
+        try await assertSaveThrows(json: statuspageJSON) { try $0.remove(id: $0.pages[0].id) }
+        try await assertSaveThrows(json: statuspageJSON) { try $0.toggleNotifications(id: $0.pages[0].id) }
+        try await assertSaveThrows(json: statuspageJSON) { try $0.toggleComponent(id: $0.pages[0].id, name: "API") }
+        try await assertSaveThrows(json: statuspageJSON) { try $0.setAllComponents(id: $0.pages[0].id, enabled: false) }
+    }
+
+    func testStoreErrorCorruptHasUserFacingText() {
+        XCTAssertEqual(StoreError.corrupt.errorDescription, "The saved status list could not be read.")
+    }
+}
+
+private func writeConfig(_ data: Data) throws -> URL {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    try data.write(to: dir.appendingPathComponent("config.json"))
+    return dir
+}
+
+private func assertLoadThrows(_ data: Data, _ expected: StoreError) throws {
+    let dir = try writeConfig(data)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    XCTAssertThrowsError(try PageStore(directory: dir).load()) { error in
+        XCTAssertEqual(error as? StoreError, expected)
+    }
+}
+
+private func assertSaveThrows(json: String, _ work: (Monitor) throws -> Void) async throws {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let client = MapHTTPClient(byPath: ["/api/v2/summary.json": (Data(json.utf8), 200)])
+    let monitor = Monitor(store: PageStore(directory: dir), client: client)
+    try await monitor.add(url: URL(string: "https://www.githubstatus.com")!, name: nil)
+    let config = dir.appendingPathComponent("config.json")
+    try FileManager.default.removeItem(at: config)
+    try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
+    let before = monitor.pages
+    XCTAssertThrowsError(try work(monitor))
+    XCTAssertEqual(monitor.pages, before)
 }
 
 private struct FailingHTTPClient: HTTPClient {
