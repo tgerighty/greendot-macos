@@ -3,17 +3,19 @@ import AppKit
 /// Accessory apps have no Edit menu, so Cmd+C / Cmd+V never reach a text field.
 enum AppEditMenu {
     static func install() {
+        NSApp.mainMenu = makeMainMenu()
+    }
+
+    static func makeMainMenu() -> NSMenu {
         let main = NSMenu()
 
         let appItem = NSMenuItem()
         main.addItem(appItem)
         let appMenu = NSMenu()
         appItem.submenu = appMenu
-        appMenu.addItem(
-            withTitle: "About greendot",
-            action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
-            keyEquivalent: ""
-        )
+        let about = NSMenuItem(title: "About greendot", action: nil, keyEquivalent: "")
+        TargetAction.install(about) { AboutPanel.show() }
+        appMenu.addItem(about)
         appMenu.addItem(.separator())
         appMenu.addItem(
             withTitle: "Hide greendot",
@@ -37,7 +39,6 @@ enum AppEditMenu {
         edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
-
-        NSApp.mainMenu = main
+        return main
     }
 }

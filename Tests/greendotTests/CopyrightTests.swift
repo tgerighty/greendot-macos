@@ -1,4 +1,3 @@
-import AppKit
 import XCTest
 @testable import greendot
 
@@ -27,9 +26,7 @@ final class CopyrightTests: XCTestCase {
     }
 
     func testAppMenuHasAboutGreendotAsFirstItem() {
-        _ = NSApplication.shared
-        AppEditMenu.install()
-        let appMenu = NSApp.mainMenu?.items.first?.submenu
+        let appMenu = AppEditMenu.makeMainMenu().items.first?.submenu
         XCTAssertEqual(appMenu?.items.first?.title, "About greendot")
     }
 
