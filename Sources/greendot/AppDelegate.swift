@@ -82,8 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     static func showAbout() {
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.orderFrontStandardAboutPanel(nil)
+        AboutPanel.show()
     }
 
     @discardableResult

@@ -4,7 +4,7 @@
 
 ### Added
 
-- About greendot in the status menu and the application menu opens the native About panel. The copyright line is Copyright © 2026 Terry Gerighty. All rights reserved.
+- About greendot in the status menu and the application menu opens the native About panel. The copyright line is Copyright © 2026 Terry Gerighty. All rights reserved. The build number is the GitHub commit hash.
 - Click a page row, a component row, or Open Status Page to open that page in the default browser.
 - UI tests exercise every Edit checkbox five times and switch Edit between two pages five times, without moving the pointer (avoids the bottom-left hot corner).
 
