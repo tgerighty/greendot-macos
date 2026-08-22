@@ -23,7 +23,7 @@ These decisions are settled. Do not re-open them in v1.
 | Menu | Bar icon = worst real status. Top level = one row per page. Submenu = components, like the ChatGPT status screenshot. |
 | Providers | Atlassian Statuspage, Statuspal, Instatus. HTML scrape is the next slice, not v1. |
 | Notifications | Per-page toggle. Default on. Toast when that page's overall colour changes, including recovery. |
-| Chrome | Menu bar only. No Dock. No settings window. Launch-at-login default on. About greendot opens the native About panel. Copyright © 2026 Terry Gerighty. All rights reserved. The build number is the GitHub commit hash. |
+| Chrome | Menu bar only. No Dock. No settings window. Launch-at-login default on. About greendot opens the native About panel. Copyright © 2026 Terry Gerighty. All rights reserved. The build number is the short GitHub commit hash. |
 | Poll | 60 seconds, global. |
 | Colours | Green = operational. Yellow = degraded / minor / maintenance. Red = major or critical. Fetch failure = grey. |
 | Mixed icon | red > yellow > green. Grey never drives the bar unless no page has a real status. |

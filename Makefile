@@ -15,7 +15,7 @@ test:
 lint:
 	swiftlint lint --strict
 
-GIT_HASH = $(shell git rev-parse HEAD)
+GIT_HASH = $(shell git rev-parse --short HEAD)
 
 app: build
 	rm -rf "$(APP)"
