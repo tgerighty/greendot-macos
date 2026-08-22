@@ -41,6 +41,36 @@ final class MenuBuilderTests: XCTestCase {
         XCTAssertEqual(opened, [Self.pageURL])
     }
 
+    func testMenuHasAboutGreendotImmediatelyAboveQuit() {
+        let menu = Self.menu(page: Self.nestedPage(), onOpen: { _ in })
+        let titles = menu.items.map(\.title)
+        XCTAssertTrue(titles.contains("About greendot"), titles.joined(separator: " | "))
+        let about = titles.firstIndex(of: "About greendot")
+        let quit = titles.firstIndex(of: "Quit greendot")
+        XCTAssertEqual(about.map { $0 + 1 }, quit)
+    }
+
+    func testAboutInvokesCallback() {
+        var aboutCount = 0
+        let menu = MenuBuilder.build(
+            pages: [],
+            launchAtLoginEnabled: false,
+            actions: MenuActions(
+                onAdd: {},
+                onEdit: { _ in },
+                onRemove: { _ in },
+                onToggleNotifications: { _ in },
+                onOpen: { _ in },
+                onRefresh: {},
+                onToggleLaunchAtLogin: {},
+                onAbout: { aboutCount += 1 },
+                onQuit: {}
+            )
+        )
+        Self.invoke(menu.item(withTitle: "About greendot"))
+        XCTAssertEqual(aboutCount, 1)
+    }
+
     func testPerformPathOpensNestedEditAndLeaf() {
         var edited: [String] = []
         var opened: [URL] = []
@@ -55,6 +85,7 @@ final class MenuBuilderTests: XCTestCase {
                 onOpen: { opened.append($0) },
                 onRefresh: {},
                 onToggleLaunchAtLogin: {},
+                onAbout: {},
                 onQuit: {}
             )
         )
@@ -82,6 +113,7 @@ final class MenuBuilderTests: XCTestCase {
                 onOpen: onOpen,
                 onRefresh: {},
                 onToggleLaunchAtLogin: {},
+                onAbout: {},
                 onQuit: {}
             )
         )

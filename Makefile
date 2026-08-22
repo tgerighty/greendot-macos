@@ -15,10 +15,13 @@ test:
 lint:
 	swiftlint lint --strict
 
+GIT_HASH = $(shell git rev-parse HEAD)
+
 app: build
 	rm -rf "$(APP)"
 	mkdir -p "$(APP)/Contents/MacOS" "$(APP)/Contents/Resources"
 	cp Resources/Info.plist "$(APP)/Contents/Info.plist"
+	/usr/libexec/PlistBuddy -c "Add :GitCommitHash string $(GIT_HASH)" "$(APP)/Contents/Info.plist"
 	cp Resources/AppIcon.icns "$(APP)/Contents/Resources/AppIcon.icns"
 	cp "$(BINDIR)/$(BIN)" "$(APP)/Contents/MacOS/$(BIN)"
 	codesign --force --sign - "$(APP)"

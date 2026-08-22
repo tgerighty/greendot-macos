@@ -35,4 +35,4 @@ Set `GREENDOT_CONFIG_DIR` to use another directory (UI tests do this).
 
 ## License
 
-Private. All rights reserved.
+Copyright © 2026 Terry Gerighty. All rights reserved.
