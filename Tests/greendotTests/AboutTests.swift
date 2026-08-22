@@ -20,4 +20,13 @@ final class AboutTests: XCTestCase {
         let options = AboutPanel.options(gitHash: "deadbeefcafebabe")
         XCTAssertEqual(options[.version] as? String, "deadbeefcafebabe")
     }
+
+    func testShortHashUsesFirstSevenCharacters() {
+        XCTAssertEqual(
+            BuildInfo.shortHash(from: ["GitCommitHash": "95596754a2720ff00eaf2078527858d67d958a2e"]),
+            "9559675"
+        )
+        XCTAssertEqual(BuildInfo.shortHash(from: ["GitCommitHash": "abc1234"]), "abc1234")
+        XCTAssertEqual(BuildInfo.shortHash(from: nil), "unknown")
+    }
 }
