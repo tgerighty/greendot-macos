@@ -10,6 +10,12 @@ enum AppEditMenu {
         let appMenu = NSMenu()
         appItem.submenu = appMenu
         appMenu.addItem(
+            withTitle: "About greendot",
+            action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+            keyEquivalent: ""
+        )
+        appMenu.addItem(.separator())
+        appMenu.addItem(
             withTitle: "Hide greendot",
             action: #selector(NSApplication.hide(_:)),
             keyEquivalent: "h"

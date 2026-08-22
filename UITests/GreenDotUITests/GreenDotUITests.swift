@@ -61,6 +61,7 @@ final class GreenDotUITests: XCTestCase {
         XCTAssertTrue(dump.contains("Add Status Page…"), dump)
         XCTAssertTrue(dump.contains("Refresh"), dump)
         XCTAssertTrue(dump.contains("Launch at Login"), dump)
+        XCTAssertTrue(dump.contains("About greendot"), dump)
         XCTAssertTrue(dump.contains("Quit greendot"), dump)
         XCTAssertTrue(dump.contains("No status pages"), dump)
     }

@@ -81,6 +81,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadSucceeded
     }
 
+    static func showAbout() {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(nil)
+    }
+
     @discardableResult
     func performStoreChange(_ work: () throws -> Void) -> Bool {
         do {
@@ -147,6 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     LaunchAtLogin.toggle()
                     self?.rebuild()
                 },
+                onAbout: { AppDelegate.showAbout() },
                 onQuit: { NSApp.terminate(nil) }
             )
         )

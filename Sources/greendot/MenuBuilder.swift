@@ -9,6 +9,7 @@ struct MenuActions {
     var onOpen: (URL) -> Void
     var onRefresh: () -> Void
     var onToggleLaunchAtLogin: () -> Void
+    var onAbout: () -> Void
     var onQuit: () -> Void
 }
 
@@ -44,6 +45,7 @@ enum MenuBuilder {
         menu.addItem(login)
 
         menu.addItem(.separator())
+        menu.addItem(actionItem("About greendot", identifier: "about", action: actions.onAbout))
         menu.addItem(actionItem("Quit greendot", identifier: "quit", action: actions.onQuit))
         return menu
     }
