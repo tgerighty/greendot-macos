@@ -1,0 +1,161 @@
+import XCTest
+@testable import StatusCore
+
+final class PollPerformanceTests: XCTestCase {
+    private static let delayNs: UInt64 = 80_000_000
+    private static let statuspageJSON = Data("""
+    {
+      "page": {"name": "GitHub", "url": "https://www.githubstatus.com"},
+      "status": {"indicator": "minor"},
+      "components": [{"name": "API", "status": "degraded_performance", "group": false}],
+      "incidents": [{"name": "API slow"}]
+    }
+    """.utf8)
+    private static let instatusJSON = Data("""
+    {
+      "page": {"name": "Instatus", "url": "https://instat.us", "status": "HASISSUES"},
+      "components": [{"name": "API", "status": "MAJOROUTAGE"}],
+      "activeIncidents": [{"name": "API", "impact": "MAJOROUTAGE"}]
+    }
+    """.utf8)
+    private static let statuspalJSON = Data("""
+    {
+      "status_page": {"name": "Acme", "url": "https://acme.statuspal.io"},
+      "current_status_type": null,
+      "services": [{"name": "API", "current_incident_type": null, "children": []}],
+      "incidents": []
+    }
+    """.utf8)
+
+    func testPollAllOverlapsIndependentPageProbes() async throws {
+        let inner = MapHTTPClient(byPath: [
+            "/api/v2/summary.json": (Self.statuspageJSON, 200)
+        ])
+        let client = DelayHTTPClient(inner: inner, nanoseconds: Self.delayNs)
+        let (monitor, dir) = try seededMonitor(
+            client: client,
+            pages: [
+                Self.page(host: "a.example", name: "A", provider: .statuspage),
+                Self.page(host: "b.example", name: "B", provider: .statuspage),
+                Self.page(host: "c.example", name: "C", provider: .statuspage)
+            ]
+        )
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let start = ContinuousClock.now
+        let toasts = await monitor.pollAll()
+        let elapsedMs = start.duration(to: .now).milliseconds
+
+        XCTAssertEqual(monitor.pages.map { $0.snapshot?.provider }, [.statuspage, .statuspage, .statuspage])
+        XCTAssertEqual(monitor.pages.map(\.displaySeverity), [.yellow, .yellow, .yellow])
+        XCTAssertEqual(toasts.map(\.body), ["Degraded", "Degraded", "Degraded"])
+        XCTAssertEqual(monitor.barSeverity(), .yellow)
+        XCTAssertLessThan(elapsedMs, 160, "independent probes should overlap, not sum; took \(elapsedMs)ms")
+        XCTAssertGreaterThan(elapsedMs, 50, "should still wait for a probe delay; took \(elapsedMs)ms")
+    }
+
+    func testKnownProviderRepollDoesNotIssueOtherProviderGets() async throws {
+        var inner = MapHTTPClient()
+        inner.byURL["https://www.githubstatus.com/api/v2/summary.json"] = (Self.statuspageJSON, 200)
+        inner.byURL["https://instat.us/summary.json"] = (Self.instatusJSON, 200)
+        inner.byURL["https://statuspal.io/api/v2/status_pages/acme/summary"] = (Self.statuspalJSON, 200)
+        let recording = RecordingHTTPClient(inner)
+        let (monitor, dir) = try seededMonitor(
+            client: recording,
+            pages: [
+                Self.page(host: "www.githubstatus.com", name: "GitHub", provider: .statuspage),
+                Self.page(host: "instat.us", name: "Instatus", provider: .instatus),
+                Self.page(host: "acme.statuspal.io", name: "Acme", provider: .statuspal)
+            ]
+        )
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let toasts = await monitor.pollAll()
+        let urls = recording.requested.map(\.absoluteString)
+
+        XCTAssertEqual(monitor.pages.map { $0.snapshot?.provider }, [.statuspage, .instatus, .statuspal])
+        XCTAssertEqual(monitor.pages.map(\.displaySeverity), [.yellow, .red, .green])
+        XCTAssertEqual(monitor.pages.map { $0.snapshot?.incidents.first?.title }, ["API slow", "API", nil])
+        XCTAssertEqual(toasts.map(\.pageName), ["GitHub", "Instatus"])
+        XCTAssertEqual(toasts.map(\.body), ["Degraded", "Major outage"])
+        XCTAssertEqual(monitor.barSeverity(), .red)
+
+        XCTAssertEqual(urls.filter { $0.contains("www.githubstatus.com") }, [
+            "https://www.githubstatus.com/api/v2/summary.json"
+        ])
+        XCTAssertEqual(urls.filter { $0.contains("instat.us") }, [
+            "https://instat.us/summary.json"
+        ])
+        XCTAssertFalse(urls.contains { $0.contains("acme.statuspal.io") }, urls.joined(separator: " "))
+        XCTAssertEqual(urls.filter { $0.contains("statuspal.io/api") }, [
+            "https://statuspal.io/api/v2/status_pages/acme/summary"
+        ])
+        XCTAssertEqual(recording.requested.count, 3)
+    }
+
+    func testPreferredProviderMissFallsBackToOthers() async throws {
+        let client = MapHTTPClient(byPath: [
+            "/api/v2/summary.json": (Self.statuspageJSON, 200)
+        ])
+        let snap = try await ProviderProbe.probe(
+            pageURL: URL(string: "https://www.githubstatus.com")!,
+            client: client,
+            prefer: .instatus
+        )
+        XCTAssertEqual(snap.provider, .statuspage)
+        XCTAssertEqual(snap.name, "GitHub")
+        XCTAssertEqual(snap.overall, .yellow)
+    }
+
+    func testPollAllUnreachablePageStaysGreyAndToasts() async throws {
+        let (monitor, dir) = try seededMonitor(
+            client: MapHTTPClient(),
+            pages: [Self.page(host: "offline.example", name: "Down", provider: .statuspage)]
+        )
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let toasts = await monitor.pollAll()
+        XCTAssertEqual(monitor.pages[0].snapshot?.isUnreachable, true)
+        XCTAssertEqual(monitor.pages[0].displaySeverity, .grey)
+        XCTAssertEqual(monitor.barSeverity(), .grey)
+        XCTAssertEqual(toasts.map(\.body), ["Unreachable"])
+    }
+
+    private func seededMonitor(
+        client: HTTPClient,
+        pages: [WatchedPage]
+    ) throws -> (Monitor, URL) {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let store = PageStore(directory: dir)
+        var config = AppConfig()
+        config.pages = pages
+        try store.save(config)
+        let monitor = Monitor(store: store, client: client)
+        try monitor.load()
+        return (monitor, dir)
+    }
+
+    private static func page(host: String, name: String, provider: StatusProvider) -> WatchedPage {
+        let url = URL(string: "https://\(host)")!
+        return WatchedPage(
+            url: url,
+            name: name,
+            snapshot: PageSnapshot(
+                name: name,
+                url: url,
+                provider: provider,
+                overall: .green,
+                components: [ComponentStatus(name: "API", severity: .green, statusText: "Operational")],
+                incidents: [],
+                isUnreachable: false
+            )
+        )
+    }
+}
+
+private extension Duration {
+    var milliseconds: Double {
+        let parts = components
+        return Double(parts.seconds) * 1_000 + Double(parts.attoseconds) / 1e15
+    }
+}

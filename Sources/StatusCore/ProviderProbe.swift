@@ -15,7 +15,11 @@ public enum ProbeError: Error, Equatable, LocalizedError {
 }
 
 public enum ProviderProbe {
-    public static func probe(pageURL: URL, client: HTTPClient) async throws -> PageSnapshot {
+    public static func probe(
+        pageURL: URL,
+        client: HTTPClient,
+        prefer: StatusProvider? = nil
+    ) async throws -> PageSnapshot {
         let base = normalizedBase(pageURL)
         var sawHTTP = false
         var sawNetworkError = false
@@ -33,27 +37,51 @@ public enum ProviderProbe {
             }
         }
 
-        if let snapshot = take(await attempt(
-            base.appendingPathComponent("api/v2/summary.json"),
-            client: client,
-            parse: { try StatuspageParser.parse(data: $0, sourceURL: base) }
-        )) {
-            return snapshot
+        func tryStatuspage() async -> PageSnapshot? {
+            take(await attempt(
+                base.appendingPathComponent("api/v2/summary.json"),
+                client: client,
+                parse: { try StatuspageParser.parse(data: $0, sourceURL: base) }
+            ))
         }
-        if let snapshot = take(await attempt(
-            base.appendingPathComponent("summary.json"),
-            client: client,
-            parse: { try InstatusParser.parse(data: $0, sourceURL: base) }
-        )) {
-            return snapshot
+
+        func tryInstatus() async -> PageSnapshot? {
+            take(await attempt(
+                base.appendingPathComponent("summary.json"),
+                client: client,
+                parse: { try InstatusParser.parse(data: $0, sourceURL: base) }
+            ))
         }
-        if let snapshot = await probeStatuspal(
-            base: base,
-            client: client,
-            flags: &sawHTTP,
-            network: &sawNetworkError
-        ) {
-            return snapshot
+
+        func tryStatuspal() async -> PageSnapshot? {
+            await probeStatuspal(
+                base: base,
+                client: client,
+                flags: &sawHTTP,
+                network: &sawNetworkError,
+                skipHTMLIfHostKnown: prefer == .statuspal
+            )
+        }
+
+        let order: [StatusProvider]
+        switch prefer {
+        case .none, .statuspage:
+            order = [.statuspage, .instatus, .statuspal]
+        case .instatus:
+            order = [.instatus, .statuspage, .statuspal]
+        case .statuspal:
+            order = [.statuspal, .statuspage, .instatus]
+        }
+
+        for provider in order {
+            switch provider {
+            case .statuspage:
+                if let snapshot = await tryStatuspage() { return snapshot }
+            case .instatus:
+                if let snapshot = await tryInstatus() { return snapshot }
+            case .statuspal:
+                if let snapshot = await tryStatuspal() { return snapshot }
+            }
         }
         if !sawHTTP && sawNetworkError {
             throw ProbeError.unreachable
@@ -102,24 +130,27 @@ public enum ProviderProbe {
         base: URL,
         client: HTTPClient,
         flags sawHTTP: inout Bool,
-        network sawNetworkError: inout Bool
+        network sawNetworkError: inout Bool,
+        skipHTMLIfHostKnown: Bool = false
     ) async -> PageSnapshot? {
         let host = base.host ?? ""
         var subdomains: [String] = []
         if host.hasSuffix(".statuspal.io") || host.hasSuffix(".statuspal.eu") {
             subdomains.append(host.split(separator: ".").first.map(String.init) ?? host)
         }
-        do {
-            let htmlHit = try await client.get(base)
-            sawHTTP = true
-            if htmlHit.1 == 200,
-               let html = String(data: htmlHit.0, encoding: .utf8),
-               html.lowercased().contains("statuspal"),
-               let extracted = extractStatuspalSubdomain(from: html) {
-                subdomains.append(extracted)
+        if subdomains.isEmpty || !skipHTMLIfHostKnown {
+            do {
+                let htmlHit = try await client.get(base)
+                sawHTTP = true
+                if htmlHit.1 == 200,
+                   let html = String(data: htmlHit.0, encoding: .utf8),
+                   html.lowercased().contains("statuspal"),
+                   let extracted = extractStatuspalSubdomain(from: html) {
+                    subdomains.append(extracted)
+                }
+            } catch {
+                sawNetworkError = true
             }
-        } catch {
-            sawNetworkError = true
         }
         let unique = Array(NSOrderedSet(array: subdomains)) as? [String] ?? subdomains
         let apiHosts = ["https://statuspal.io/api/v2/status_pages/", "https://statuspal.eu/api/v2/status_pages/"]

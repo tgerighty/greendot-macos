@@ -96,25 +96,45 @@ public final class Monitor: @unchecked Sendable {
     }
 
     public func pollAll() async -> [Toast] {
+        let pages = config.pages
+        let snapshots: [PageSnapshot] = await withTaskGroup(of: (Int, PageSnapshot).self) { group in
+            for (index, page) in pages.enumerated() {
+                let client = self.client
+                group.addTask {
+                    let snapshot: PageSnapshot
+                    do {
+                        snapshot = try await ProviderProbe.probe(
+                            pageURL: page.url,
+                            client: client,
+                            prefer: page.snapshot?.provider
+                        )
+                    } catch {
+                        snapshot = PageSnapshot(
+                            name: page.name,
+                            url: page.url,
+                            provider: page.snapshot?.provider ?? .statuspage,
+                            overall: .grey,
+                            components: page.snapshot?.components ?? [],
+                            incidents: [],
+                            isUnreachable: true
+                        )
+                    }
+                    return (index, snapshot)
+                }
+            }
+            var collected = [PageSnapshot?](repeating: nil, count: pages.count)
+            for await (index, snapshot) in group {
+                collected[index] = snapshot
+            }
+            return collected.map { $0! }
+        }
+
         var toasts: [Toast] = []
-        for index in config.pages.indices {
+        for index in pages.indices {
             let page = config.pages[index]
             let previous = page.snapshot
             let previousDisplay = page.displaySeverity
-            let snapshot: PageSnapshot
-            do {
-                snapshot = try await ProviderProbe.probe(pageURL: page.url, client: client)
-            } catch {
-                snapshot = PageSnapshot(
-                    name: page.name,
-                    url: page.url,
-                    provider: previous?.provider ?? .statuspage,
-                    overall: .grey,
-                    components: previous?.components ?? [],
-                    incidents: [],
-                    isUnreachable: true
-                )
-            }
+            let snapshot = snapshots[index]
             config.pages[index].snapshot = snapshot
             if previous != nil,
                previousDisplay != config.pages[index].displaySeverity,
