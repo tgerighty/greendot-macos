@@ -1,7 +1,7 @@
 import AppKit
-import StatusCore
 import XCTest
 @testable import greendot
+@testable import StatusCore
 
 /// Repeatable in-memory timings for the shipped parse, poll, menu, and icon paths.
 /// Prints `BENCH name=ms` lines. Does not gate on absolute microseconds.
@@ -18,6 +18,7 @@ final class PerformanceHarnessTests: XCTestCase {
         let icon = measureStatusDot()
         let save = measureStoreSave()
         let unchangedWrites = try await measureUnchangedPollWrites()
+        let remaining = try await measureRemaining()
 
         let lines = [
             "BENCH parse_statuspage_ms=\(fmt(parse.statuspage))",
@@ -27,20 +28,26 @@ final class PerformanceHarnessTests: XCTestCase {
             "BENCH pollAll_3page_delay_expected_sequential_ms=\(fmt(3 * Self.delayMs))",
             "BENCH pollAll_3page_get_count=\(poll.getCount)",
             "BENCH pollAll_mixed_get_count=\(poll.mixedGetCount)",
-            "BENCH menu_build_ms=\(fmt(menu))",
+            "BENCH menu_build_ms=\(fmt(menu.elapsedMs))",
             "BENCH status_dot_ms=\(fmt(icon.elapsedMs))",
             "BENCH status_dot_unique_images=\(icon.uniqueCount)",
             "BENCH store_save_ms=\(fmt(save))",
-            "BENCH pollAll_unchanged_config_rewrites=\(unchangedWrites)"
+            "BENCH pollAll_unchanged_config_rewrites=\(unchangedWrites)",
+            "BENCH statuspal_first_probe_gets=\(remaining.statuspalGets)",
+            "BENCH menu_unique_objects=\(menu.uniqueCount)",
+            "BENCH statuspal_regex_compiles=\(remaining.regexCompiles)",
+            "BENCH poll_second_parse_count=\(remaining.secondParseCount)",
+            "BENCH pulse_refresh_when_reachable=\(remaining.pulseWhenReachable)"
         ]
         for line in lines {
             print(line)
         }
         XCTAssertGreaterThan(parse.statuspage, 0)
         XCTAssertGreaterThan(poll.elapsedMs, 0)
-        XCTAssertGreaterThan(menu, 0)
+        XCTAssertGreaterThan(menu.elapsedMs, 0)
         XCTAssertGreaterThan(icon.elapsedMs, 0)
         XCTAssertGreaterThan(poll.getCount, 0)
+        XCTAssertGreaterThan(remaining.statuspalGets, 0)
     }
 
     private func measureParse() -> (statuspage: Double, instatus: Double, statuspal: Double) {
@@ -137,17 +144,78 @@ final class PerformanceHarnessTests: XCTestCase {
         return (elapsed.milliseconds, toasts, monitor.pages.map(\.snapshot))
     }
 
-    private func measureMenu() -> Double {
+    private func measureMenu() -> (elapsedMs: Double, uniqueCount: Int) {
         let pages = (0..<6).map { index in
             Self.nestedPage(name: "Page \(index)", host: "status\(index).example")
         }
-        return elapsedMs(iterations: 80) {
-            _ = MenuBuilder.build(
+        var menus: [NSMenu] = []
+        menus.reserveCapacity(80)
+        let ms = elapsedMs(iterations: 80) {
+            menus.append(MenuBuilder.build(
                 pages: pages,
                 launchAtLoginEnabled: false,
                 actions: Self.noopActions
-            )
+            ))
         }
+        return (ms, Set(menus.map(ObjectIdentifier.init)).count)
+    }
+
+    private func measureRemaining() async throws -> (
+        statuspalGets: Int,
+        regexCompiles: Int,
+        secondParseCount: Int,
+        pulseWhenReachable: Int
+    ) {
+        var statuspalMap = MapHTTPClient()
+        statuspalMap.byURL["https://statuspal.io/api/v2/status_pages/acme/summary"] = (Data("""
+        {
+          "status_page": {"name": "Acme", "url": "https://acme.statuspal.io"},
+          "current_status_type": null,
+          "services": [],
+          "incidents": []
+        }
+        """.utf8), 200)
+        let statuspalRecording = RecordingHTTPClient(statuspalMap)
+        _ = try await ProviderProbe.probe(
+            pageURL: URL(string: "https://acme.statuspal.io")!,
+            client: statuspalRecording
+        )
+
+        ProviderProbe.resetCounts()
+        let html = String(repeating: "statuspal.io/api/v2/status_pages/acme plus filler ", count: 40)
+        for _ in 0..<500 {
+            _ = ProviderProbe.extractStatuspalSubdomain(from: html)
+        }
+        let regexCompiles = ProviderProbe.regexCompileCount
+
+        let json = Self.statuspageJSON(name: "GitHub", components: 8)
+        let client = MapHTTPClient(byPath: ["/api/v2/summary.json": (json, 200)])
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        var config = AppConfig()
+        config.pages = [
+            Self.page(host: "a.example", name: "A", provider: .statuspage),
+            Self.page(host: "b.example", name: "B", provider: .statuspage),
+            Self.page(host: "c.example", name: "C", provider: .statuspage)
+        ]
+        try store.save(config)
+        let monitor = Monitor(store: store, client: client)
+        try monitor.load()
+        _ = await monitor.pollAll()
+        ProviderProbe.resetCounts()
+        _ = await monitor.pollAll()
+        let secondParse = ProviderProbe.parseCount
+
+        var pulse = 0
+        for _ in 0..<240 {
+            if AppDelegate.shouldRefreshIconOnPulse(hasUnreachable: false) {
+                pulse += 1
+            }
+        }
+
+        return (statuspalRecording.requested.count, regexCompiles, secondParse, pulse)
     }
 
     private func measureStatusDot() -> (elapsedMs: Double, uniqueCount: Int) {

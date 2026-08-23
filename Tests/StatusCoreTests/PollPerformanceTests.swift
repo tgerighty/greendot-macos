@@ -93,6 +93,54 @@ final class PollPerformanceTests: XCTestCase {
         XCTAssertEqual(recording.requested.count, 3)
     }
 
+    func testFirstStatuspalProbeOnNamedHostDoesNotGetHTML() async throws {
+        var inner = MapHTTPClient()
+        inner.byURL["https://statuspal.io/api/v2/status_pages/acme/summary"] = (Self.statuspalJSON, 200)
+        let recording = RecordingHTTPClient(inner)
+        let snap = try await ProviderProbe.probe(
+            pageURL: URL(string: "https://acme.statuspal.io")!,
+            client: recording
+        )
+        XCTAssertEqual(snap.provider, .statuspal)
+        XCTAssertEqual(snap.name, "Acme")
+        XCTAssertEqual(snap.overall, .green)
+        let urls = recording.requested.map(\.absoluteString)
+        XCTAssertFalse(urls.contains("https://acme.statuspal.io"), urls.joined(separator: " "))
+        XCTAssertTrue(urls.contains("https://statuspal.io/api/v2/status_pages/acme/summary"))
+        XCTAssertEqual(recording.requested.count, 3)
+    }
+
+    func testUnchangedBodySkipsParseOnSecondPoll() async throws {
+        let client = MapHTTPClient(byPath: [
+            "/api/v2/summary.json": (Self.statuspageJSON, 200)
+        ])
+        let (monitor, dir) = try seededMonitor(
+            client: client,
+            pages: [Self.page(host: "a.example", name: "A", provider: .statuspage)]
+        )
+        defer { try? FileManager.default.removeItem(at: dir) }
+        ProviderProbe.resetCounts()
+        let first = await monitor.pollAll()
+        XCTAssertEqual(ProviderProbe.parseCount, 1)
+        XCTAssertEqual(monitor.pages[0].displaySeverity, .yellow)
+        XCTAssertEqual(first.map(\.body), ["Degraded"])
+        ProviderProbe.resetCounts()
+        let second = await monitor.pollAll()
+        XCTAssertEqual(ProviderProbe.parseCount, 0)
+        XCTAssertEqual(second, [])
+        XCTAssertEqual(monitor.pages[0].displaySeverity, .yellow)
+        XCTAssertEqual(monitor.pages[0].snapshot?.incidents.first?.title, "API slow")
+    }
+
+    func testStatuspalRegexCompilesOnce() {
+        let html = "prefix statuspal.io/api/v2/status_pages/acme/summary suffix"
+        XCTAssertEqual(ProviderProbe.extractStatuspalSubdomain(from: html), "acme")
+        let afterFirst = ProviderProbe.regexCompileCount
+        XCTAssertEqual(ProviderProbe.extractStatuspalSubdomain(from: html), "acme")
+        XCTAssertEqual(ProviderProbe.extractStatuspalSubdomain(from: html), "acme")
+        XCTAssertEqual(ProviderProbe.regexCompileCount, afterFirst)
+    }
+
     func testPreferredProviderMissFallsBackToOthers() async throws {
         let client = MapHTTPClient(byPath: [
             "/api/v2/summary.json": (Self.statuspageJSON, 200)

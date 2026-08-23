@@ -139,6 +139,27 @@ final class PanelLifecycleTests: XCTestCase {
         XCTAssertEqual(green12.size, NSSize(width: 12, height: 12))
     }
 
+    func testPulseSkipsIconRefreshWhenNothingIsUnreachable() {
+        XCTAssertFalse(AppDelegate.shouldRefreshIconOnPulse(hasUnreachable: false))
+        XCTAssertTrue(AppDelegate.shouldRefreshIconOnPulse(hasUnreachable: true))
+        XCTAssertEqual(
+            GreyPulse.displayedSeverity(
+                persistent: .green,
+                hasUnreachable: true,
+                now: Date(timeIntervalSince1970: 0)
+            ),
+            .grey
+        )
+        XCTAssertEqual(
+            GreyPulse.displayedSeverity(
+                persistent: .green,
+                hasUnreachable: false,
+                now: Date(timeIntervalSince1970: 0)
+            ),
+            .green
+        )
+    }
+
     func testShouldSeedOpenAIOnlyWhenLoadSucceededAndPagesEmpty() {
         XCTAssertTrue(AppDelegate.shouldSeedOpenAI(loadSucceeded: true, pagesEmpty: true, skipSeed: false))
         XCTAssertFalse(AppDelegate.shouldSeedOpenAI(loadSucceeded: false, pagesEmpty: true, skipSeed: false))

@@ -14,11 +14,24 @@ struct MenuActions {
 }
 
 enum MenuBuilder {
+    private static var cachedPages: [WatchedPage]?
+    private static var cachedLogin: Bool?
+    private static var cachedMenu: NSMenu?
+
+    static func resetCache() {
+        cachedPages = nil
+        cachedLogin = nil
+        cachedMenu = nil
+    }
+
     static func build(
         pages: [WatchedPage],
         launchAtLoginEnabled: Bool,
         actions: MenuActions
     ) -> NSMenu {
+        if cachedPages == pages, cachedLogin == launchAtLoginEnabled, let cachedMenu {
+            return cachedMenu
+        }
         let menu = NSMenu()
         menu.autoenablesItems = false
 
@@ -47,6 +60,9 @@ enum MenuBuilder {
         menu.addItem(.separator())
         menu.addItem(actionItem("About greendot", identifier: "about", action: actions.onAbout))
         menu.addItem(actionItem("Quit greendot", identifier: "quit", action: actions.onQuit))
+        cachedPages = pages
+        cachedLogin = launchAtLoginEnabled
+        cachedMenu = menu
         return menu
     }
 

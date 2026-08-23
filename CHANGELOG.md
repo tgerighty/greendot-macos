@@ -4,6 +4,11 @@
 
 ### Changed
 
+- A first probe of a `*.statuspal.io` host does not GET the HTML page (the host already names the subdomain). First-probe GETs: 4 before, 3 after (second after run 3).
+- The status menu is reused when the watched pages do not change. 80 identical builds: 80 unique menus before, 1 after (second after run 1).
+- The Statuspal subdomain regex is compiled once. 500 extracts: 500 compiles before, 1 after (second after run 1).
+- A re-poll with an unchanged response body does not parse JSON again. Second poll of three pages: 3 parses before, 0 after (second after run 0).
+- The 4 Hz icon pulse does not refresh when every page is reachable. 240 ticks: 240 refreshes before, 0 after (second after run 0). Unreachable pages still flash grey.
 - Status-dot images are reused per colour and size. 2000 constructions of the four bar colours: 2000 unique images before, 4 after (second after run 4). Construction time 1.14 ms before, 0.37 ms after (second after run 0.39 ms).
 - An unchanged poll does not rewrite `config.json` (1 rewrite before, 0 after). A status change still writes.
 - Refresh waits for the slowest watched page, not the sum of page waits. Three pages with an 80 ms probe delay: 253 ms before, 87 ms after (second after run 87 ms).

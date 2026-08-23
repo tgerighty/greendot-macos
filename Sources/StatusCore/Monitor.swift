@@ -4,6 +4,7 @@ public final class Monitor: @unchecked Sendable {
     private let store: PageStore
     private let client: HTTPClient
     private var config: AppConfig
+    private var lastBodies: [UUID: Data] = [:]
     public var onLaunchAtLoginEnable: (() -> Void)?
 
     public init(store: PageStore, client: HTTPClient) {
@@ -97,19 +98,23 @@ public final class Monitor: @unchecked Sendable {
 
     public func pollAll() async -> [Toast] {
         let pages = config.pages
-        let snapshots: [PageSnapshot] = await withTaskGroup(of: (Int, PageSnapshot).self) { group in
+        let bodies = lastBodies
+        let hits: [(Int, PageSnapshot, Data?)] = await withTaskGroup(of: (Int, PageSnapshot, Data?).self) { group in
             for (index, page) in pages.enumerated() {
                 let client = self.client
+                let previousBody = bodies[page.id]
                 group.addTask {
-                    let snapshot: PageSnapshot
                     do {
-                        snapshot = try await ProviderProbe.probe(
+                        let hit = try await ProviderProbe.probeHit(
                             pageURL: page.url,
                             client: client,
-                            prefer: page.snapshot?.provider
+                            prefer: page.snapshot?.provider,
+                            previousBody: previousBody,
+                            previousSnapshot: page.snapshot
                         )
+                        return (index, hit.snapshot, hit.body)
                     } catch {
-                        snapshot = PageSnapshot(
+                        let snapshot = PageSnapshot(
                             name: page.name,
                             url: page.url,
                             provider: page.snapshot?.provider ?? .statuspage,
@@ -118,16 +123,24 @@ public final class Monitor: @unchecked Sendable {
                             incidents: [],
                             isUnreachable: true
                         )
+                        return (index, snapshot, nil)
                     }
-                    return (index, snapshot)
                 }
             }
-            var collected = [PageSnapshot?](repeating: nil, count: pages.count)
-            for await (index, snapshot) in group {
-                collected[index] = snapshot
+            var collected = [(PageSnapshot, Data?)?](repeating: nil, count: pages.count)
+            for await (index, snapshot, body) in group {
+                collected[index] = (snapshot, body)
             }
-            return collected.map { $0! }
+            return collected.enumerated().map { index, value in
+                (index, value!.0, value!.1)
+            }
         }
+        for (index, _, body) in hits {
+            if let body {
+                lastBodies[pages[index].id] = body
+            }
+        }
+        let snapshots = hits.map { $0.1 }
 
         let beforeSave = config
         var toasts: [Toast] = []

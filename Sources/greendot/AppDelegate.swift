@@ -59,7 +59,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         pulseTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
-            self?.refreshIcon()
+            guard let self, let monitor = self.monitor else { return }
+            let hasUnreachable = monitor.pages.contains { $0.snapshot?.isUnreachable == true }
+            guard Self.shouldRefreshIconOnPulse(hasUnreachable: hasUnreachable) else { return }
+            self.refreshIcon()
         }
     }
 
@@ -79,6 +82,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     static func shouldPoll(loadSucceeded: Bool) -> Bool {
         loadSucceeded
+    }
+
+    /// Pulse exists to flash grey while a page is unreachable. Today every tick
+    /// still refreshes the icon; the harness counts that so we can skip it.
+    static func shouldRefreshIconOnPulse(hasUnreachable: Bool) -> Bool {
+        hasUnreachable
     }
 
     static func showAbout() {

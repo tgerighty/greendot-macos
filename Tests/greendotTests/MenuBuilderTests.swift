@@ -4,6 +4,24 @@ import XCTest
 @testable import greendot
 
 final class MenuBuilderTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        MenuBuilder.resetCache()
+    }
+
+    func testRepeatedBuildReusesMenuWhenPagesUnchanged() {
+        let page = Self.nestedPage()
+        let first = Self.menu(page: page, onOpen: { _ in })
+        let second = Self.menu(page: page, onOpen: { _ in })
+        XCTAssertTrue(first === second)
+        var page2 = page
+        page2.name = "Other"
+        let third = Self.menu(page: page2, onOpen: { _ in })
+        XCTAssertFalse(first === third)
+        XCTAssertEqual(first.item(at: 0)?.title, "Box")
+        XCTAssertEqual(third.item(at: 0)?.title, "Other")
+    }
+
     func testPageRowOpensPageURL() {
         var opened: [URL] = []
         let page = Self.nestedPage()
