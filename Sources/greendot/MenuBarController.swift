@@ -8,6 +8,7 @@ final class MenuBarController: NSObject {
     private let clickOpener = MenuClickOpener()
     private var needsReload = false
     private var needsPop = false
+    private var displayedSeverity: Severity?
 
     override init() {
         super.init()
@@ -22,6 +23,8 @@ final class MenuBarController: NSObject {
     }
 
     func setSeverity(_ severity: Severity) {
+        if displayedSeverity == severity { return }
+        displayedSeverity = severity
         statusItem.button?.image = StatusDot.image(severity, size: 14)
         statusItem.button?.toolTip = "greendot"
     }

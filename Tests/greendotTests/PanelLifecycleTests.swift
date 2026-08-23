@@ -124,6 +124,42 @@ final class PanelLifecycleTests: XCTestCase {
         }
     }
 
+    func testRepeatedStatusDotReusesImagePerSeverityAndSize() {
+        _ = NSApplication.shared
+        let green14a = StatusDot.image(.green, size: 14)
+        let green14b = StatusDot.image(.green, size: 14)
+        let red14 = StatusDot.image(.red, size: 14)
+        let green12 = StatusDot.image(.green, size: 12)
+        XCTAssertTrue(green14a === green14b)
+        XCTAssertFalse(green14a === red14)
+        XCTAssertFalse(green14a === green12)
+        XCTAssertEqual(green14a.accessibilityDescription, Severity.green.rawValue)
+        XCTAssertEqual(red14.accessibilityDescription, Severity.red.rawValue)
+        XCTAssertEqual(green14a.size, NSSize(width: 14, height: 14))
+        XCTAssertEqual(green12.size, NSSize(width: 12, height: 12))
+    }
+
+    func testPulseSkipsIconRefreshWhenNothingIsUnreachable() {
+        XCTAssertFalse(AppDelegate.shouldRefreshIconOnPulse(hasUnreachable: false))
+        XCTAssertTrue(AppDelegate.shouldRefreshIconOnPulse(hasUnreachable: true))
+        XCTAssertEqual(
+            GreyPulse.displayedSeverity(
+                persistent: .green,
+                hasUnreachable: true,
+                now: Date(timeIntervalSince1970: 0)
+            ),
+            .grey
+        )
+        XCTAssertEqual(
+            GreyPulse.displayedSeverity(
+                persistent: .green,
+                hasUnreachable: false,
+                now: Date(timeIntervalSince1970: 0)
+            ),
+            .green
+        )
+    }
+
     func testShouldSeedOpenAIOnlyWhenLoadSucceededAndPagesEmpty() {
         XCTAssertTrue(AppDelegate.shouldSeedOpenAI(loadSucceeded: true, pagesEmpty: true, skipSeed: false))
         XCTAssertFalse(AppDelegate.shouldSeedOpenAI(loadSucceeded: false, pagesEmpty: true, skipSeed: false))

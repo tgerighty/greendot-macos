@@ -4,13 +4,16 @@ BIN := greendot
 SWIFTFLAGS ?=
 BINDIR = $(shell swift build -c $(CONFIG) $(SWIFTFLAGS) --show-bin-path)
 
-.PHONY: build test app install clean uitest lint
+.PHONY: build test app install clean uitest lint bench
 
 build:
 	swift build -c $(CONFIG) $(SWIFTFLAGS)
 
 test:
 	swift test $(SWIFTFLAGS)
+
+bench:
+	GREENDOT_BENCH=1 swift test --filter PerformanceHarnessTests $(SWIFTFLAGS)
 
 lint:
 	swiftlint lint --strict
