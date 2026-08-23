@@ -102,6 +102,7 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
     public var name: String
     public var notificationsEnabled: Bool
     public var disabledComponentNames: Set<String>
+    public var token: String?
     public var snapshot: PageSnapshot?
 
     public init(
@@ -110,6 +111,7 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
         name: String,
         notificationsEnabled: Bool = true,
         disabledComponentNames: Set<String> = [],
+        token: String? = nil,
         snapshot: PageSnapshot? = nil
     ) {
         self.id = id
@@ -117,6 +119,7 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
         self.name = name
         self.notificationsEnabled = notificationsEnabled
         self.disabledComponentNames = disabledComponentNames
+        self.token = token
         self.snapshot = snapshot
     }
 
@@ -153,7 +156,7 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
 
 extension WatchedPage: Codable {
     enum CodingKeys: String, CodingKey {
-        case id, url, name, notificationsEnabled, disabledComponentNames, snapshot
+        case id, url, name, notificationsEnabled, disabledComponentNames, token, snapshot
     }
 
     public init(from decoder: Decoder) throws {
@@ -163,6 +166,23 @@ extension WatchedPage: Codable {
         name = try container.decode(String.self, forKey: .name)
         notificationsEnabled = try container.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true
         disabledComponentNames = try container.decodeIfPresent(Set<String>.self, forKey: .disabledComponentNames) ?? []
+        if let raw = try container.decodeIfPresent(String.self, forKey: .token) {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            token = trimmed.isEmpty ? nil : trimmed
+        } else {
+            token = nil
+        }
         snapshot = try container.decodeIfPresent(PageSnapshot.self, forKey: .snapshot)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(url, forKey: .url)
+        try container.encode(name, forKey: .name)
+        try container.encode(notificationsEnabled, forKey: .notificationsEnabled)
+        try container.encode(disabledComponentNames, forKey: .disabledComponentNames)
+        try container.encodeIfPresent(token, forKey: .token)
+        try container.encodeIfPresent(snapshot, forKey: .snapshot)
     }
 }

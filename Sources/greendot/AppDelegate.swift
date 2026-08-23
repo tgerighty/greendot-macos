@@ -162,14 +162,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         previous?.close()
         let panel = PagePanelController(
             page: editing,
-            onSave: { [weak self] url, name in
+            onSave: { [weak self] url, name, token in
                 guard let self, let monitor = self.monitor else { return }
                 Task {
                     do {
                         if let editing {
-                            try await monitor.edit(id: editing.id, url: url, name: name)
+                            try await monitor.edit(id: editing.id, url: url, name: name, token: token)
                         } else {
-                            try await monitor.add(url: url, name: name)
+                            try await monitor.add(url: url, name: name, token: token)
                         }
                         await MainActor.run { self.rebuild() }
                     } catch {

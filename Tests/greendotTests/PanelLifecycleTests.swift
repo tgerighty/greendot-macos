@@ -7,10 +7,10 @@ final class PanelLifecycleTests: XCTestCase {
     func testReplacingEditPanelDoesNotCrash() {
         _ = NSApplication.shared
         let page = Self.nestedPage()
-        var panel: PagePanelController? = PagePanelController(page: page, onSave: { _, _ in })
+        var panel: PagePanelController? = PagePanelController(page: page, onSave: { _, _, _ in })
         panel?.show()
         panel?.close()
-        panel = PagePanelController(page: page, onSave: { _, _ in })
+        panel = PagePanelController(page: page, onSave: { _, _, _ in })
         panel?.show()
         panel?.close()
         panel = nil
@@ -19,7 +19,7 @@ final class PanelLifecycleTests: XCTestCase {
     func testCloseAfterWindowCloseDoesNotCrash() {
         _ = NSApplication.shared
         let page = Self.nestedPage()
-        let panel = PagePanelController(page: page, onSave: { _, _ in })
+        let panel = PagePanelController(page: page, onSave: { _, _, _ in })
         panel.show()
         panel.closeWindow()
         panel.close()
@@ -32,10 +32,10 @@ final class PanelLifecycleTests: XCTestCase {
         var panel: PagePanelController?
         for _ in 1...5 {
             panel?.close()
-            panel = PagePanelController(page: first, onSave: { _, _ in })
+            panel = PagePanelController(page: first, onSave: { _, _, _ in })
             panel?.show()
             panel?.close()
-            panel = PagePanelController(page: second, onSave: { _, _ in })
+            panel = PagePanelController(page: second, onSave: { _, _, _ in })
             panel?.show()
         }
         panel?.close()
@@ -47,7 +47,7 @@ final class PanelLifecycleTests: XCTestCase {
         let page = Self.nestedPage()
         let panel = PagePanelController(
             page: page,
-            onSave: { _, _ in },
+            onSave: { _, _, _ in },
             onToggleComponent: { _ in true },
             onSetAll: { _ in true }
         )
@@ -67,7 +67,7 @@ final class PanelLifecycleTests: XCTestCase {
         let page = Self.nestedPage()
         let panel = PagePanelController(
             page: page,
-            onSave: { _, _ in },
+            onSave: { _, _, _ in },
             onToggleComponent: { _ in true },
             onSetAll: { _ in true }
         )
@@ -89,7 +89,7 @@ final class PanelLifecycleTests: XCTestCase {
         let page = Self.nestedPage()
         let panel = PagePanelController(
             page: page,
-            onSave: { _, _ in },
+            onSave: { _, _, _ in },
             onToggleComponent: { _ in false },
             onSetAll: { _ in false }
         )
@@ -169,6 +169,39 @@ final class PanelLifecycleTests: XCTestCase {
         XCTAssertFalse(delegate.performStoreChange { try monitor.remove(id: id) })
         XCTAssertTrue(presented)
         XCTAssertEqual(monitor.pages.count, 1)
+    }
+
+    func testAddPanelExposesTokenField() {
+        _ = NSApplication.shared
+        let panel = PagePanelController(page: nil, onSave: { _, _, _ in })
+        panel.show()
+        XCTAssertTrue(UITestDriver.identifiers().contains("token-field"))
+        panel.close()
+    }
+
+    func testSavePassesTrimmedToken() {
+        _ = NSApplication.shared
+        var saved: (URL, String?, String?)?
+        let panel = PagePanelController(page: nil, onSave: { saved = ($0, $1, $2) })
+        panel.show()
+        XCTAssertTrue(UITestDriver.setField("url-field", value: "https://www.githubstatus.com"))
+        XCTAssertTrue(UITestDriver.setField("token-field", value: "  abc  "))
+        XCTAssertTrue(UITestDriver.clickIdentifier("save-button"))
+        XCTAssertEqual(saved?.0.absoluteString, "https://www.githubstatus.com")
+        XCTAssertEqual(saved?.2, "abc")
+        panel.close()
+    }
+
+    func testSaveEmptyTokenIsNil() {
+        _ = NSApplication.shared
+        var saved: (URL, String?, String?)?
+        let panel = PagePanelController(page: nil, onSave: { saved = ($0, $1, $2) })
+        panel.show()
+        XCTAssertTrue(UITestDriver.setField("url-field", value: "https://www.githubstatus.com"))
+        XCTAssertTrue(UITestDriver.setField("token-field", value: "   "))
+        XCTAssertTrue(UITestDriver.clickIdentifier("save-button"))
+        XCTAssertNil(saved?.2)
+        panel.close()
     }
 
     func testPerformStoreChangeDoesNotPresentOnSuccess() throws {

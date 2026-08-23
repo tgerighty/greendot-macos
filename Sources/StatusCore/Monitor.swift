@@ -25,23 +25,27 @@ public final class Monitor: @unchecked Sendable {
         onLaunchAtLoginEnable?()
     }
 
-    public func add(url: URL, name: String?) async throws {
-        let snapshot = try await ProviderProbe.probe(pageURL: url, client: client)
+    public func add(url: URL, name: String?, token: String? = nil) async throws {
+        let savedToken = trimmed(token)
+        let snapshot = try await ProviderProbe.probe(pageURL: url, token: savedToken, client: client)
         let page = WatchedPage(
             url: ProviderProbe.normalizedBase(url),
             name: trimmed(name) ?? snapshot.name,
             notificationsEnabled: true,
+            token: savedToken,
             snapshot: snapshot
         )
         try commit { $0.pages.append(page) }
     }
 
-    public func edit(id: UUID, url: URL, name: String?) async throws {
-        let snapshot = try await ProviderProbe.probe(pageURL: url, client: client)
+    public func edit(id: UUID, url: URL, name: String?, token: String? = nil) async throws {
+        let savedToken = trimmed(token)
+        let snapshot = try await ProviderProbe.probe(pageURL: url, token: savedToken, client: client)
         try commit { next in
             guard let index = next.pages.firstIndex(where: { $0.id == id }) else { return }
             next.pages[index].url = ProviderProbe.normalizedBase(url)
             next.pages[index].name = trimmed(name) ?? snapshot.name
+            next.pages[index].token = savedToken
             next.pages[index].snapshot = snapshot
         }
     }
@@ -103,7 +107,7 @@ public final class Monitor: @unchecked Sendable {
             let previousDisplay = page.displaySeverity
             let snapshot: PageSnapshot
             do {
-                snapshot = try await ProviderProbe.probe(pageURL: page.url, client: client)
+                snapshot = try await ProviderProbe.probe(pageURL: page.url, token: page.token, client: client)
             } catch {
                 snapshot = PageSnapshot(
                     name: page.name,

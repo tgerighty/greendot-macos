@@ -243,6 +243,87 @@ final class ProbeAndMonitorTests: XCTestCase {
     func testStoreErrorCorruptHasUserFacingText() {
         XCTAssertEqual(StoreError.corrupt.errorDescription, "The saved status list could not be read.")
     }
+
+    /// FT-44-01: save writes the token into config.json with mode 0600.
+    func testAddPersistsTokenInConfigAndPollSendsBearer() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        let client = MapHTTPClient(byPath: [
+            "/api/v2/summary.json": (Data(statuspageJSON.utf8), 200)
+        ])
+        let monitor = Monitor(store: store, client: client)
+        try monitor.load()
+        try await monitor.add(
+            url: URL(string: "https://www.githubstatus.com")!,
+            name: nil,
+            token: "page-read-token"
+        )
+        XCTAssertEqual(monitor.pages[0].token, "page-read-token")
+        let body = String(decoding: try Data(contentsOf: store.configURL), as: UTF8.self)
+        XCTAssertTrue(body.contains("page-read-token"), body)
+        let mode = try FileManager.default.attributesOfItem(atPath: store.configURL.path)[.posixPermissions] as? NSNumber
+        XCTAssertEqual(mode?.intValue, 0o600)
+
+        let loaded = Monitor(store: store, client: client)
+        try loaded.load()
+        XCTAssertEqual(loaded.pages[0].token, "page-read-token")
+        _ = await loaded.pollAll()
+        XCTAssertEqual(client.lastHeaders, RequestHeaders.authorization(token: "page-read-token"))
+    }
+
+    func testEditReplacesToken() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let client = MapHTTPClient(byPath: [
+            "/api/v2/summary.json": (Data(statuspageJSON.utf8), 200)
+        ])
+        let monitor = Monitor(store: PageStore(directory: dir), client: client)
+        try await monitor.add(
+            url: URL(string: "https://www.githubstatus.com")!,
+            name: nil,
+            token: "old-token"
+        )
+        try await monitor.edit(
+            id: monitor.pages[0].id,
+            url: URL(string: "https://www.githubstatus.com")!,
+            name: "GH",
+            token: "new-token"
+        )
+        XCTAssertEqual(monitor.pages[0].name, "GH")
+        XCTAssertEqual(monitor.pages[0].token, "new-token")
+        XCTAssertEqual(client.lastHeaders, RequestHeaders.authorization(token: "new-token"))
+    }
+
+    /// FT-44-02: an empty token is public. The page still loads.
+    func testEmptyTokenIsNilAndPublicProbeWorks() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        let client = MapHTTPClient(byPath: [
+            "/api/v2/summary.json": (Data(statuspageJSON.utf8), 200)
+        ])
+        let monitor = Monitor(store: store, client: client)
+        try await monitor.add(
+            url: URL(string: "https://www.githubstatus.com")!,
+            name: nil,
+            token: ""
+        )
+        XCTAssertNil(monitor.pages[0].token)
+        XCTAssertEqual(monitor.pages[0].name, "GitHub")
+        XCTAssertEqual(client.lastHeaders, [:])
+    }
+
+    func testPageStoreLoadWithoutTokenFieldLeavesTokenNil() throws {
+        let json = """
+        {"version":1,"pages":[{"id":"00000000-0000-0000-0000-000000000001","url":"https://www.githubstatus.com","name":"GitHub","notificationsEnabled":true,"disabledComponentNames":[]}],"didSetLaunchAtLogin":false}
+        """
+        let dir = try writeConfig(Data(json.utf8))
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let config = try PageStore(directory: dir).load()
+        XCTAssertEqual(config.pages.count, 1)
+        XCTAssertNil(config.pages[0].token)
+    }
 }
 
 private func writeConfig(_ data: Data) throws -> URL {

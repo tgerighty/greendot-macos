@@ -16,7 +16,13 @@ public enum ProbeError: Error, Equatable, LocalizedError {
 
 public enum ProviderProbe {
     public static func probe(pageURL: URL, client: HTTPClient) async throws -> PageSnapshot {
+        try await probe(pageURL: pageURL, token: nil, client: client)
+    }
+
+    /// Sends the token as a Bearer header on each GET. A nil token or an empty token sends no Authorization header.
+    public static func probe(pageURL: URL, token: String? = nil, client: HTTPClient) async throws -> PageSnapshot {
         let base = normalizedBase(pageURL)
+        let headers = RequestHeaders.authorization(token: token)
         var sawHTTP = false
         var sawNetworkError = false
 
@@ -36,6 +42,7 @@ public enum ProviderProbe {
         if let snapshot = take(await attempt(
             base.appendingPathComponent("api/v2/summary.json"),
             client: client,
+            headers: headers,
             parse: { try StatuspageParser.parse(data: $0, sourceURL: base) }
         )) {
             return snapshot
@@ -43,6 +50,7 @@ public enum ProviderProbe {
         if let snapshot = take(await attempt(
             base.appendingPathComponent("summary.json"),
             client: client,
+            headers: headers,
             parse: { try InstatusParser.parse(data: $0, sourceURL: base) }
         )) {
             return snapshot
@@ -50,6 +58,7 @@ public enum ProviderProbe {
         if let snapshot = await probeStatuspal(
             base: base,
             client: client,
+            headers: headers,
             flags: &sawHTTP,
             network: &sawNetworkError
         ) {
@@ -83,10 +92,11 @@ public enum ProviderProbe {
     private static func attempt(
         _ url: URL,
         client: HTTPClient,
+        headers: [String: String],
         parse: (Data) throws -> PageSnapshot
     ) async -> AttemptResult {
         do {
-            let (data, status) = try await client.get(url)
+            let (data, status) = try await client.get(url, headers: headers)
             guard status == 200 else { return .miss }
             do {
                 return .hit(try parse(data))
@@ -101,6 +111,7 @@ public enum ProviderProbe {
     private static func probeStatuspal(
         base: URL,
         client: HTTPClient,
+        headers: [String: String],
         flags sawHTTP: inout Bool,
         network sawNetworkError: inout Bool
     ) async -> PageSnapshot? {
@@ -110,7 +121,7 @@ public enum ProviderProbe {
             subdomains.append(host.split(separator: ".").first.map(String.init) ?? host)
         }
         do {
-            let htmlHit = try await client.get(base)
+            let htmlHit = try await client.get(base, headers: headers)
             sawHTTP = true
             if htmlHit.1 == 200,
                let html = String(data: htmlHit.0, encoding: .utf8),
@@ -126,7 +137,7 @@ public enum ProviderProbe {
         for subdomain in unique {
             for prefix in apiHosts {
                 guard let url = URL(string: prefix + subdomain + "/summary") else { continue }
-                switch await attempt(url, client: client, parse: {
+                switch await attempt(url, client: client, headers: headers, parse: {
                     try StatuspalParser.parse(data: $0, sourceURL: base)
                 }) {
                 case .hit(let snapshot):
