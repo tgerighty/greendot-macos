@@ -17,6 +17,7 @@ final class PerformanceHarnessTests: XCTestCase {
         let menu = measureMenu()
         let icon = measureStatusDot()
         let save = measureStoreSave()
+        let unchangedWrites = try await measureUnchangedPollWrites()
 
         let lines = [
             "BENCH parse_statuspage_ms=\(fmt(parse.statuspage))",
@@ -29,7 +30,8 @@ final class PerformanceHarnessTests: XCTestCase {
             "BENCH menu_build_ms=\(fmt(menu))",
             "BENCH status_dot_ms=\(fmt(icon.elapsedMs))",
             "BENCH status_dot_unique_images=\(icon.uniqueCount)",
-            "BENCH store_save_ms=\(fmt(save))"
+            "BENCH store_save_ms=\(fmt(save))",
+            "BENCH pollAll_unchanged_config_rewrites=\(unchangedWrites)"
         ]
         for line in lines {
             print(line)
@@ -172,6 +174,29 @@ final class PerformanceHarnessTests: XCTestCase {
         return elapsedMs(iterations: 40) {
             try store.save(config)
         }
+    }
+
+    /// Second poll of identical JSON: 1 if config.json was replaced, 0 if not.
+    private func measureUnchangedPollWrites() async throws -> Int {
+        let json = Self.statuspageJSON(name: "GitHub", components: 8)
+        let client = MapHTTPClient(byPath: ["/api/v2/summary.json": (json, 200)])
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        var config = AppConfig()
+        config.pages = [Self.page(host: "a.example", name: "A", provider: .statuspage)]
+        try store.save(config)
+        let monitor = Monitor(store: store, client: client)
+        try monitor.load()
+        _ = await monitor.pollAll()
+        let path = store.configURL.path
+        let before = try FileManager.default.attributesOfItem(atPath: path)
+        let beforeInode = before[.systemFileNumber] as? NSNumber
+        _ = await monitor.pollAll()
+        let after = try FileManager.default.attributesOfItem(atPath: path)
+        let afterInode = after[.systemFileNumber] as? NSNumber
+        return beforeInode == afterInode ? 0 : 1
     }
 
     private func elapsedMs(iterations: Int, _ body: () throws -> Void) -> Double {

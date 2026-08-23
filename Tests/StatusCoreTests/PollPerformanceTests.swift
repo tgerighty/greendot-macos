@@ -107,6 +107,43 @@ final class PollPerformanceTests: XCTestCase {
         XCTAssertEqual(snap.overall, .yellow)
     }
 
+    func testUnchangedPollDoesNotRewriteConfig() async throws {
+        let client = MapHTTPClient(byPath: [
+            "/api/v2/summary.json": (Self.statuspageJSON, 200)
+        ])
+        let (monitor, dir) = try seededMonitor(
+            client: client,
+            pages: [Self.page(host: "a.example", name: "A", provider: .statuspage)]
+        )
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let configURL = PageStore(directory: dir).configURL
+        _ = await monitor.pollAll()
+        XCTAssertEqual(monitor.pages[0].displaySeverity, .yellow)
+        XCTAssertEqual(monitor.pages[0].snapshot?.incidents.first?.title, "API slow")
+        let afterFirst = try inode(configURL)
+        _ = await monitor.pollAll()
+        let afterSecond = try inode(configURL)
+        XCTAssertEqual(afterFirst, afterSecond)
+        XCTAssertEqual(monitor.pages[0].displaySeverity, .yellow)
+    }
+
+    func testChangedPollStillRewritesConfig() async throws {
+        let client = MapHTTPClient(byPath: [
+            "/api/v2/summary.json": (Self.statuspageJSON, 200)
+        ])
+        let (monitor, dir) = try seededMonitor(
+            client: client,
+            pages: [Self.page(host: "a.example", name: "A", provider: .statuspage)]
+        )
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let configURL = PageStore(directory: dir).configURL
+        let before = try inode(configURL)
+        _ = await monitor.pollAll()
+        let after = try inode(configURL)
+        XCTAssertNotEqual(before, after)
+        XCTAssertEqual(monitor.pages[0].displaySeverity, .yellow)
+    }
+
     func testPollAllUnreachablePageStaysGreyAndToasts() async throws {
         let (monitor, dir) = try seededMonitor(
             client: MapHTTPClient(),
@@ -118,6 +155,13 @@ final class PollPerformanceTests: XCTestCase {
         XCTAssertEqual(monitor.pages[0].displaySeverity, .grey)
         XCTAssertEqual(monitor.barSeverity(), .grey)
         XCTAssertEqual(toasts.map(\.body), ["Unreachable"])
+    }
+
+    private func inode(_ url: URL) throws -> NSNumber {
+        let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+        let value = attrs[.systemFileNumber] as? NSNumber
+        XCTAssertNotNil(value)
+        return value ?? 0
     }
 
     private func seededMonitor(

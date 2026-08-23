@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Status-dot images are reused per colour and size. 2000 constructions of the four bar colours: 2000 unique images before, 4 after (second after run 4). Construction time 1.14 ms before, 0.37 ms after (second after run 0.39 ms).
+- An unchanged poll does not rewrite `config.json` (1 rewrite before, 0 after). A status change still writes.
 - Refresh waits for the slowest watched page, not the sum of page waits. Three pages with an 80 ms probe delay: 253 ms before, 87 ms after (second after run 87 ms).
 - A later poll of a known Statuspal or Instatus page does not GET the other providers. Mixed three-page re-poll: 7 GETs before, 3 after.
 

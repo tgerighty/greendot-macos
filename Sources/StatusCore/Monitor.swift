@@ -129,6 +129,7 @@ public final class Monitor: @unchecked Sendable {
             return collected.map { $0! }
         }
 
+        let beforeSave = config
         var toasts: [Toast] = []
         for index in pages.indices {
             let page = config.pages[index]
@@ -156,7 +157,9 @@ public final class Monitor: @unchecked Sendable {
                 toasts.append(toast)
             }
         }
-        try? store.save(config)
+        if config != beforeSave {
+            try? store.save(config)
+        }
         return toasts
     }
 
