@@ -84,8 +84,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadSucceeded
     }
 
-    /// Pulse exists to flash grey while a page is unreachable. Today every tick
-    /// still refreshes the icon; the harness counts that so we can skip it.
+    /// Pulse flashes grey while a page is unreachable.
+    /// Skip icon refreshes when all pages are reachable.
     static func shouldRefreshIconOnPulse(hasUnreachable: Bool) -> Bool {
         hasUnreachable
     }

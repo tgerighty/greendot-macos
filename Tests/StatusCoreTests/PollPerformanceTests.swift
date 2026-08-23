@@ -31,9 +31,10 @@ final class PollPerformanceTests: XCTestCase {
         let inner = MapHTTPClient(byPath: [
             "/api/v2/summary.json": (Self.statuspageJSON, 200)
         ])
-        let client = DelayHTTPClient(inner: inner, nanoseconds: Self.delayNs)
+        let delayed = DelayHTTPClient(inner: inner, nanoseconds: Self.delayNs)
+        let probe = ConcurrencyProbeHTTPClient(delayed)
         let (monitor, dir) = try seededMonitor(
-            client: client,
+            client: probe,
             pages: [
                 Self.page(host: "a.example", name: "A", provider: .statuspage),
                 Self.page(host: "b.example", name: "B", provider: .statuspage),
@@ -42,16 +43,13 @@ final class PollPerformanceTests: XCTestCase {
         )
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let start = ContinuousClock.now
         let toasts = await monitor.pollAll()
-        let elapsedMs = start.duration(to: .now).milliseconds
 
         XCTAssertEqual(monitor.pages.map { $0.snapshot?.provider }, [.statuspage, .statuspage, .statuspage])
         XCTAssertEqual(monitor.pages.map(\.displaySeverity), [.yellow, .yellow, .yellow])
         XCTAssertEqual(toasts.map(\.body), ["Degraded", "Degraded", "Degraded"])
         XCTAssertEqual(monitor.barSeverity(), .yellow)
-        XCTAssertLessThan(elapsedMs, 160, "independent probes should overlap, not sum; took \(elapsedMs)ms")
-        XCTAssertGreaterThan(elapsedMs, 50, "should still wait for a probe delay; took \(elapsedMs)ms")
+        XCTAssertGreaterThanOrEqual(probe.peakInFlight, 3)
     }
 
     func testKnownProviderRepollDoesNotIssueOtherProviderGets() async throws {
@@ -242,6 +240,42 @@ final class PollPerformanceTests: XCTestCase {
                 isUnreachable: false
             )
         )
+    }
+}
+
+final class ConcurrencyProbeHTTPClient: HTTPClient, @unchecked Sendable {
+    private let inner: any HTTPClient
+    private let lock = NSLock()
+    private var inFlight = 0
+    private var peak = 0
+
+    init(_ inner: any HTTPClient) {
+        self.inner = inner
+    }
+
+    var peakInFlight: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return peak
+    }
+
+    func get(_ url: URL) async throws -> (Data, Int) {
+        begin()
+        defer { end() }
+        return try await inner.get(url)
+    }
+
+    private func begin() {
+        lock.lock()
+        inFlight += 1
+        peak = max(peak, inFlight)
+        lock.unlock()
+    }
+
+    private func end() {
+        lock.lock()
+        inFlight -= 1
+        lock.unlock()
     }
 }
 

@@ -94,17 +94,7 @@ public enum ProviderProbe {
             )
         }
 
-        let order: [StatusProvider]
-        switch prefer {
-        case .none, .statuspage:
-            order = [.statuspage, .instatus, .statuspal]
-        case .instatus:
-            order = [.instatus, .statuspage, .statuspal]
-        case .statuspal:
-            order = [.statuspal, .statuspage, .instatus]
-        }
-
-        for provider in order {
+        for provider in probeOrder(preferring: prefer) {
             switch provider {
             case .statuspage:
                 if let hit = await tryStatuspage() { return hit }
@@ -118,6 +108,17 @@ public enum ProviderProbe {
             throw ProbeError.unreachable
         }
         throw ProbeError.unsupported
+    }
+
+    static func probeOrder(preferring prefer: StatusProvider?) -> [StatusProvider] {
+        switch prefer {
+        case .none, .statuspage:
+            return [.statuspage, .instatus, .statuspal]
+        case .instatus:
+            return [.instatus, .statuspage, .statuspal]
+        case .statuspal:
+            return [.statuspal, .statuspage, .instatus]
+        }
     }
 
     public static func normalizedBase(_ url: URL) -> URL {

@@ -10,6 +10,9 @@ final class PerformanceHarnessTests: XCTestCase {
     private static let delayMs = 80.0
 
     func testEmitBenchTimings() async throws {
+        guard ProcessInfo.processInfo.environment["GREENDOT_BENCH"] == "1" else {
+            throw XCTSkip("Run this harness with make bench")
+        }
         _ = NSApplication.shared
 
         let parse = measureParse()
@@ -160,12 +163,14 @@ final class PerformanceHarnessTests: XCTestCase {
         return (ms, Set(menus.map(ObjectIdentifier.init)).count)
     }
 
-    private func measureRemaining() async throws -> (
-        statuspalGets: Int,
-        regexCompiles: Int,
-        secondParseCount: Int,
-        pulseWhenReachable: Int
-    ) {
+    private struct RemainingMetrics {
+        var statuspalGets: Int
+        var regexCompiles: Int
+        var secondParseCount: Int
+        var pulseWhenReachable: Int
+    }
+
+    private func measureRemaining() async throws -> RemainingMetrics {
         var statuspalMap = MapHTTPClient()
         statuspalMap.byURL["https://statuspal.io/api/v2/status_pages/acme/summary"] = (Data("""
         {
@@ -215,7 +220,12 @@ final class PerformanceHarnessTests: XCTestCase {
             }
         }
 
-        return (statuspalRecording.requested.count, regexCompiles, secondParse, pulse)
+        return RemainingMetrics(
+            statuspalGets: statuspalRecording.requested.count,
+            regexCompiles: regexCompiles,
+            secondParseCount: secondParse,
+            pulseWhenReachable: pulse
+        )
     }
 
     private func measureStatusDot() -> (elapsedMs: Double, uniqueCount: Int) {

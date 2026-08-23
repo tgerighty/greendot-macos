@@ -91,78 +91,14 @@ final class MenuBuilderTests: XCTestCase {
 
     func testMenuFromPolledPagesKeepsTitlesActionsAndSeverities() async throws {
         _ = NSApplication.shared
-        var inner = MapHTTPClient()
-        inner.byURL["https://www.githubstatus.com/api/v2/summary.json"] = (Data("""
-        {
-          "page": {"name": "GitHub", "url": "https://www.githubstatus.com"},
-          "status": {"indicator": "minor"},
-          "components": [{"name": "API", "status": "degraded_performance", "group": false}],
-          "incidents": [{"name": "API slow"}]
-        }
-        """.utf8), 200)
-        inner.byURL["https://instat.us/summary.json"] = (Data("""
-        {
-          "page": {"name": "Instatus", "url": "https://instat.us", "status": "UP"},
-          "components": [{"name": "API", "status": "OPERATIONAL"}]
-        }
-        """.utf8), 200)
-        inner.byURL["https://statuspal.io/api/v2/status_pages/acme/summary"] = (Data("""
-        {
-          "status_page": {"name": "Acme", "url": "https://acme.statuspal.io"},
-          "current_status_type": null,
-          "services": [{"name": "API", "current_incident_type": null, "children": []}],
-          "incidents": []
-        }
-        """.utf8), 200)
-
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         var config = AppConfig()
-        config.pages = [
-            WatchedPage(
-                url: URL(string: "https://www.githubstatus.com")!,
-                name: "GitHub",
-                snapshot: PageSnapshot(
-                    name: "GitHub",
-                    url: URL(string: "https://www.githubstatus.com")!,
-                    provider: .statuspage,
-                    overall: .green,
-                    components: [ComponentStatus(name: "API", severity: .green, statusText: "Operational")],
-                    incidents: [],
-                    isUnreachable: false
-                )
-            ),
-            WatchedPage(
-                url: URL(string: "https://instat.us")!,
-                name: "Instatus",
-                snapshot: PageSnapshot(
-                    name: "Instatus",
-                    url: URL(string: "https://instat.us")!,
-                    provider: .instatus,
-                    overall: .green,
-                    components: [ComponentStatus(name: "API", severity: .green, statusText: "Operational")],
-                    incidents: [],
-                    isUnreachable: false
-                )
-            ),
-            WatchedPage(
-                url: URL(string: "https://acme.statuspal.io")!,
-                name: "Acme",
-                snapshot: PageSnapshot(
-                    name: "Acme",
-                    url: URL(string: "https://acme.statuspal.io")!,
-                    provider: .statuspal,
-                    overall: .green,
-                    components: [ComponentStatus(name: "API", severity: .green, statusText: "Operational")],
-                    incidents: [],
-                    isUnreachable: false
-                )
-            )
-        ]
+        config.pages = Self.mixedProviderPages()
         let store = PageStore(directory: dir)
         try store.save(config)
-        let monitor = Monitor(store: store, client: inner)
+        let monitor = Monitor(store: store, client: Self.mixedProviderClient())
         try monitor.load()
         let toasts = await monitor.pollAll()
         XCTAssertEqual(toasts.map(\.pageName), ["GitHub"])
@@ -256,6 +192,58 @@ final class MenuBuilderTests: XCTestCase {
             if let sub = item.submenu, let hit = findItem(title, in: sub) { return hit }
         }
         return nil
+    }
+
+    private static func mixedProviderClient() -> MapHTTPClient {
+        var inner = MapHTTPClient()
+        inner.byURL["https://www.githubstatus.com/api/v2/summary.json"] = (Data("""
+        {
+          "page": {"name": "GitHub", "url": "https://www.githubstatus.com"},
+          "status": {"indicator": "minor"},
+          "components": [{"name": "API", "status": "degraded_performance", "group": false}],
+          "incidents": [{"name": "API slow"}]
+        }
+        """.utf8), 200)
+        inner.byURL["https://instat.us/summary.json"] = (Data("""
+        {
+          "page": {"name": "Instatus", "url": "https://instat.us", "status": "UP"},
+          "components": [{"name": "API", "status": "OPERATIONAL"}]
+        }
+        """.utf8), 200)
+        inner.byURL["https://statuspal.io/api/v2/status_pages/acme/summary"] = (Data("""
+        {
+          "status_page": {"name": "Acme", "url": "https://acme.statuspal.io"},
+          "current_status_type": null,
+          "services": [{"name": "API", "current_incident_type": null, "children": []}],
+          "incidents": []
+        }
+        """.utf8), 200)
+        return inner
+    }
+
+    private static func greenPage(url: String, name: String, provider: StatusProvider) -> WatchedPage {
+        let pageURL = URL(string: url)!
+        return WatchedPage(
+            url: pageURL,
+            name: name,
+            snapshot: PageSnapshot(
+                name: name,
+                url: pageURL,
+                provider: provider,
+                overall: .green,
+                components: [ComponentStatus(name: "API", severity: .green, statusText: "Operational")],
+                incidents: [],
+                isUnreachable: false
+            )
+        )
+    }
+
+    private static func mixedProviderPages() -> [WatchedPage] {
+        [
+            greenPage(url: "https://www.githubstatus.com", name: "GitHub", provider: .statuspage),
+            greenPage(url: "https://instat.us", name: "Instatus", provider: .instatus),
+            greenPage(url: "https://acme.statuspal.io", name: "Acme", provider: .statuspal)
+        ]
     }
 
     private static func nestedPage() -> WatchedPage {
