@@ -5,29 +5,33 @@ import XCTest
 @testable import greendot
 
 final class NotifierTests: XCTestCase {
-    func testToastIconColourMatchesIssueColour() {
+    func testToastAttachmentColourMatchesIssueColour() {
         _ = NSApplication.shared
         for severity in [Severity.red, .yellow, .green, .grey] {
             let toast = Toast(pageName: "GitHub", body: "Major outage", severity: severity)
             let content = Notifier.content(for: toast)
             XCTAssertEqual(content.title, "GitHub")
             XCTAssertEqual(content.body, "Major outage")
-            guard let png = Self.iconPNG(content),
+            guard let png = Self.attachmentPNG(content),
                   let sampled = Self.centerColor(png) else {
-                XCTFail("missing toast icon for \(severity.rawValue)")
+                XCTFail("missing toast image for \(severity.rawValue)")
                 continue
             }
             XCTAssertEqual(
                 Self.nearestSeverity(to: sampled),
                 severity,
-                "toast icon for \(severity.rawValue) sampled \(sampled)"
+                "toast image for \(severity.rawValue) sampled \(sampled)"
             )
         }
     }
 
-    private static func iconPNG(_ content: UNMutableNotificationContent) -> Data? {
-        guard let icon = content.value(forKey: "icon") as? NSObject else { return nil }
-        return icon.perform(NSSelectorFromString("data"))?.takeUnretainedValue() as? Data
+    private static func attachmentPNG(_ content: UNMutableNotificationContent) -> Data? {
+        guard let url = content.attachments.first?.url else { return nil }
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer {
+            if accessed { url.stopAccessingSecurityScopedResource() }
+        }
+        return try? Data(contentsOf: url)
     }
 
     private static func centerColor(_ png: Data) -> NSColor? {

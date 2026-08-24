@@ -25,21 +25,30 @@ final class Notifier {
         content.title = toast.pageName
         content.body = toast.body
         content.sound = .default
-        if let icon = icon(for: toast.severity) {
-            content.setValue(icon, forKey: "icon")
+        if let attachment = attachment(for: toast.severity) {
+            content.attachments = [attachment]
         }
         return content
     }
 
-    /// Banner icon. `UNNotificationIcon` is in the framework but not the public headers.
-    private static func icon(for severity: Severity) -> NSObject? {
+    private static func attachment(for severity: Severity) -> UNNotificationAttachment? {
         let image = StatusDot.image(severity, size: 64)
         guard let tiff = image.tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: tiff),
-              let png = bitmap.representation(using: .png, properties: [:]),
-              let iconClass = NSClassFromString("UNNotificationIcon") as? NSObject.Type
+              let png = bitmap.representation(using: .png, properties: [:])
         else { return nil }
-        return iconClass.perform(NSSelectorFromString("iconWithData:"), with: png)?
-            .takeUnretainedValue() as? NSObject
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("greendot-\(severity.rawValue)-\(UUID().uuidString).png")
+        do {
+            try png.write(to: url)
+            return try UNNotificationAttachment(
+                identifier: "status-\(severity.rawValue)",
+                url: url,
+                options: [UNNotificationAttachmentOptionsTypeHintKey: "public.png"]
+            )
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            return nil
+        }
     }
 }
