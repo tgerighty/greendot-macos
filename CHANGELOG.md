@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Status-change notifications use the issue colour (red, yellow, green, or grey) on the banner icon.
 - A first probe of a `*.statuspal.io` host does not GET the HTML page (the host already names the subdomain). First-probe GETs: 4 before, 3 after (second after run 3).
 - The status menu is reused when the watched pages do not change. 80 identical builds: 80 unique menus before, 1 after (second after run 1).
 - The Statuspal subdomain regex is compiled once. 500 extracts: 500 compiles before, 1 after (second after run 1).
