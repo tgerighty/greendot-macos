@@ -1,0 +1,44 @@
+import Foundation
+import StatusCore
+
+public final class ControllableHTTPClient: HTTPClient, @unchecked Sendable {
+    private let lock = NSLock()
+    private var requestCount = 0
+    private var pending: [Int: CheckedContinuation<(Data, Int), Error>] = [:]
+    private var waiters: [(minimum: Int, continuation: CheckedContinuation<Void, Never>)] = []
+
+    public init() {}
+
+    public func get(_: URL) async throws -> (Data, Int) {
+        try await withCheckedThrowingContinuation { continuation in
+            lock.lock()
+            requestCount += 1
+            let request = requestCount
+            pending[request] = continuation
+            let ready = waiters.filter { requestCount >= $0.minimum }
+            waiters.removeAll { requestCount >= $0.minimum }
+            lock.unlock()
+            ready.forEach { $0.continuation.resume() }
+        }
+    }
+
+    public func waitUntilRequestCount(_ minimum: Int) async {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if requestCount >= minimum {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                waiters.append((minimum: minimum, continuation: continuation))
+                lock.unlock()
+            }
+        }
+    }
+
+    public func complete(request: Int, with data: Data) {
+        lock.lock()
+        let continuation = pending.removeValue(forKey: request)
+        lock.unlock()
+        continuation?.resume(returning: (data, 200))
+    }
+}

@@ -1,5 +1,6 @@
 import XCTest
 @testable import StatusCore
+import TestSupport
 
 final class MonitorRefreshTransactionTests: XCTestCase {
     private let greenStatuspageJSON = """
@@ -72,7 +73,7 @@ final class MonitorRefreshTransactionTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: dir) }
         let url = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
         let store = try await seedStore(at: dir, pageURL: url)
-        let client = ContinuationHTTPClient()
+        let client = ControllableHTTPClient()
         let monitor = try loadedMonitor(store: store, client: client)
 
         let pollA = Task { try await monitor.pollAll() }
@@ -95,7 +96,7 @@ final class MonitorRefreshTransactionTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: dir) }
         let url = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
         let store = try await seedStore(at: dir, pageURL: url)
-        let client = ContinuationHTTPClient()
+        let client = ControllableHTTPClient()
         let monitor = try loadedMonitor(store: store, client: client)
         let pageID = monitor.pages[0].id
 
@@ -120,7 +121,7 @@ final class MonitorRefreshTransactionTests: XCTestCase {
         let originalURL = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
         let editedURL = try XCTUnwrap(URL(string: "https://status.example.com"))
         let store = try await seedStore(at: dir, pageURL: originalURL)
-        let client = ContinuationHTTPClient()
+        let client = ControllableHTTPClient()
         let monitor = try loadedMonitor(store: store, client: client)
         let pageID = monitor.pages[0].id
 
@@ -170,45 +171,5 @@ final class MonitorRefreshTransactionTests: XCTestCase {
         let monitor = Monitor(store: store, client: client)
         try monitor.load()
         return monitor
-    }
-}
-
-private final class ContinuationHTTPClient: HTTPClient, @unchecked Sendable {
-    private let lock = NSLock()
-    private var requestCount = 0
-    private var pending: [Int: CheckedContinuation<(Data, Int), Error>] = [:]
-    private var waiters: [(minimum: Int, continuation: CheckedContinuation<Void, Never>)] = []
-
-    func get(_ url: URL) async throws -> (Data, Int) {
-        try await withCheckedThrowingContinuation { continuation in
-            lock.lock()
-            requestCount += 1
-            let request = requestCount
-            pending[request] = continuation
-            let ready = waiters.filter { requestCount >= $0.minimum }
-            waiters.removeAll { requestCount >= $0.minimum }
-            lock.unlock()
-            ready.forEach { $0.continuation.resume() }
-        }
-    }
-
-    func waitUntilRequestCount(_ minimum: Int) async {
-        await withCheckedContinuation { continuation in
-            lock.lock()
-            if requestCount >= minimum {
-                lock.unlock()
-                continuation.resume()
-            } else {
-                waiters.append((minimum: minimum, continuation: continuation))
-                lock.unlock()
-            }
-        }
-    }
-
-    func complete(request: Int, with data: Data) {
-        lock.lock()
-        let continuation = pending.removeValue(forKey: request)
-        lock.unlock()
-        continuation?.resume(returning: (data, 200))
     }
 }

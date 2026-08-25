@@ -1,6 +1,7 @@
 import Foundation
 import XCTest
 import StatusCore
+import TestSupport
 @testable import greendot
 
 final class AppDelegateRefreshErrorTests: XCTestCase {
@@ -26,14 +27,7 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let pageURL = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
-        let store = PageStore(directory: directory)
-        let seed = Monitor(
-            store: store,
-            client: MapHTTPClient(byPath: [
-                "/api/v2/summary.json": (Data(greenJSON.utf8), 200)
-            ])
-        )
-        try await seed.add(url: pageURL, name: nil)
+        let store = try await seedStore(at: directory, pageURL: pageURL)
 
         let sequence = SequenceHTTPClient(responses: [
             Data(redJSON.utf8),
@@ -72,16 +66,9 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let pageURL = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
-        let store = PageStore(directory: directory)
-        let seed = Monitor(
-            store: store,
-            client: MapHTTPClient(byPath: [
-                "/api/v2/summary.json": (Data(greenJSON.utf8), 200)
-            ])
-        )
-        try await seed.add(url: pageURL, name: nil)
+        let store = try await seedStore(at: directory, pageURL: pageURL)
 
-        let client = GatedHTTPClient()
+        let client = ControllableHTTPClient()
         let monitor = Monitor(store: store, client: client)
         try monitor.load()
         let delegate = AppDelegate()
@@ -108,6 +95,18 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
         XCTAssertEqual(presentedErrors, 1)
     }
 
+    private func seedStore(at directory: URL, pageURL: URL) async throws -> PageStore {
+        let store = PageStore(directory: directory)
+        let seed = Monitor(
+            store: store,
+            client: MapHTTPClient(byPath: [
+                "/api/v2/summary.json": (Data(greenJSON.utf8), 200)
+            ])
+        )
+        try await seed.add(url: pageURL, name: nil)
+        return store
+    }
+
     private func breakPersistence(at configURL: URL) throws {
         try? FileManager.default.removeItem(at: configURL)
         try FileManager.default.createDirectory(at: configURL, withIntermediateDirectories: true)
@@ -131,45 +130,5 @@ private final class SequenceHTTPClient: HTTPClient, @unchecked Sendable {
         defer { lock.unlock() }
         guard !responses.isEmpty else { throw URLError(.badServerResponse) }
         return (responses.removeFirst(), 200)
-    }
-}
-
-private final class GatedHTTPClient: HTTPClient, @unchecked Sendable {
-    private let lock = NSLock()
-    private var requestCount = 0
-    private var pending: [Int: CheckedContinuation<(Data, Int), Error>] = [:]
-    private var waiters: [(minimum: Int, continuation: CheckedContinuation<Void, Never>)] = []
-
-    func get(_: URL) async throws -> (Data, Int) {
-        try await withCheckedThrowingContinuation { continuation in
-            lock.lock()
-            requestCount += 1
-            let request = requestCount
-            pending[request] = continuation
-            let ready = waiters.filter { requestCount >= $0.minimum }
-            waiters.removeAll { requestCount >= $0.minimum }
-            lock.unlock()
-            ready.forEach { $0.continuation.resume() }
-        }
-    }
-
-    func waitUntilRequestCount(_ minimum: Int) async {
-        await withCheckedContinuation { continuation in
-            lock.lock()
-            if requestCount >= minimum {
-                lock.unlock()
-                continuation.resume()
-            } else {
-                waiters.append((minimum: minimum, continuation: continuation))
-                lock.unlock()
-            }
-        }
-    }
-
-    func complete(request: Int, with data: Data) {
-        lock.lock()
-        let continuation = pending.removeValue(forKey: request)
-        lock.unlock()
-        continuation?.resume(returning: (data, 200))
     }
 }
