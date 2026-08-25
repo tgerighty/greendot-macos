@@ -3,6 +3,7 @@ import StatusCore
 import XCTest
 @testable import greendot
 
+@MainActor
 final class MenuBuilderTests: XCTestCase {
     func testRepeatedBuildReusesMenuWhenPagesUnchanged() {
         let page = Self.nestedPage()

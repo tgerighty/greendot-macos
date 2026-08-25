@@ -5,6 +5,7 @@ import XCTest
 
 /// Repeatable in-memory timings for the shipped parse, poll, menu, and icon paths.
 /// Prints `BENCH name=ms` lines. Does not gate on absolute microseconds.
+@MainActor
 final class PerformanceHarnessTests: XCTestCase {
     private static let delayNs: UInt64 = 80_000_000
     private static let delayMs = 80.0
@@ -50,6 +51,7 @@ final class PerformanceHarnessTests: XCTestCase {
         XCTAssertGreaterThan(poll.elapsedMs, 0)
         XCTAssertGreaterThan(menu.uncachedBuildMs, 0)
         XCTAssertGreaterThan(menu.cachedBuildMs, 0)
+        XCTAssertEqual(menu.uniqueCount, 1, "Repeated cached builds must reuse one menu")
         XCTAssertGreaterThan(icon.elapsedMs, 0)
         XCTAssertGreaterThan(poll.getCount, 0)
         XCTAssertGreaterThan(remaining.statuspalGets, 0)

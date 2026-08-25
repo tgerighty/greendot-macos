@@ -3,6 +3,7 @@ import StatusCore
 import XCTest
 @testable import greendot
 
+@MainActor
 final class PanelLifecycleTests: XCTestCase {
     func testReplacingEditPanelDoesNotCrash() {
         _ = NSApplication.shared

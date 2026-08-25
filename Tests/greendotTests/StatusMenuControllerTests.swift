@@ -3,6 +3,7 @@ import StatusCore
 import XCTest
 @testable import greendot
 
+@MainActor
 final class StatusMenuControllerTests: XCTestCase {
     func testSeverityOnlyUpdateReusesMenuAndUpdatesIcon() throws {
         _ = NSApplication.shared
@@ -153,6 +154,45 @@ final class StatusMenuControllerTests: XCTestCase {
         XCTAssertTrue(presentedMenus.isEmpty)
         wait(for: [didPresent], timeout: 1)
         XCTAssertEqual(presentedMenus.count, 1)
+    }
+
+    func testDeferredPopWaitsWhenTrackingRestartsBeforeScheduledFlush() throws {
+        _ = NSApplication.shared
+        let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        defer { NSStatusBar.system.removeStatusItem(statusItem) }
+        let tracking = MenuClickOpener()
+        var scheduledWork: [() -> Void] = []
+        var presentedMenus: [NSMenu] = []
+        var activationCount = 0
+        let controller = StatusMenuController(
+            state: Self.state(page: Self.page(name: "Tracked")),
+            handlers: Self.handlers(),
+            statusItem: statusItem,
+            clickOpener: tracking,
+            activateApplication: { activationCount += 1 },
+            presentMenu: { presentedMenus.append($0) },
+            scheduleOnMain: { scheduledWork.append($0) }
+        )
+        let trackedMenu = try XCTUnwrap(statusItem.menu)
+
+        tracking.menuWillOpen(trackedMenu)
+        controller.update(Self.state(page: Self.page(name: "Latest")))
+        controller.popMenuOnScreen()
+        tracking.menuDidClose(trackedMenu)
+        tracking.menuWillOpen(trackedMenu)
+
+        try XCTUnwrap(scheduledWork.first)()
+        scheduledWork.removeFirst()
+
+        XCTAssertTrue(presentedMenus.isEmpty)
+        XCTAssertEqual(activationCount, 1)
+        XCTAssertTrue(statusItem.menu === trackedMenu)
+
+        tracking.menuDidClose(trackedMenu)
+        try XCTUnwrap(scheduledWork.first)()
+
+        XCTAssertEqual(presentedMenus.count, 1)
+        XCTAssertTrue(controller.dumpMenu().contains("Latest"))
     }
 
     func testControllersOwnIndependentMenusAndStableHandlers() throws {
