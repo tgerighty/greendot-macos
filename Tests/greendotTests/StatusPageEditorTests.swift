@@ -138,7 +138,7 @@ final class StatusPageEditorTests: XCTestCase {
         let editor = StatusPageEditor(
             monitor: monitor,
             editingPageID: staleID,
-            onChange: {},
+            onChange: { XCTFail("A stale editor must not report a change") },
             presentError: { presentedError = $0 }
         )
 
@@ -172,7 +172,7 @@ final class StatusPageEditorTests: XCTestCase {
             let replacement = StatusPageEditor(
                 monitor: monitor,
                 editingPageID: page.id,
-                onChange: {},
+                onChange: { XCTFail("Showing an editor must not report a change") },
                 presentError: { error in XCTFail("unexpected error: \(error)") }
             )
             let shown = expectation(description: "replacement editor \(index) is shown")
@@ -285,6 +285,45 @@ final class StatusPageEditorTests: XCTestCase {
     private func breakPersistence(at configURL: URL) throws {
         try? FileManager.default.removeItem(at: configURL)
         try FileManager.default.createDirectory(at: configURL, withIntermediateDirectories: true)
+    }
+}
+
+extension StatusPageEditorTests {
+    func testFieldsAreDisabledWhileSavePendingAndRestoredAfterFailure() async throws {
+        _ = NSApplication.shared
+        let gate = PendingSaveGate()
+        addTeardownBlock { await gate.complete(with: false) }
+        let panelController = PagePanelController(
+            page: nil,
+            onSave: { _, _ in await gate.save() }
+        )
+        panelController.show()
+        defer { panelController.close() }
+
+        let panel = try XCTUnwrap(Self.visiblePanelWindow())
+        let urlField = try XCTUnwrap(Self.field("url-field", in: panel.contentView))
+        let nameField = try XCTUnwrap(Self.field("name-field", in: panel.contentView))
+        urlField.stringValue = "https://status.example.com"
+        nameField.stringValue = "Pending save"
+        try XCTUnwrap(Self.button("save-button", in: panel.contentView)).performClick(nil)
+        await gate.waitUntilStarted()
+
+        XCTAssertFalse(urlField.isEnabled)
+        XCTAssertFalse(nameField.isEnabled)
+
+        await gate.complete(with: false)
+        await waitUntilFieldsEnabled(urlField, nameField)
+
+        XCTAssertTrue(urlField.isEnabled)
+        XCTAssertTrue(nameField.isEnabled)
+        XCTAssertTrue(panel.isVisible)
+    }
+
+    private func waitUntilFieldsEnabled(_ fields: NSTextField...) async {
+        for _ in 0..<100 {
+            if fields.allSatisfy(\.isEnabled) { return }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
     }
 }
 
