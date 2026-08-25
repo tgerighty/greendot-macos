@@ -123,6 +123,42 @@ final class MonitorRefreshTransactionTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: store.configURL), persistedBefore)
     }
 
+    func testCancelledPollWaitingForTransitionLockDoesNotCommit() async throws {
+        let dir = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
+        let store = try await seedStore(at: dir, pageURL: url)
+        let client = ControllableHTTPClient()
+        defer { client.failAll() }
+        let transitionLock = ControllableTransitionLock()
+        let monitor = Monitor(store: store, client: client, transitionLock: transitionLock)
+        try monitor.load()
+        let before = monitor.pages
+        let persistedBefore = try Data(contentsOf: store.configURL)
+
+        let poll = Task { try await monitor.pollAll() }
+        await client.waitUntilRequestCount(1)
+        transitionLock.blockNextAcquisition()
+        client.complete(request: 1, with: Data(redStatuspageJSON.utf8))
+        let reachedCommitLock = transitionLock.waitUntilAcquisitionBlocked()
+        poll.cancel()
+        transitionLock.resumeBlockedAcquisition()
+
+        XCTAssertTrue(reachedCommitLock, "poll did not reach the blocked commit lock")
+        do {
+            _ = try await poll.value
+            XCTFail("expected CancellationError")
+        } catch is CancellationError {
+            // A cancelled refresh must not cross the commit boundary.
+        } catch {
+            XCTFail("expected CancellationError, got \(error)")
+        }
+
+        XCTAssertEqual(monitor.pages, before)
+        XCTAssertEqual(try store.load().pages, before)
+        XCTAssertEqual(try Data(contentsOf: store.configURL), persistedBefore)
+    }
+
     func testPollPreservesNotificationToggleMadeWhileRequestIsInFlight() async throws {
         let dir = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -313,5 +349,54 @@ final class MonitorRefreshTransactionTests: XCTestCase {
         let monitor = Monitor(store: store, client: client)
         try monitor.load()
         return monitor
+    }
+}
+
+private final class ControllableTransitionLock: NSLocking, @unchecked Sendable {
+    private let condition = NSCondition()
+    private let wrapped = NSLock()
+    private var shouldBlockNextAcquisition = false
+    private var acquisitionIsBlocked = false
+
+    func blockNextAcquisition() {
+        condition.lock()
+        shouldBlockNextAcquisition = true
+        condition.unlock()
+    }
+
+    func waitUntilAcquisitionBlocked(timeout: TimeInterval = 2) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        condition.lock()
+        defer { condition.unlock() }
+        while !acquisitionIsBlocked {
+            guard condition.wait(until: deadline) else { return false }
+        }
+        return true
+    }
+
+    func resumeBlockedAcquisition() {
+        condition.lock()
+        shouldBlockNextAcquisition = false
+        acquisitionIsBlocked = false
+        condition.broadcast()
+        condition.unlock()
+    }
+
+    func lock() {
+        condition.lock()
+        if shouldBlockNextAcquisition {
+            shouldBlockNextAcquisition = false
+            acquisitionIsBlocked = true
+            condition.broadcast()
+            while acquisitionIsBlocked {
+                condition.wait()
+            }
+        }
+        condition.unlock()
+        wrapped.lock()
+    }
+
+    func unlock() {
+        wrapped.unlock()
     }
 }

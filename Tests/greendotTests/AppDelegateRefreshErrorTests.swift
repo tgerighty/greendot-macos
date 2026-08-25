@@ -96,6 +96,29 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
         XCTAssertEqual(presentedErrors, 1)
     }
 
+    func testCancelledPollDoesNotPresentAnError() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pageURL = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
+        let store = try await seedStore(at: directory, pageURL: pageURL)
+        let client = ControllableHTTPClient()
+        defer { client.failAll() }
+        let monitor = Monitor(store: store, client: client)
+        try monitor.load()
+        let delegate = AppDelegate()
+        var presentedErrors = 0
+        delegate.presentError = { _ in presentedErrors += 1 }
+
+        let poll = Task { await delegate.pollAndRefresh(monitor) }
+        await client.waitUntilRequestCount(1)
+        poll.cancel()
+        client.complete(request: 1, with: Data(redJSON.utf8))
+        await poll.value
+
+        XCTAssertEqual(presentedErrors, 0)
+        XCTAssertEqual(monitor.pages[0].snapshot?.overall, .green)
+    }
+
     private func seedStore(at directory: URL, pageURL: URL) async throws -> PageStore {
         let store = PageStore(directory: directory)
         let seed = Monitor(
