@@ -52,6 +52,16 @@ final class ToastPolicyTests: XCTestCase {
         ))
     }
 
+    func testOnlyGreenToastsAutoDismiss() {
+        XCTAssertEqual(Toast(pageName: "GitHub", body: "Operational", severity: .green).autoDismissSeconds, 6)
+        for severity in [Severity.red, .yellow, .grey] {
+            XCTAssertNil(
+                Toast(pageName: "GitHub", body: "Degraded", severity: severity).autoDismissSeconds,
+                "\(severity.rawValue) toast must wait for a click"
+            )
+        }
+    }
+
     private func snap(_ severity: Severity) -> PageSnapshot {
         PageSnapshot(
             name: "GitHub",

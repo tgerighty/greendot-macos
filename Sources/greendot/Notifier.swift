@@ -12,12 +12,18 @@ final class Notifier {
     }
 
     func post(_ toast: Toast) {
+        let identifier = UUID().uuidString
         let request = UNNotificationRequest(
-            identifier: UUID().uuidString,
+            identifier: identifier,
             content: Self.content(for: toast),
             trigger: nil
         )
-        UNUserNotificationCenter.current().add(request)
+        let center = UNUserNotificationCenter.current()
+        center.add(request)
+        guard let seconds = toast.autoDismissSeconds else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
+            center.removeDeliveredNotifications(withIdentifiers: [identifier])
+        }
     }
 
     static func content(for toast: Toast) -> UNMutableNotificationContent {

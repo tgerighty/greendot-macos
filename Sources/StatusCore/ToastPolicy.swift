@@ -1,3 +1,5 @@
+import Foundation
+
 public struct Toast: Equatable, Sendable {
     public var pageName: String
     public var body: String
@@ -7,6 +9,11 @@ public struct Toast: Equatable, Sendable {
         self.pageName = pageName
         self.body = body
         self.severity = severity
+    }
+
+    /// Seconds before the toast clears itself. `nil` means the user must click it away.
+    public var autoDismissSeconds: TimeInterval? {
+        severity == .green ? 6 : nil
     }
 }
 
