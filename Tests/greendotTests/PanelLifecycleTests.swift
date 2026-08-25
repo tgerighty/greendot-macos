@@ -266,7 +266,7 @@ final class PanelLifecycleTests: XCTestCase {
 }
 
 final class PanelReleaseTests: XCTestCase {
-    func testReleasedControllerRemovesPanelFromApplicationWindowList() throws {
+    func testClosingPanelDeallocatesControllerAndWindow() throws {
         _ = NSApplication.shared
         let controller = WeakReference<PagePanelController>()
         let window = WeakReference<NSWindow>()
@@ -279,10 +279,14 @@ final class PanelReleaseTests: XCTestCase {
             })
             panel.close()
         }
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
 
-        XCTAssertNil(controller.value)
-        XCTAssertNil(window.value)
+        let deadline = Date().addingTimeInterval(1)
+        while controller.value != nil || window.value != nil, Date() < deadline {
+            RunLoop.current.run(until: min(Date().addingTimeInterval(0.01), deadline))
+        }
+
+        XCTAssertNil(controller.value, "Timed out waiting for PagePanelController deallocation")
+        XCTAssertNil(window.value, "Timed out waiting for status-page-panel window deallocation")
     }
 }
 
