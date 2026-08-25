@@ -1,24 +1,5 @@
 import Foundation
 
-private struct WatchedPagePollResult: Sendable {
-    let pageID: UUID
-    let snapshot: PageSnapshot
-    let body: Data?
-}
-
-private struct WatchedPagePollStart {
-    let pages: [WatchedPage]
-    let bodies: [UUID: Data]
-    let inputRevisions: [UUID: UInt64]
-    let identity: UInt64
-}
-
-private struct WatchedPagePollMerge {
-    let config: AppConfig
-    let acceptedIDs: Set<UUID>
-    let toasts: [Toast]
-}
-
 public final class Monitor: @unchecked Sendable {
 
     private let store: PageStore
