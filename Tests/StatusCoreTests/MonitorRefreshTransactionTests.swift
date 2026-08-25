@@ -130,7 +130,7 @@ final class MonitorRefreshTransactionTests: XCTestCase {
         let store = try await seedStore(at: dir, pageURL: url)
         let client = ControllableHTTPClient()
         defer { client.failAll() }
-        let transitionLock = ControllableTransitionLock()
+        let transitionLock = ControllableLock()
         let monitor = Monitor(store: store, client: client, transitionLock: transitionLock)
         try monitor.load()
         let before = monitor.pages
@@ -349,54 +349,5 @@ final class MonitorRefreshTransactionTests: XCTestCase {
         let monitor = Monitor(store: store, client: client)
         try monitor.load()
         return monitor
-    }
-}
-
-private final class ControllableTransitionLock: NSLocking, @unchecked Sendable {
-    private let condition = NSCondition()
-    private let wrapped = NSLock()
-    private var shouldBlockNextAcquisition = false
-    private var acquisitionIsBlocked = false
-
-    func blockNextAcquisition() {
-        condition.lock()
-        shouldBlockNextAcquisition = true
-        condition.unlock()
-    }
-
-    func waitUntilAcquisitionBlocked(timeout: TimeInterval = 2) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        condition.lock()
-        defer { condition.unlock() }
-        while !acquisitionIsBlocked {
-            guard condition.wait(until: deadline) else { return false }
-        }
-        return true
-    }
-
-    func resumeBlockedAcquisition() {
-        condition.lock()
-        shouldBlockNextAcquisition = false
-        acquisitionIsBlocked = false
-        condition.broadcast()
-        condition.unlock()
-    }
-
-    func lock() {
-        condition.lock()
-        if shouldBlockNextAcquisition {
-            shouldBlockNextAcquisition = false
-            acquisitionIsBlocked = true
-            condition.broadcast()
-            while acquisitionIsBlocked {
-                condition.wait()
-            }
-        }
-        condition.unlock()
-        wrapped.lock()
-    }
-
-    func unlock() {
-        wrapped.unlock()
     }
 }
