@@ -85,7 +85,7 @@ final class MenuBuilderTests: XCTestCase {
         XCTAssertEqual(aboutCount, 1)
     }
 
-    func testMenuFromPolledPagesKeepsTitlesActionsAndSeverities() async throws {
+    @MainActor func testMenuFromPolledPagesKeepsTitlesActionsAndSeverities() async throws {
         _ = NSApplication.shared
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
