@@ -25,5 +25,13 @@ final class MonitorFirstRunTests: XCTestCase {
         try originalData.write(to: store.configURL)
         let persisted = try store.load()
         XCTAssertFalse(persisted.didSetLaunchAtLogin)
+
+        monitor.enableLaunchAtLoginOnFirstRun()
+        XCTAssertEqual(callbackCount, 1)
+        XCTAssertTrue(try store.load().didSetLaunchAtLogin)
+
+        monitor.enableLaunchAtLoginOnFirstRun()
+        XCTAssertEqual(callbackCount, 1)
+        XCTAssertTrue(try store.load().didSetLaunchAtLogin)
     }
 }
