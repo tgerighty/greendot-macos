@@ -10,16 +10,21 @@ final class PagePanelController: NSObject, NSWindowDelegate {
     private let window: NSWindow
     private let urlField = NSTextField(string: "")
     private let nameField = NSTextField(string: "")
-    private let onSave: (URL, String?) -> Void
-    private let onRemove: (() -> Void)?
+    private let onSave: (URL, String?) async -> Bool
+    private let onRemove: (() -> Bool)?
+    private var saveButton: NSButton?
+    private var removeButton: NSButton?
+    private var operationInFlight = false
+    private var operationGeneration: UInt64 = 0
+    private var saveTask: Task<Void, Never>?
     private var picker: ComponentPicker?
 
     init(
         page: WatchedPage?,
-        onSave: @escaping (URL, String?) -> Void,
+        onSave: @escaping (URL, String?) async -> Bool,
         onToggleComponent: ((String) -> Bool)? = nil,
         onSetAll: ((Bool) -> Bool)? = nil,
-        onRemove: (() -> Void)? = nil
+        onRemove: (() -> Bool)? = nil
     ) {
         self.onSave = onSave
         self.onRemove = onRemove
@@ -57,19 +62,26 @@ final class PagePanelController: NSObject, NSWindowDelegate {
     }
 
     func close() {
+        invalidatePendingOperations()
         window.delegate = nil
         window.orderOut(nil)
     }
 
     /// Same path as the window close button / Save / Cancel.
     func closeWindow() {
+        invalidatePendingOperations()
         window.close()
+    }
+
+    func windowWillClose(_: Notification) {
+        invalidatePendingOperations()
     }
 
     private func buildView(page: WatchedPage?, listHeight: CGFloat) -> NSView {
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: window.frame.height))
         configureFields(page: page)
         let save = button(page == nil ? "Add" : "Save", id: "save-button", action: #selector(saveTapped))
+        saveButton = save
         save.keyEquivalent = "\r"
         let cancel = button("Cancel", id: "cancel-button", action: #selector(cancelTapped))
         [urlField, nameField, save, cancel].forEach {
@@ -80,6 +92,7 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         if page != nil, let picker {
             constraints.append(contentsOf: picker.install(in: view, below: nameField, listHeight: listHeight))
             let remove = button("Remove Status Page", id: "remove-page-button", action: #selector(removeTapped))
+            removeButton = remove
             remove.bezelStyle = .rounded
             remove.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(remove)
@@ -135,6 +148,7 @@ final class PagePanelController: NSObject, NSWindowDelegate {
     }
 
     @objc private func saveTapped() {
+        guard !operationInFlight else { return }
         let raw = urlField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         var text = raw
         if !text.contains("://") {
@@ -144,8 +158,25 @@ final class PagePanelController: NSObject, NSWindowDelegate {
             NSSound.beep()
             return
         }
-        onSave(url, nameField.stringValue)
-        window.close()
+        operationInFlight = true
+        saveButton?.isEnabled = false
+        removeButton?.isEnabled = false
+        let generation = operationGeneration
+        let name = nameField.stringValue
+        let save = onSave
+        saveTask = Task { [weak self] in
+            let saved = await save(url, name)
+            await MainActor.run { [weak self] in
+                guard let self, self.operationGeneration == generation else { return }
+                self.saveTask = nil
+                self.operationInFlight = false
+                self.saveButton?.isEnabled = true
+                self.removeButton?.isEnabled = true
+                if saved {
+                    self.window.close()
+                }
+            }
+        }
     }
 
     @objc private func cancelTapped() {
@@ -153,7 +184,25 @@ final class PagePanelController: NSObject, NSWindowDelegate {
     }
 
     @objc private func removeTapped() {
-        onRemove?()
-        window.close()
+        guard !operationInFlight else { return }
+        operationInFlight = true
+        saveButton?.isEnabled = false
+        removeButton?.isEnabled = false
+        let removed = onRemove?() ?? false
+        operationInFlight = false
+        saveButton?.isEnabled = true
+        removeButton?.isEnabled = true
+        if removed {
+            window.close()
+        }
+    }
+
+    private func invalidatePendingOperations() {
+        operationGeneration &+= 1
+        saveTask?.cancel()
+        saveTask = nil
+        operationInFlight = false
+        saveButton?.isEnabled = true
+        removeButton?.isEnabled = true
     }
 }

@@ -7,10 +7,10 @@ final class PanelLifecycleTests: XCTestCase {
     func testReplacingEditPanelDoesNotCrash() {
         _ = NSApplication.shared
         let page = Self.nestedPage()
-        var panel: PagePanelController? = PagePanelController(page: page, onSave: { _, _ in })
+        var panel: PagePanelController? = PagePanelController(page: page, onSave: { _, _ in true })
         panel?.show()
         panel?.close()
-        panel = PagePanelController(page: page, onSave: { _, _ in })
+        panel = PagePanelController(page: page, onSave: { _, _ in true })
         panel?.show()
         panel?.close()
         panel = nil
@@ -19,7 +19,7 @@ final class PanelLifecycleTests: XCTestCase {
     func testCloseAfterWindowCloseDoesNotCrash() {
         _ = NSApplication.shared
         let page = Self.nestedPage()
-        let panel = PagePanelController(page: page, onSave: { _, _ in })
+        let panel = PagePanelController(page: page, onSave: { _, _ in true })
         panel.show()
         panel.closeWindow()
         panel.close()
@@ -32,10 +32,10 @@ final class PanelLifecycleTests: XCTestCase {
         var panel: PagePanelController?
         for _ in 1...5 {
             panel?.close()
-            panel = PagePanelController(page: first, onSave: { _, _ in })
+            panel = PagePanelController(page: first, onSave: { _, _ in true })
             panel?.show()
             panel?.close()
-            panel = PagePanelController(page: second, onSave: { _, _ in })
+            panel = PagePanelController(page: second, onSave: { _, _ in true })
             panel?.show()
         }
         panel?.close()
@@ -47,7 +47,7 @@ final class PanelLifecycleTests: XCTestCase {
         let page = Self.nestedPage()
         let panel = PagePanelController(
             page: page,
-            onSave: { _, _ in },
+            onSave: { _, _ in true },
             onToggleComponent: { _ in true },
             onSetAll: { _ in true }
         )
@@ -67,7 +67,7 @@ final class PanelLifecycleTests: XCTestCase {
         let page = Self.nestedPage()
         let panel = PagePanelController(
             page: page,
-            onSave: { _, _ in },
+            onSave: { _, _ in true },
             onToggleComponent: { _ in true },
             onSetAll: { _ in true }
         )
@@ -89,7 +89,7 @@ final class PanelLifecycleTests: XCTestCase {
         let page = Self.nestedPage()
         let panel = PagePanelController(
             page: page,
-            onSave: { _, _ in },
+            onSave: { _, _ in true },
             onToggleComponent: { _ in false },
             onSetAll: { _ in false }
         )
@@ -263,6 +263,31 @@ final class PanelLifecycleTests: XCTestCase {
             )
         )
     }
+}
+
+final class PanelReleaseTests: XCTestCase {
+    func testReleasedControllerRemovesPanelFromApplicationWindowList() throws {
+        _ = NSApplication.shared
+        let controller = WeakReference<PagePanelController>()
+        let window = WeakReference<NSWindow>()
+        try autoreleasepool {
+            let panel = PagePanelController(page: nil, onSave: { _, _ in true })
+            controller.value = panel
+            panel.show()
+            window.value = try XCTUnwrap(NSApp.windows.first {
+                $0.accessibilityIdentifier() == "status-page-panel" && $0.isVisible
+            })
+            panel.close()
+        }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+
+        XCTAssertNil(controller.value)
+        XCTAssertNil(window.value)
+    }
+}
+
+private final class WeakReference<Object: AnyObject> {
+    weak var value: Object?
 }
 
 private func writeTempConfig(_ data: Data) throws -> (URL, URL) {

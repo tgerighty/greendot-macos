@@ -152,6 +152,113 @@ final class MonitorRefreshTransactionTests: XCTestCase {
         XCTAssertEqual(persisted.snapshot?.url, editedURL)
     }
 
+    func testEditRemovedWhileProbeIsInFlightThrowsAndLeavesStoreEmpty() async throws {
+        let dir = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let originalURL = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
+        let editedURL = try XCTUnwrap(URL(string: "https://status.example.com"))
+        let store = try await seedStore(at: dir, pageURL: originalURL)
+        let client = ControllableHTTPClient()
+        defer { client.failAll() }
+        let monitor = try loadedMonitor(store: store, client: client)
+        let pageID = monitor.pages[0].id
+
+        let edit = Task {
+            try await monitor.edit(id: pageID, url: editedURL, name: "Edited Status")
+        }
+        await client.waitUntilRequestCount(1)
+        try monitor.remove(id: pageID)
+        client.complete(request: 1, with: Data(editedRedStatuspageJSON.utf8))
+
+        do {
+            try await edit.value
+            XCTFail("expected the missing-page error")
+        } catch {
+            XCTAssertEqual(error as? MonitorError, .pageNotFound(pageID))
+        }
+        XCTAssertTrue(monitor.pages.isEmpty)
+        XCTAssertTrue(try store.load().pages.isEmpty)
+    }
+
+    func testCancelledEditCompletingLaterLeavesOriginalPageUnchanged() async throws {
+        let dir = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let originalURL = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
+        let editedURL = try XCTUnwrap(URL(string: "https://status.example.com"))
+        let store = try await seedStore(at: dir, pageURL: originalURL)
+        let client = ControllableHTTPClient()
+        defer { client.failAll() }
+        let monitor = try loadedMonitor(store: store, client: client)
+        let pageID = monitor.pages[0].id
+        let before = monitor.pages[0]
+
+        let edit = Task {
+            try await monitor.edit(id: pageID, url: editedURL, name: "Edited Status")
+        }
+        await client.waitUntilRequestCount(1)
+        edit.cancel()
+        client.complete(request: 1, with: Data(editedRedStatuspageJSON.utf8))
+
+        try await assertCancellation(edit)
+        XCTAssertEqual(monitor.pages, [before])
+        XCTAssertEqual(try store.load().pages, [before])
+    }
+
+    func testCancelledAddCompletingLaterLeavesStoreEmpty() async throws {
+        let dir = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let pageURL = try XCTUnwrap(URL(string: "https://status.example.com"))
+        let store = PageStore(directory: dir)
+        let client = ControllableHTTPClient()
+        defer { client.failAll() }
+        let monitor = Monitor(store: store, client: client)
+        try monitor.load()
+
+        let add = Task { try await monitor.add(url: pageURL, name: "Added Status") }
+        await client.waitUntilRequestCount(1)
+        add.cancel()
+        client.complete(request: 1, with: Data(editedRedStatuspageJSON.utf8))
+
+        try await assertCancellation(add)
+        XCTAssertTrue(monitor.pages.isEmpty)
+        XCTAssertTrue(try store.load().pages.isEmpty)
+    }
+
+    func testMissingPageMutationsThrowWithoutWritingConfig() throws {
+        let dir = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        let monitor = Monitor(store: store, client: MapHTTPClient())
+        try monitor.load()
+        let missingPageID = UUID()
+
+        assertPageNotFound(missingPageID) { try monitor.remove(id: missingPageID) }
+        assertPageNotFound(missingPageID) { try monitor.toggleNotifications(id: missingPageID) }
+        assertPageNotFound(missingPageID) {
+            try monitor.toggleComponent(id: missingPageID, name: "API")
+        }
+        assertPageNotFound(missingPageID) {
+            try monitor.setAllComponents(id: missingPageID, enabled: false)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.configURL.path))
+    }
+
+    private func assertPageNotFound(_ pageID: UUID, _ work: () throws -> Void) {
+        XCTAssertThrowsError(try work()) { error in
+            XCTAssertEqual(error as? MonitorError, .pageNotFound(pageID))
+        }
+    }
+
+    private func assertCancellation<Success>(_ task: Task<Success, Error>) async throws {
+        do {
+            _ = try await task.value
+            XCTFail("expected CancellationError")
+        } catch is CancellationError {
+        } catch {
+            XCTFail("expected CancellationError, got \(error)")
+        }
+    }
+
     private func temporaryDirectory() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     }
