@@ -137,7 +137,8 @@ final class SystemToastDeliveryTests: XCTestCase {
     }
 }
 
-private final class RecordingUserNotificationCenter: UserNotificationCenterClient {
+/// Used only by main-actor tests and completes every callback synchronously.
+private final class RecordingUserNotificationCenter: UserNotificationCenterClient, @unchecked Sendable {
     var calls: [String] = []
     var authorizationOptions: UNAuthorizationOptions = []
     var addedRequests: [UNNotificationRequest] = []
@@ -146,7 +147,7 @@ private final class RecordingUserNotificationCenter: UserNotificationCenterClien
 
     func requestAuthorization(
         options: UNAuthorizationOptions,
-        completion: @escaping (Bool, Error?) -> Void
+        completion: @escaping @Sendable (Bool, Error?) -> Void
     ) {
         calls.append("authorization")
         authorizationOptions = options
@@ -158,7 +159,9 @@ private final class RecordingUserNotificationCenter: UserNotificationCenterClien
         addedRequests.append(request)
     }
 
-    func getDeliveredRequests(completion: @escaping ([UNNotificationRequest]) -> Void) {
+    func getDeliveredRequests(
+        completion: @escaping @Sendable ([UNNotificationRequest]) -> Void
+    ) {
         calls.append("delivered")
         completion(deliveredRequests)
     }

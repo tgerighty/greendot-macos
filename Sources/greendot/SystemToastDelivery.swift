@@ -2,22 +2,25 @@ import AppKit
 import StatusCore
 import UserNotifications
 
-protocol UserNotificationCenterClient: AnyObject {
+protocol UserNotificationCenterClient: AnyObject, Sendable {
     func requestAuthorization(
         options: UNAuthorizationOptions,
-        completion: @escaping (Bool, Error?) -> Void
+        completion: @escaping @Sendable (Bool, Error?) -> Void
     )
     func add(_ request: UNNotificationRequest)
-    func getDeliveredRequests(completion: @escaping ([UNNotificationRequest]) -> Void)
+    func getDeliveredRequests(
+        completion: @escaping @Sendable ([UNNotificationRequest]) -> Void
+    )
     func removeDeliveredNotifications(withIdentifiers identifiers: [String])
 }
 
-private final class LiveUserNotificationCenterClient: UserNotificationCenterClient {
-    private lazy var center = UNUserNotificationCenter.current()
+/// UserNotifications accepts calls from its completion queues; this adapter is immutable after init.
+private final class LiveUserNotificationCenterClient: UserNotificationCenterClient, @unchecked Sendable {
+    private let center = UNUserNotificationCenter.current()
 
     func requestAuthorization(
         options: UNAuthorizationOptions,
-        completion: @escaping (Bool, Error?) -> Void
+        completion: @escaping @Sendable (Bool, Error?) -> Void
     ) {
         center.requestAuthorization(options: options, completionHandler: completion)
     }
@@ -26,7 +29,9 @@ private final class LiveUserNotificationCenterClient: UserNotificationCenterClie
         center.add(request)
     }
 
-    func getDeliveredRequests(completion: @escaping ([UNNotificationRequest]) -> Void) {
+    func getDeliveredRequests(
+        completion: @escaping @Sendable ([UNNotificationRequest]) -> Void
+    ) {
         center.getDeliveredNotifications { delivered in
             completion(delivered.map(\.request))
         }
@@ -37,7 +42,10 @@ private final class LiveUserNotificationCenterClient: UserNotificationCenterClie
     }
 }
 
-typealias ToastScheduler = (TimeInterval, @escaping () -> Void) -> Void
+typealias ToastScheduler = @MainActor (
+    TimeInterval,
+    @escaping @MainActor @Sendable () -> Void
+) -> Void
 
 final class SystemToastDelivery: ToastDelivery {
     /// Marks the toasts that clear themselves, so a stale one can be cleared at the next launch.
