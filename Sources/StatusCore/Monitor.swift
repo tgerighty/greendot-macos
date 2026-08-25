@@ -24,16 +24,21 @@ public final class Monitor: @unchecked Sendable {
     private let store: PageStore
     private let client: HTTPClient
     private let stateLock = NSLock()
-    private let transitionLock = NSLock()
+    private let transitionLock: any NSLocking
     private var config: AppConfig
     private var lastBodies: [UUID: Data] = [:]
     private var pageInputRevisions: [UUID: UInt64] = [:]
     private var latestPollIdentity: UInt64 = 0
     public var onLaunchAtLoginEnable: (() -> Void)?
 
-    public init(store: PageStore, client: HTTPClient) {
+    public convenience init(store: PageStore, client: HTTPClient) {
+        self.init(store: store, client: client, transitionLock: NSLock())
+    }
+
+    init(store: PageStore, client: HTTPClient, transitionLock: any NSLocking) {
         self.store = store
         self.client = client
+        self.transitionLock = transitionLock
         self.config = AppConfig()
     }
 
@@ -264,6 +269,7 @@ private extension Monitor {
     ) throws -> [Toast] {
         transitionLock.lock()
         defer { transitionLock.unlock() }
+        try Task.checkCancellation()
 
         let (currentConfig, currentPollIdentity, currentInputRevisions) = withStateLock {
             (config, latestPollIdentity, pageInputRevisions)
