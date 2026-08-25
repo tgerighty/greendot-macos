@@ -129,53 +129,29 @@ public final class Monitor: @unchecked Sendable {
     }
 
     public func pollAll() async throws -> [Toast] {
+        try Task.checkCancellation()
         let pollStart = startPoll()
         let pages = pollStart.pages
         let bodies = pollStart.bodies
         let pollIdentity = pollStart.identity
-        let pollResults: [UUID: WatchedPagePollResult] = await withTaskGroup(of: WatchedPagePollResult.self) { group in
+        let pollResults: [UUID: WatchedPagePollResult] = try await withThrowingTaskGroup(
+            of: WatchedPagePollResult.self
+        ) { group in
             for page in pages {
                 let client = self.client
                 let previousBody = bodies[page.id]
                 group.addTask {
-                    do {
-                        let hit = try await ProviderProbe.probeHit(
-                            pageURL: page.url,
-                            client: client,
-                            prefer: page.snapshot?.provider,
-                            previousBody: previousBody,
-                            previousSnapshot: page.snapshot
-                        )
-                        return WatchedPagePollResult(
-                            pageID: page.id,
-                            snapshot: hit.snapshot,
-                            body: hit.body
-                        )
-                    } catch {
-                        let snapshot = PageSnapshot(
-                            name: page.name,
-                            url: page.url,
-                            provider: page.snapshot?.provider ?? .statuspage,
-                            overall: .grey,
-                            components: page.snapshot?.components ?? [],
-                            incidents: [],
-                            isUnreachable: true
-                        )
-                        return WatchedPagePollResult(
-                            pageID: page.id,
-                            snapshot: snapshot,
-                            body: nil
-                        )
-                    }
+                    try await self.pollResult(for: page, client: client, previousBody: previousBody)
                 }
             }
             var collected: [UUID: WatchedPagePollResult] = [:]
-            for await result in group {
+            for try await result in group {
                 collected[result.pageID] = result
             }
             return collected
         }
 
+        try Task.checkCancellation()
         return try applyPollResults(
             pollResults, for: pollIdentity, expectedPages: pages, expectedInputRevisions: pollStart.inputRevisions
         )
@@ -200,6 +176,45 @@ public final class Monitor: @unchecked Sendable {
 }
 
 private extension Monitor {
+    func pollResult(
+        for page: WatchedPage,
+        client: HTTPClient,
+        previousBody: Data?
+    ) async throws -> WatchedPagePollResult {
+        do {
+            let hit = try await ProviderProbe.probeHit(
+                pageURL: page.url,
+                client: client,
+                prefer: page.snapshot?.provider,
+                previousBody: previousBody,
+                previousSnapshot: page.snapshot
+            )
+            return WatchedPagePollResult(
+                pageID: page.id,
+                snapshot: hit.snapshot,
+                body: hit.body
+            )
+        } catch {
+            if error is CancellationError || Task.isCancelled {
+                throw CancellationError()
+            }
+            let snapshot = PageSnapshot(
+                name: page.name,
+                url: page.url,
+                provider: page.snapshot?.provider ?? .statuspage,
+                overall: .grey,
+                components: page.snapshot?.components ?? [],
+                incidents: [],
+                isUnreachable: true
+            )
+            return WatchedPagePollResult(
+                pageID: page.id,
+                snapshot: snapshot,
+                body: nil
+            )
+        }
+    }
+
     func startPoll() -> WatchedPagePollStart {
         transitionLock.lock()
         defer { transitionLock.unlock() }
