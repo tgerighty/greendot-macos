@@ -174,9 +174,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // over-releases AppKit view arrays (SIGSEGV in NSArray dealloc).
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.editor === editor else { return }
-                withExtendedLifetime(previous) {
-                    editor.show()
-                }
+                editor.show()
+                _ = previous
             }
         }
     }

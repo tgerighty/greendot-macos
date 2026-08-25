@@ -254,6 +254,7 @@ final class MonitorRefreshTransactionTests: XCTestCase {
             _ = try await task.value
             XCTFail("expected CancellationError")
         } catch is CancellationError {
+            // The expected cancellation is the successful assertion path.
         } catch {
             XCTFail("expected CancellationError, got \(error)")
         }

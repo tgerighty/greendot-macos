@@ -7,7 +7,9 @@ public final class ControllableHTTPClient: HTTPClient, @unchecked Sendable {
     private var pending: [Int: CheckedContinuation<(Data, Int), Error>] = [:]
     private var waiters: [(minimum: Int, continuation: CheckedContinuation<Void, Never>)] = []
 
-    public init() {}
+    public init() {
+        // Requests are registered only when get(_:) is called.
+    }
 
     public func get(_: URL) async throws -> (Data, Int) {
         try await withCheckedThrowingContinuation { continuation in
