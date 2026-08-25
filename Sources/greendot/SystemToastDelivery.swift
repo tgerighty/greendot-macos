@@ -14,9 +14,9 @@ protocol UserNotificationCenterClient: AnyObject, Sendable {
     func removeDeliveredNotifications(withIdentifiers identifiers: [String])
 }
 
-/// UserNotifications accepts calls from its completion queues; this adapter is immutable after init.
+/// The center is created from main-actor delivery entry points before callbacks use it.
 private final class LiveUserNotificationCenterClient: UserNotificationCenterClient, @unchecked Sendable {
-    private let center = UNUserNotificationCenter.current()
+    private lazy var center = UNUserNotificationCenter.current()
 
     func requestAuthorization(
         options: UNAuthorizationOptions,
