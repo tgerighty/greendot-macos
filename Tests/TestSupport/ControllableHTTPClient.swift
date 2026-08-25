@@ -37,8 +37,24 @@ public final class ControllableHTTPClient: HTTPClient, @unchecked Sendable {
 
     public func complete(request: Int, with data: Data) {
         lock.lock()
-        let continuation = pending.removeValue(forKey: request)
+        guard let continuation = pending.removeValue(forKey: request) else {
+            lock.unlock()
+            assertionFailure("Unknown HTTP request ordinal: \(request)")
+            return
+        }
         lock.unlock()
-        continuation?.resume(returning: (data, 200))
+        continuation.resume(returning: (data, 200))
+    }
+
+    public func failAll(_ error: Error = URLError(.cancelled)) {
+        lock.lock()
+        let continuations = Array(pending.values)
+        let waiterContinuations = waiters.map { $0.continuation }
+        pending.removeAll()
+        waiters.removeAll()
+        lock.unlock()
+
+        continuations.forEach { $0.resume(throwing: error) }
+        waiterContinuations.forEach { $0.resume() }
     }
 }

@@ -18,11 +18,12 @@ final class MonitorFirstRunTests: XCTestCase {
         monitor.onLaunchAtLoginEnable = { callbackCount += 1 }
 
         monitor.enableLaunchAtLoginOnFirstRun()
+        XCTAssertEqual(callbackCount, 0)
+        XCTAssertThrowsError(try store.load())
 
         try FileManager.default.removeItem(at: store.configURL)
         try originalData.write(to: store.configURL)
         let persisted = try store.load()
-        XCTAssertEqual(callbackCount, 0)
         XCTAssertFalse(persisted.didSetLaunchAtLogin)
     }
 }

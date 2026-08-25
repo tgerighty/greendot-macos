@@ -69,6 +69,7 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
         let store = try await seedStore(at: directory, pageURL: pageURL)
 
         let client = ControllableHTTPClient()
+        defer { client.failAll() }
         let monitor = Monitor(store: store, client: client)
         try monitor.load()
         let delegate = AppDelegate()

@@ -74,6 +74,7 @@ final class MonitorRefreshTransactionTests: XCTestCase {
         let url = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
         let store = try await seedStore(at: dir, pageURL: url)
         let client = ControllableHTTPClient()
+        defer { client.failAll() }
         let monitor = try loadedMonitor(store: store, client: client)
 
         let pollA = Task { try await monitor.pollAll() }
@@ -97,6 +98,7 @@ final class MonitorRefreshTransactionTests: XCTestCase {
         let url = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
         let store = try await seedStore(at: dir, pageURL: url)
         let client = ControllableHTTPClient()
+        defer { client.failAll() }
         let monitor = try loadedMonitor(store: store, client: client)
         let pageID = monitor.pages[0].id
 
@@ -122,6 +124,7 @@ final class MonitorRefreshTransactionTests: XCTestCase {
         let editedURL = try XCTUnwrap(URL(string: "https://status.example.com"))
         let store = try await seedStore(at: dir, pageURL: originalURL)
         let client = ControllableHTTPClient()
+        defer { client.failAll() }
         let monitor = try loadedMonitor(store: store, client: client)
         let pageID = monitor.pages[0].id
 
