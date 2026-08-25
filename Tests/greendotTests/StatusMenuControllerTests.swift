@@ -128,6 +128,7 @@ final class StatusMenuControllerTests: XCTestCase {
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         defer { NSStatusBar.system.removeStatusItem(statusItem) }
         let tracking = MenuClickOpener()
+        var activationCount = 0
         var presentedMenus: [NSMenu] = []
         let didPresent = expectation(description: "deferred menu presentation")
         let controller = StatusMenuController(
@@ -135,7 +136,7 @@ final class StatusMenuControllerTests: XCTestCase {
             handlers: Self.handlers(),
             statusItem: statusItem,
             clickOpener: tracking,
-            activateApplication: {},
+            activateApplication: { activationCount += 1 },
             presentMenu: { menu in
                 presentedMenus.append(menu)
                 didPresent.fulfill()
@@ -145,6 +146,7 @@ final class StatusMenuControllerTests: XCTestCase {
 
         tracking.menuWillOpen(trackedMenu)
         controller.popMenuOnScreen()
+        XCTAssertEqual(activationCount, 1)
 
         tracking.menuDidClose(trackedMenu)
 
