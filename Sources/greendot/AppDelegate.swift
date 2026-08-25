@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pulseTimer: Timer?
     private var panel: PagePanelController?
     private var notifier: Notifier?
+    private var pollRefreshState = (presentedError: false, latestInvocation: UInt64(0))
     var presentError: (Error) -> Void = { error in
         _ = NSAlert(error: error).runModal()
     }
@@ -115,22 +116,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             skipSeed: skipSeed
         ), let url = URL(string: "https://status.openai.com") else { return }
         try? await monitor.add(url: url, name: "OpenAI")
-    }
-
-    private func pollAndRefresh() async {
-        guard let monitor else { return }
-        do {
-            let toasts = try await monitor.pollAll()
-            await MainActor.run {
-                toasts.forEach { self.notifier?.post($0) }
-                self.rebuild()
-            }
-        } catch {
-            await MainActor.run {
-                self.presentError(error)
-                self.rebuild()
-            }
-        }
     }
 
     private func rebuild() {
@@ -268,5 +253,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let root = URL(fileURLWithPath: configDir, isDirectory: true)
         guard PathSafety.contained(file, under: root) != nil else { return }
         try? body.write(to: file, atomically: true, encoding: .utf8)
+    }
+}
+
+extension AppDelegate {
+    private func pollAndRefresh() async {
+        guard let monitor else { return }
+        await pollAndRefresh(monitor)
+    }
+
+    func pollAndRefresh(_ monitor: Monitor) async {
+        let invocation = await MainActor.run {
+            pollRefreshState.latestInvocation &+= 1
+            return pollRefreshState.latestInvocation
+        }
+        let outcome: (toasts: [Toast], error: Error?)
+        do {
+            outcome = (try await monitor.pollAll(), nil)
+        } catch {
+            outcome = ([], error)
+        }
+        await MainActor.run {
+            guard invocation == self.pollRefreshState.latestInvocation else { return }
+            if let error = outcome.error {
+                if !self.pollRefreshState.presentedError {
+                    self.pollRefreshState.presentedError = true
+                    self.presentError(error)
+                }
+            } else {
+                self.pollRefreshState.presentedError = false
+                outcome.toasts.forEach { self.notifier?.post($0) }
+            }
+            self.rebuild()
+        }
     }
 }

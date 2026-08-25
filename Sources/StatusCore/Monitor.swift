@@ -9,6 +9,7 @@ private struct WatchedPagePollResult: Sendable {
 private struct WatchedPagePollStart {
     let pages: [WatchedPage]
     let bodies: [UUID: Data]
+    let inputRevisions: [UUID: UInt64]
     let identity: UInt64
 }
 
@@ -26,6 +27,7 @@ public final class Monitor: @unchecked Sendable {
     private let transitionLock = NSLock()
     private var config: AppConfig
     private var lastBodies: [UUID: Data] = [:]
+    private var pageInputRevisions: [UUID: UInt64] = [:]
     private var latestPollIdentity: UInt64 = 0
     public var onLaunchAtLoginEnable: (() -> Void)?
 
@@ -47,6 +49,7 @@ public final class Monitor: @unchecked Sendable {
         withStateLock {
             config = loaded
             lastBodies.removeAll()
+            pageInputRevisions = Dictionary(uniqueKeysWithValues: loaded.pages.map { ($0.id, 0) })
             latestPollIdentity &+= 1
         }
     }
@@ -173,7 +176,9 @@ public final class Monitor: @unchecked Sendable {
             return collected
         }
 
-        return try applyPollResults(pollResults, for: pollIdentity, expectedPages: pages)
+        return try applyPollResults(
+            pollResults, for: pollIdentity, expectedPages: pages, expectedInputRevisions: pollStart.inputRevisions
+        )
     }
 
     public func barSeverity() -> Severity {
@@ -204,6 +209,7 @@ private extension Monitor {
             return WatchedPagePollStart(
                 pages: config.pages,
                 bodies: lastBodies,
+                inputRevisions: pageInputRevisions,
                 identity: latestPollIdentity
             )
         }
@@ -219,10 +225,18 @@ private extension Monitor {
         var next = withStateLock { config }
         try body(&next)
         try store.save(next)
+        let nextPageIDs = Set(next.pages.map(\.id))
         withStateLock {
             config = next
+            pageInputRevisions = pageInputRevisions.filter { nextPageIDs.contains($0.key) }
+            for pageID in nextPageIDs where pageInputRevisions[pageID] == nil {
+                pageInputRevisions[pageID] = 0
+            }
             if let pageID {
                 lastBodies[pageID] = nil
+                if nextPageIDs.contains(pageID) {
+                    pageInputRevisions[pageID, default: 0] &+= 1
+                }
             }
         }
     }
@@ -230,20 +244,23 @@ private extension Monitor {
     func applyPollResults(
         _ pollResults: [UUID: WatchedPagePollResult],
         for pollIdentity: UInt64,
-        expectedPages: [WatchedPage]
+        expectedPages: [WatchedPage],
+        expectedInputRevisions: [UUID: UInt64]
     ) throws -> [Toast] {
         transitionLock.lock()
         defer { transitionLock.unlock() }
 
-        let (currentConfig, currentPollIdentity) = withStateLock {
-            (config, latestPollIdentity)
+        let (currentConfig, currentPollIdentity, currentInputRevisions) = withStateLock {
+            (config, latestPollIdentity, pageInputRevisions)
         }
         guard pollIdentity == currentPollIdentity else { return [] }
 
         guard let merge = mergePollResults(
             currentConfig: currentConfig,
             pollResults: pollResults,
-            expectedPages: expectedPages
+            expectedPages: expectedPages,
+            expectedInputRevisions: expectedInputRevisions,
+            currentInputRevisions: currentInputRevisions
         ) else { return [] }
         if merge.config != currentConfig {
             try store.save(merge.config)
@@ -262,7 +279,9 @@ private extension Monitor {
     func mergePollResults(
         currentConfig: AppConfig,
         pollResults: [UUID: WatchedPagePollResult],
-        expectedPages: [WatchedPage]
+        expectedPages: [WatchedPage],
+        expectedInputRevisions: [UUID: UInt64],
+        currentInputRevisions: [UUID: UInt64]
     ) -> WatchedPagePollMerge? {
         guard let expectedByID = expectedPagesByID(expectedPages) else { return nil }
         var next = currentConfig
@@ -270,8 +289,9 @@ private extension Monitor {
         var toasts: [Toast] = []
         for index in next.pages.indices {
             let id = next.pages[index].id
-            guard let expectedPage = expectedByID[id],
-                  next.pages[index] == expectedPage,
+            guard expectedByID[id] != nil,
+                  let expectedInputRevision = expectedInputRevisions[id],
+                  currentInputRevisions[id] == expectedInputRevision,
                   let result = pollResults[id] else { continue }
             acceptedIDs.insert(id)
             let page = next.pages[index]

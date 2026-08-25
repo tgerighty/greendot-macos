@@ -90,6 +90,30 @@ final class MonitorRefreshTransactionTests: XCTestCase {
         XCTAssertEqual(persisted.pages[0].snapshot?.overall, .red)
     }
 
+    func testPollPreservesNotificationToggleMadeWhileRequestIsInFlight() async throws {
+        let dir = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
+        let store = try await seedStore(at: dir, pageURL: url)
+        let client = ContinuationHTTPClient()
+        let monitor = try loadedMonitor(store: store, client: client)
+        let pageID = monitor.pages[0].id
+
+        let poll = Task { try await monitor.pollAll() }
+        await client.waitUntilRequestCount(1)
+        try monitor.toggleNotifications(id: pageID)
+        XCTAssertFalse(monitor.pages[0].notificationsEnabled)
+
+        client.complete(request: 1, with: Data(redStatuspageJSON.utf8))
+        _ = try await poll.value
+
+        XCTAssertFalse(monitor.pages[0].notificationsEnabled)
+        XCTAssertEqual(monitor.pages[0].snapshot?.overall, .red)
+        let persisted = try store.load().pages[0]
+        XCTAssertFalse(persisted.notificationsEnabled)
+        XCTAssertEqual(persisted.snapshot?.overall, .red)
+    }
+
     func testCompletedEditSurvivesOlderInFlightPoll() async throws {
         let dir = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
