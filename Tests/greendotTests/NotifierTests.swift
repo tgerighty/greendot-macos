@@ -25,6 +25,20 @@ final class NotifierTests: XCTestCase {
         }
     }
 
+    func testOnlyAutoDismissToastsCarryTheClearOnLaunchCategory() {
+        _ = NSApplication.shared
+        let green = Notifier.content(for: Toast(pageName: "GitHub", body: "Operational", severity: .green))
+        XCTAssertEqual(green.categoryIdentifier, Notifier.autoDismissCategory)
+        for severity in [Severity.red, .yellow, .grey] {
+            let content = Notifier.content(for: Toast(pageName: "GitHub", body: "Degraded", severity: severity))
+            XCTAssertEqual(
+                content.categoryIdentifier,
+                "",
+                "\(severity.rawValue) toast must not be cleared on launch"
+            )
+        }
+    }
+
     private static func attachmentPNG(_ content: UNMutableNotificationContent) -> Data? {
         guard let url = content.attachments.first?.url else { return nil }
         let accessed = url.startAccessingSecurityScopedResource()

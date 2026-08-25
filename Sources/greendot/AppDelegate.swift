@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let notifier = Notifier()
         notifier.requestPermissionIfNeeded()
+        notifier.clearStaleAutoDismissToasts()
         self.notifier = notifier
 
         if loadSucceeded, ProcessInfo.processInfo.environment["GREENDOT_SKIP_LOGIN_ITEM"] == nil {

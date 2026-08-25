@@ -5,6 +5,7 @@
 ### Changed
 
 - Red, yellow, and grey status-change notifications stay on screen until you click them away. Green notifications clear themselves after 6 seconds.
+- A green notification that a quit cut short is cleared the next time greendot starts.
 - Status-change notifications include a status-dot image in the issue colour (red, yellow, green, or grey).
 - A first probe of a `*.statuspal.io` host does not GET the HTML page (the host already names the subdomain). First-probe GETs: 4 before, 3 after (second after run 3).
 - The status menu is reused when the watched pages do not change. 80 identical builds: 80 unique menus before, 1 after (second after run 1).
