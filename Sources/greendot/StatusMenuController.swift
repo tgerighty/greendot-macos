@@ -7,6 +7,7 @@ final class StatusMenuController: NSObject {
     private let builder: MenuBuilder
     private let activateApplication: () -> Void
     private let presentMenu: (NSMenu) -> Void
+    private let scheduleOnMain: (@escaping () -> Void) -> Void
     private var state: StatusMenuState
     private var needsReload = false
     private var needsPop = false
@@ -18,7 +19,10 @@ final class StatusMenuController: NSObject {
         statusItem: NSStatusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength),
         clickOpener: MenuClickOpener = MenuClickOpener(),
         activateApplication: @escaping () -> Void = { NSApp.activate(ignoringOtherApps: true) },
-        presentMenu: @escaping (NSMenu) -> Void = StatusMenuController.presentAtScreenCenter
+        presentMenu: @escaping (NSMenu) -> Void = StatusMenuController.presentAtScreenCenter,
+        scheduleOnMain: @escaping (@escaping () -> Void) -> Void = { work in
+            DispatchQueue.main.async(execute: work)
+        }
     ) {
         self.state = state
         self.statusItem = statusItem
@@ -26,10 +30,11 @@ final class StatusMenuController: NSObject {
         builder = MenuBuilder(handlers: handlers)
         self.activateApplication = activateApplication
         self.presentMenu = presentMenu
+        self.scheduleOnMain = scheduleOnMain
         super.init()
         configureStatusItem()
         clickOpener.onTrackingEnded = { [weak self] in
-            self?.flushDeferredMenuWork()
+            self?.scheduleDeferredMenuWork()
         }
         updateSeverity(state.severity)
         applyMenu()
@@ -56,6 +61,8 @@ final class StatusMenuController: NSObject {
             needsPop = true
             return
         }
+        needsPop = false
+        needsReload = false
         presentPopMenu()
     }
 
@@ -103,6 +110,12 @@ final class StatusMenuController: NSObject {
         if needsReload {
             needsReload = false
             applyMenu()
+        }
+    }
+
+    private func scheduleDeferredMenuWork() {
+        scheduleOnMain { [weak self] in
+            self?.flushDeferredMenuWork()
         }
     }
 

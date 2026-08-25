@@ -6,7 +6,9 @@ import XCTest
 final class MenuBuilderTests: XCTestCase {
     func testRepeatedBuildReusesMenuWhenPagesUnchanged() {
         let page = Self.nestedPage()
-        let builder = MenuBuilder(handlers: Self.handlers(onOpen: { _ in }))
+        let builder = MenuBuilder(handlers: Self.handlers(onOpen: { _ in
+            XCTFail("Building a menu must not invoke its open handler")
+        }))
         let first = builder.build(for: Self.state(page: page))
         let second = builder.build(for: Self.state(page: page))
         XCTAssertTrue(first === second)
