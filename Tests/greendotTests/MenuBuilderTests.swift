@@ -3,20 +3,19 @@ import StatusCore
 import XCTest
 @testable import greendot
 
+@MainActor
 final class MenuBuilderTests: XCTestCase {
-    override func setUp() {
-        super.setUp()
-        MenuBuilder.resetCache()
-    }
-
     func testRepeatedBuildReusesMenuWhenPagesUnchanged() {
         let page = Self.nestedPage()
-        let first = Self.menu(page: page, onOpen: { _ in })
-        let second = Self.menu(page: page, onOpen: { _ in })
+        let builder = MenuBuilder(handlers: Self.handlers(onOpen: { _ in
+            XCTFail("Building a menu must not invoke its open handler")
+        }))
+        let first = builder.build(for: Self.state(page: page))
+        let second = builder.build(for: Self.state(page: page))
         XCTAssertTrue(first === second)
         var page2 = page
         page2.name = "Other"
-        let third = Self.menu(page: page2, onOpen: { _ in })
+        let third = builder.build(for: Self.state(page: page2))
         XCTAssertFalse(first === third)
         XCTAssertEqual(first.item(at: 0)?.title, "Box")
         XCTAssertEqual(third.item(at: 0)?.title, "Other")
@@ -70,10 +69,8 @@ final class MenuBuilderTests: XCTestCase {
 
     func testAboutInvokesCallback() {
         var aboutCount = 0
-        let menu = MenuBuilder.build(
-            pages: [],
-            launchAtLoginEnabled: false,
-            actions: MenuActions(
+        let menu = MenuBuilder(
+            handlers: StatusMenuHandlers(
                 onAdd: {},
                 onEdit: { _ in },
                 onRemove: { _ in },
@@ -84,12 +81,12 @@ final class MenuBuilderTests: XCTestCase {
                 onAbout: { aboutCount += 1 },
                 onQuit: {}
             )
-        )
+        ).build(for: Self.state(pages: []))
         Self.invoke(menu.item(withTitle: "About greendot"))
         XCTAssertEqual(aboutCount, 1)
     }
 
-    func testMenuFromPolledPagesKeepsTitlesActionsAndSeverities() async throws {
+    @MainActor func testMenuFromPolledPagesKeepsTitlesActionsAndSeverities() async throws {
         _ = NSApplication.shared
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -105,10 +102,8 @@ final class MenuBuilderTests: XCTestCase {
         XCTAssertEqual(toasts.first?.body, "Degraded")
 
         var opened: [URL] = []
-        let menu = MenuBuilder.build(
-            pages: monitor.pages,
-            launchAtLoginEnabled: false,
-            actions: MenuActions(
+        let menu = MenuBuilder(
+            handlers: StatusMenuHandlers(
                 onAdd: {},
                 onEdit: { _ in },
                 onRemove: { _ in },
@@ -119,7 +114,7 @@ final class MenuBuilderTests: XCTestCase {
                 onAbout: {},
                 onQuit: {}
             )
-        )
+        ).build(for: Self.state(pages: monitor.pages))
         XCTAssertEqual(menu.item(at: 0)?.title, "GitHub")
         XCTAssertEqual(menu.item(at: 1)?.title, "Instatus")
         XCTAssertEqual(menu.item(at: 2)?.title, "Acme")
@@ -134,14 +129,13 @@ final class MenuBuilderTests: XCTestCase {
     }
 
     func testPerformPathOpensNestedEditAndLeaf() {
-        var edited: [String] = []
+        var edited: [UUID] = []
         var opened: [URL] = []
-        let menu = MenuBuilder.build(
-            pages: [Self.nestedPage()],
-            launchAtLoginEnabled: false,
-            actions: MenuActions(
+        let page = Self.nestedPage()
+        let menu = MenuBuilder(
+            handlers: StatusMenuHandlers(
                 onAdd: {},
-                onEdit: { edited.append($0.name) },
+                onEdit: { edited.append($0) },
                 onRemove: { _ in },
                 onToggleNotifications: { _ in },
                 onOpen: { opened.append($0) },
@@ -150,9 +144,9 @@ final class MenuBuilderTests: XCTestCase {
                 onAbout: {},
                 onQuit: {}
             )
-        )
+        ).build(for: Self.state(page: page))
         XCTAssertTrue(MenuCommands.perform(path: "Box/Edit…", in: menu))
-        XCTAssertEqual(edited, ["Box"])
+        XCTAssertEqual(edited, [page.id])
         XCTAssertTrue(MenuCommands.perform(path: "API    Operational", in: menu) == false)
         XCTAssertTrue(MenuCommands.perform(path: "Content API    Operational", in: menu))
         XCTAssertEqual(opened, [Self.pageURL])
@@ -164,20 +158,28 @@ final class MenuBuilderTests: XCTestCase {
     private static let pageURL = URL(string: "https://status.box.com")!
 
     private static func menu(page: WatchedPage, onOpen: @escaping (URL) -> Void) -> NSMenu {
-        MenuBuilder.build(
-            pages: [page],
-            launchAtLoginEnabled: false,
-            actions: MenuActions(
-                onAdd: {},
-                onEdit: { _ in },
-                onRemove: { _ in },
-                onToggleNotifications: { _ in },
-                onOpen: onOpen,
-                onRefresh: {},
-                onToggleLaunchAtLogin: {},
-                onAbout: {},
-                onQuit: {}
-            )
+        MenuBuilder(handlers: handlers(onOpen: onOpen)).build(for: state(page: page))
+    }
+
+    private static func state(pages: [WatchedPage]) -> StatusMenuState {
+        StatusMenuState(pages: pages, severity: .green, launchAtLoginEnabled: false)
+    }
+
+    private static func state(page: WatchedPage) -> StatusMenuState {
+        state(pages: [page])
+    }
+
+    private static func handlers(onOpen: @escaping (URL) -> Void) -> StatusMenuHandlers {
+        StatusMenuHandlers(
+            onAdd: {},
+            onEdit: { _ in },
+            onRemove: { _ in },
+            onToggleNotifications: { _ in },
+            onOpen: onOpen,
+            onRefresh: {},
+            onToggleLaunchAtLogin: {},
+            onAbout: {},
+            onQuit: {}
         )
     }
 

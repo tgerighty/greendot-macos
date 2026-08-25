@@ -5,6 +5,7 @@ import XCTest
 
 /// Repeatable in-memory timings for the shipped parse, poll, menu, and icon paths.
 /// Prints `BENCH name=ms` lines. Does not gate on absolute microseconds.
+@MainActor
 final class PerformanceHarnessTests: XCTestCase {
     private static let delayNs: UInt64 = 80_000_000
     private static let delayMs = 80.0
@@ -31,7 +32,8 @@ final class PerformanceHarnessTests: XCTestCase {
             "BENCH pollAll_3page_delay_expected_sequential_ms=\(fmt(3 * Self.delayMs))",
             "BENCH pollAll_3page_get_count=\(poll.getCount)",
             "BENCH pollAll_mixed_get_count=\(poll.mixedGetCount)",
-            "BENCH menu_build_ms=\(fmt(menu.elapsedMs))",
+            "BENCH menu_build_ms=\(fmt(menu.uncachedBuildMs))",
+            "BENCH menu_build_cached_ms=\(fmt(menu.cachedBuildMs))",
             "BENCH status_dot_ms=\(fmt(icon.elapsedMs))",
             "BENCH status_dot_unique_images=\(icon.uniqueCount)",
             "BENCH store_save_ms=\(fmt(save))",
@@ -47,7 +49,9 @@ final class PerformanceHarnessTests: XCTestCase {
         }
         XCTAssertGreaterThan(parse.statuspage, 0)
         XCTAssertGreaterThan(poll.elapsedMs, 0)
-        XCTAssertGreaterThan(menu.elapsedMs, 0)
+        XCTAssertGreaterThan(menu.uncachedBuildMs, 0)
+        XCTAssertGreaterThan(menu.cachedBuildMs, 0)
+        XCTAssertEqual(menu.uniqueCount, 1, "Repeated cached builds must reuse one menu")
         XCTAssertGreaterThan(icon.elapsedMs, 0)
         XCTAssertGreaterThan(poll.getCount, 0)
         XCTAssertGreaterThan(remaining.statuspalGets, 0)
@@ -147,20 +151,32 @@ final class PerformanceHarnessTests: XCTestCase {
         return (elapsed.milliseconds, toasts, monitor.pages.map(\.snapshot))
     }
 
-    private func measureMenu() -> (elapsedMs: Double, uniqueCount: Int) {
+    private struct MenuMetrics {
+        var uncachedBuildMs: Double
+        var cachedBuildMs: Double
+        var uniqueCount: Int
+    }
+
+    private func measureMenu() -> MenuMetrics {
         let pages = (0..<6).map { index in
             Self.nestedPage(name: "Page \(index)", host: "status\(index).example")
         }
-        var menus: [NSMenu] = []
-        menus.reserveCapacity(80)
-        let ms = elapsedMs(iterations: 80) {
-            menus.append(MenuBuilder.build(
-                pages: pages,
-                launchAtLoginEnabled: false,
-                actions: Self.noopActions
-            ))
+        let state = StatusMenuState(pages: pages, severity: .green, launchAtLoginEnabled: false)
+        let uncachedBuildMs = elapsedMs(iterations: 80) {
+            let builder = MenuBuilder(handlers: Self.noopHandlers)
+            _ = builder.build(for: state)
         }
-        return (ms, Set(menus.map(ObjectIdentifier.init)).count)
+        let cachedBuilder = MenuBuilder(handlers: Self.noopHandlers)
+        var cachedMenus: [NSMenu] = []
+        cachedMenus.reserveCapacity(80)
+        let cachedBuildMs = elapsedMs(iterations: 80) {
+            cachedMenus.append(cachedBuilder.build(for: state))
+        }
+        return MenuMetrics(
+            uncachedBuildMs: uncachedBuildMs,
+            cachedBuildMs: cachedBuildMs,
+            uniqueCount: Set(cachedMenus.map(ObjectIdentifier.init)).count
+        )
     }
 
     private struct RemainingMetrics {
@@ -360,7 +376,7 @@ final class PerformanceHarnessTests: XCTestCase {
         )
     }
 
-    private static let noopActions = MenuActions(
+    private static let noopHandlers = StatusMenuHandlers(
         onAdd: {},
         onEdit: { _ in },
         onRemove: { _ in },
