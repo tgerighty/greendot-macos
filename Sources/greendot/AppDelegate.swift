@@ -7,10 +7,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pollTimer: Timer?
     private var pulseTimer: Timer?
     private var editor: StatusPageEditor?
-    private var notifier: Notifier?
+    private let toastDelivery: any ToastDelivery
     private var pollRefreshState = (presentedError: false, latestInvocation: UInt64(0))
     var presentError: (Error) -> Void = { error in
         _ = NSAlert(error: error).runModal()
+    }
+
+    init(toastDelivery: any ToastDelivery = SystemToastDelivery()) {
+        self.toastDelivery = toastDelivery
+        super.init()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -28,10 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let loadSucceeded = loadMonitor(monitor)
         self.monitor = monitor
 
-        let notifier = Notifier()
-        notifier.requestPermissionIfNeeded()
-        notifier.clearStaleAutoDismissToasts()
-        self.notifier = notifier
+        toastDelivery.start()
 
         if loadSucceeded, ProcessInfo.processInfo.environment["GREENDOT_SKIP_LOGIN_ITEM"] == nil {
             monitor.enableLaunchAtLoginOnFirstRun()
@@ -257,7 +259,7 @@ extension AppDelegate {
                 }
             } else {
                 self.pollRefreshState.presentedError = false
-                outcome.toasts.forEach { self.notifier?.post($0) }
+                outcome.toasts.forEach { self.toastDelivery.deliver($0) }
             }
             self.rebuild()
         }
