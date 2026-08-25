@@ -2,7 +2,7 @@ import AppKit
 import StatusCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var menuBar: MenuBarController?
+    private var statusMenu: StatusMenuController?
     private var monitor: Monitor?
     private var pollTimer: Timer?
     private var pulseTimer: Timer?
@@ -37,12 +37,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             monitor.enableLaunchAtLoginOnFirstRun()
         }
 
-        let menuBar = MenuBarController()
-        menuBar.menuProvider = { [weak self] in
-            self?.buildMenu() ?? NSMenu()
-        }
-        self.menuBar = menuBar
-        rebuild()
+        statusMenu = StatusMenuController(
+            state: makeStatusMenuState(monitor),
+            handlers: makeStatusMenuHandlers()
+        )
         installUITestHooks()
 
         Task {
@@ -64,7 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let monitor = self.monitor else { return }
             let hasUnreachable = monitor.pages.contains { $0.snapshot?.isUnreachable == true }
             guard Self.shouldRefreshIconOnPulse(hasUnreachable: hasUnreachable) else { return }
-            self.refreshIcon()
+            self.rebuild()
         }
     }
 
@@ -119,43 +117,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func rebuild() {
-        refreshIcon()
-        menuBar?.reloadMenu()
-    }
-
-    private func refreshIcon() {
         guard let monitor else { return }
-        let displayed = monitor.displayedSeverity(at: Date())
-        menuBar?.setSeverity(displayed)
+        statusMenu?.update(makeStatusMenuState(monitor))
     }
 
-    private func buildMenu() -> NSMenu {
-        guard let monitor else { return NSMenu() }
-        return MenuBuilder.build(
+    private func makeStatusMenuState(_ monitor: Monitor) -> StatusMenuState {
+        StatusMenuState(
             pages: monitor.pages,
-            launchAtLoginEnabled: LaunchAtLogin.isEnabled,
-            actions: MenuActions(
-                onAdd: { [weak self] in self?.openEditor(editingPageID: nil) },
-                onEdit: { [weak self] page in self?.openEditor(editingPageID: page.id) },
-                onRemove: { [weak self] id in
-                    self?.performStoreChange { try self?.monitor?.remove(id: id) }
-                },
-                onToggleNotifications: { [weak self] id in
-                    self?.performStoreChange { try self?.monitor?.toggleNotifications(id: id) }
-                },
-                onOpen: { url in
-                    URLOpener.open(url)
-                },
-                onRefresh: { [weak self] in
-                    Task { await self?.pollAndRefresh() }
-                },
-                onToggleLaunchAtLogin: { [weak self] in
-                    LaunchAtLogin.toggle()
-                    self?.rebuild()
-                },
-                onAbout: { AppDelegate.showAbout() },
-                onQuit: { NSApp.terminate(nil) }
-            )
+            severity: monitor.displayedSeverity(at: Date()),
+            launchAtLoginEnabled: LaunchAtLogin.isEnabled
+        )
+    }
+
+    private func makeStatusMenuHandlers() -> StatusMenuHandlers {
+        StatusMenuHandlers(
+            onAdd: { [weak self] in self?.openEditor(editingPageID: nil) },
+            onEdit: { [weak self] id in self?.openEditor(editingPageID: id) },
+            onRemove: { [weak self] id in
+                self?.performStoreChange { try self?.monitor?.remove(id: id) }
+            },
+            onToggleNotifications: { [weak self] id in
+                self?.performStoreChange { try self?.monitor?.toggleNotifications(id: id) }
+            },
+            onOpen: { url in
+                URLOpener.open(url)
+            },
+            onRefresh: { [weak self] in
+                Task { await self?.pollAndRefresh() }
+            },
+            onToggleLaunchAtLogin: { [weak self] in
+                LaunchAtLogin.toggle()
+                self?.rebuild()
+            },
+            onAbout: { AppDelegate.showAbout() },
+            onQuit: { NSApp.terminate(nil) }
         )
     }
 
@@ -191,13 +186,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let configDir = ProcessInfo.processInfo.environment["GREENDOT_CONFIG_DIR"],
               !configDir.isEmpty else { return }
         observe("showMenu") { [weak self] _ in
-            self?.menuBar?.popMenuOnScreen()
+            self?.statusMenu?.popMenuOnScreen()
         }
         observe("clickMenu") { [weak self] path in
-            self?.menuBar?.performMenuPath(path)
+            self?.statusMenu?.performMenuPath(path)
         }
         observe("dumpMenu") { [weak self] _ in
-            Self.writeDump("GREENDOT_MENU_DUMP", body: self?.menuBar?.dumpMenu() ?? "")
+            Self.writeDump("GREENDOT_MENU_DUMP", body: self?.statusMenu?.dumpMenu() ?? "")
         }
         observe("clickIdentifier") { identifier in
             UITestDriver.clickIdentifier(identifier)

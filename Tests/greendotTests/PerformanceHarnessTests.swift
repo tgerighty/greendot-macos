@@ -153,12 +153,10 @@ final class PerformanceHarnessTests: XCTestCase {
         }
         var menus: [NSMenu] = []
         menus.reserveCapacity(80)
+        let state = StatusMenuState(pages: pages, severity: .green, launchAtLoginEnabled: false)
+        let builder = MenuBuilder(handlers: Self.noopHandlers)
         let ms = elapsedMs(iterations: 80) {
-            menus.append(MenuBuilder.build(
-                pages: pages,
-                launchAtLoginEnabled: false,
-                actions: Self.noopActions
-            ))
+            menus.append(builder.build(for: state))
         }
         return (ms, Set(menus.map(ObjectIdentifier.init)).count)
     }
@@ -360,7 +358,7 @@ final class PerformanceHarnessTests: XCTestCase {
         )
     }
 
-    private static let noopActions = MenuActions(
+    private static let noopHandlers = StatusMenuHandlers(
         onAdd: {},
         onEdit: { _ in },
         onRemove: { _ in },
