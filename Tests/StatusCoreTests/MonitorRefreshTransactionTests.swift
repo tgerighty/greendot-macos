@@ -91,6 +91,38 @@ final class MonitorRefreshTransactionTests: XCTestCase {
         XCTAssertEqual(persisted.pages[0].snapshot?.overall, .red)
     }
 
+    func testCancelledPollCompletingLaterLeavesWatchedPageAndStoreUnchanged() async throws {
+        let dir = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
+        let store = try await seedStore(at: dir, pageURL: url)
+        let client = ControllableHTTPClient()
+        defer { client.failAll() }
+        let monitor = try loadedMonitor(store: store, client: client)
+        let before = monitor.pages
+        let persistedBefore = try Data(contentsOf: store.configURL)
+
+        let poll = Task { try await monitor.pollAll() }
+        await client.waitUntilRequestCount(1)
+        poll.cancel()
+        client.complete(request: 1, with: Data(redStatuspageJSON.utf8))
+
+        var returnedToasts: [Toast]?
+        do {
+            returnedToasts = try await poll.value
+            XCTFail("expected CancellationError")
+        } catch is CancellationError {
+            // Cancellation is the expected result, including after late HTTP completion.
+        } catch {
+            XCTFail("expected CancellationError, got \(error)")
+        }
+
+        XCTAssertNil(returnedToasts)
+        XCTAssertEqual(monitor.pages, before)
+        XCTAssertEqual(try store.load().pages, before)
+        XCTAssertEqual(try Data(contentsOf: store.configURL), persistedBefore)
+    }
+
     func testPollPreservesNotificationToggleMadeWhileRequestIsInFlight() async throws {
         let dir = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
