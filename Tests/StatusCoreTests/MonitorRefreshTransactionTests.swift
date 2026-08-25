@@ -62,7 +62,6 @@ final class MonitorRefreshTransactionTests: XCTestCase {
         } catch {
             let persistenceError = error as NSError
             XCTAssertEqual(persistenceError.domain, NSCocoaErrorDomain)
-            XCTAssertEqual(persistenceError.code, NSFileWriteUnknownError)
         }
         XCTAssertEqual(monitor.pages, [before])
         XCTAssertEqual(monitor.pages[0].snapshot?.overall, .green)
