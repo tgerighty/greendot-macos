@@ -257,6 +257,8 @@ extension AppDelegate {
         let outcome: (toasts: [Toast], error: Error?)
         do {
             outcome = (try await monitor.pollAll(), nil)
+        } catch is CancellationError {
+            return
         } catch {
             outcome = ([], error)
         }
