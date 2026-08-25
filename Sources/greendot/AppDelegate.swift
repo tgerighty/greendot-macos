@@ -119,10 +119,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func pollAndRefresh() async {
         guard let monitor else { return }
-        let toasts = await monitor.pollAll()
-        await MainActor.run {
-            toasts.forEach { notifier?.post($0) }
-            rebuild()
+        do {
+            let toasts = try await monitor.pollAll()
+            await MainActor.run {
+                toasts.forEach { self.notifier?.post($0) }
+                self.rebuild()
+            }
+        } catch {
+            await MainActor.run {
+                self.presentError(error)
+                self.rebuild()
+            }
         }
     }
 

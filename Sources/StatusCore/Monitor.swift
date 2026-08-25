@@ -1,11 +1,32 @@
 import Foundation
 
+private struct WatchedPagePollResult: Sendable {
+    let pageID: UUID
+    let snapshot: PageSnapshot
+    let body: Data?
+}
+
+private struct WatchedPagePollStart {
+    let pages: [WatchedPage]
+    let bodies: [UUID: Data]
+    let identity: UInt64
+}
+
+private struct WatchedPagePollMerge {
+    let config: AppConfig
+    let acceptedIDs: Set<UUID>
+    let toasts: [Toast]
+}
+
 public final class Monitor: @unchecked Sendable {
+
     private let store: PageStore
     private let client: HTTPClient
-    private let lock = NSLock()
+    private let stateLock = NSLock()
+    private let transitionLock = NSLock()
     private var config: AppConfig
     private var lastBodies: [UUID: Data] = [:]
+    private var latestPollIdentity: UInt64 = 0
     public var onLaunchAtLoginEnable: (() -> Void)?
 
     public init(store: PageStore, client: HTTPClient) {
@@ -15,21 +36,29 @@ public final class Monitor: @unchecked Sendable {
     }
 
     public var pages: [WatchedPage] {
-        withLock { config.pages }
+        withStateLock { config.pages }
     }
 
     public func load() throws {
+        transitionLock.lock()
+        defer { transitionLock.unlock() }
+
         let loaded = try store.load()
-        withLock {
+        withStateLock {
             config = loaded
             lastBodies.removeAll()
+            latestPollIdentity &+= 1
         }
     }
 
     public func enableLaunchAtLoginOnFirstRun() {
-        let already = withLock { config.didSetLaunchAtLogin }
+        let already = withStateLock { config.didSetLaunchAtLogin }
         guard !already else { return }
-        try? commit { $0.didSetLaunchAtLogin = true }
+        do {
+            try commitWatchedPageMutation { $0.didSetLaunchAtLogin = true }
+        } catch {
+            return
+        }
         onLaunchAtLoginEnable?()
     }
 
@@ -41,13 +70,12 @@ public final class Monitor: @unchecked Sendable {
             notificationsEnabled: true,
             snapshot: snapshot
         )
-        try commit { $0.pages.append(page) }
+        try commitWatchedPageMutation { $0.pages.append(page) }
     }
 
     public func edit(id: UUID, url: URL, name: String?) async throws {
         let snapshot = try await ProviderProbe.probe(pageURL: url, client: client)
-        withLock { lastBodies[id] = nil }
-        try commit { next in
+        try commitWatchedPageMutation(invalidatingBodyFor: id) { next in
             guard let index = next.pages.firstIndex(where: { $0.id == id }) else { return }
             next.pages[index].url = ProviderProbe.normalizedBase(url)
             next.pages[index].name = trimmed(name) ?? snapshot.name
@@ -56,19 +84,18 @@ public final class Monitor: @unchecked Sendable {
     }
 
     public func remove(id: UUID) throws {
-        withLock { lastBodies[id] = nil }
-        try commit { $0.pages.removeAll { $0.id == id } }
+        try commitWatchedPageMutation(invalidatingBodyFor: id) { $0.pages.removeAll { $0.id == id } }
     }
 
     public func toggleNotifications(id: UUID) throws {
-        try commit { next in
+        try commitWatchedPageMutation { next in
             guard let index = next.pages.firstIndex(where: { $0.id == id }) else { return }
             next.pages[index].notificationsEnabled.toggle()
         }
     }
 
     public func toggleComponent(id: UUID, name: String) throws {
-        try commit { next in
+        try commitWatchedPageMutation { next in
             guard let index = next.pages.firstIndex(where: { $0.id == id }) else { return }
             let tree = next.pages[index].snapshot?.components ?? []
             let node = ComponentTree.find(name, in: tree)
@@ -86,7 +113,7 @@ public final class Monitor: @unchecked Sendable {
     }
 
     public func setAllComponents(id: UUID, enabled: Bool) throws {
-        try commit { next in
+        try commitWatchedPageMutation { next in
             guard let index = next.pages.firstIndex(where: { $0.id == id }) else { return }
             if enabled {
                 next.pages[index].disabledComponentNames.removeAll()
@@ -98,18 +125,12 @@ public final class Monitor: @unchecked Sendable {
         }
     }
 
-    private func commit(_ body: (inout AppConfig) throws -> Void) throws {
-        var next = withLock { config }
-        try body(&next)
-        try store.save(next)
-        withLock { config = next }
-    }
-
-    public func pollAll() async -> [Toast] {
-        let pages: [WatchedPage]
-        let bodies: [UUID: Data]
-        (pages, bodies) = withLock { (config.pages, lastBodies) }
-        let hits: [UUID: (PageSnapshot, Data?)] = await withTaskGroup(of: (UUID, PageSnapshot, Data?).self) { group in
+    public func pollAll() async throws -> [Toast] {
+        let pollStart = startPoll()
+        let pages = pollStart.pages
+        let bodies = pollStart.bodies
+        let pollIdentity = pollStart.identity
+        let pollResults: [UUID: WatchedPagePollResult] = await withTaskGroup(of: WatchedPagePollResult.self) { group in
             for page in pages {
                 let client = self.client
                 let previousBody = bodies[page.id]
@@ -122,7 +143,11 @@ public final class Monitor: @unchecked Sendable {
                             previousBody: previousBody,
                             previousSnapshot: page.snapshot
                         )
-                        return (page.id, hit.snapshot, hit.body)
+                        return WatchedPagePollResult(
+                            pageID: page.id,
+                            snapshot: hit.snapshot,
+                            body: hit.body
+                        )
                     } catch {
                         let snapshot = PageSnapshot(
                             name: page.name,
@@ -133,68 +158,32 @@ public final class Monitor: @unchecked Sendable {
                             incidents: [],
                             isUnreachable: true
                         )
-                        return (page.id, snapshot, nil)
+                        return WatchedPagePollResult(
+                            pageID: page.id,
+                            snapshot: snapshot,
+                            body: nil
+                        )
                     }
                 }
             }
-            var collected: [UUID: (PageSnapshot, Data?)] = [:]
-            for await (id, snapshot, body) in group {
-                collected[id] = (snapshot, body)
+            var collected: [UUID: WatchedPagePollResult] = [:]
+            for await result in group {
+                collected[result.pageID] = result
             }
             return collected
         }
 
-        let (changed, toSave, toasts): (Bool, AppConfig, [Toast]) = withLock {
-            for (id, hit) in hits {
-                if let body = hit.1 {
-                    lastBodies[id] = body
-                }
-            }
-            let beforeSave = config
-            var toasts: [Toast] = []
-            for index in config.pages.indices {
-                let id = config.pages[index].id
-                guard let snapshot = hits[id]?.0 else { continue }
-                let page = config.pages[index]
-                let previous = page.snapshot
-                let previousDisplay = page.displaySeverity
-                config.pages[index].snapshot = snapshot
-                if previous != nil,
-                   previousDisplay != config.pages[index].displaySeverity,
-                   let toast = ToastPolicy.toast(
-                    previous: previous.map { prev in
-                        var copy = prev
-                        copy.overall = previousDisplay
-                        return copy
-                    },
-                    current: {
-                        var copy = snapshot
-                        copy.overall = config.pages[index].displaySeverity
-                        copy.isUnreachable = snapshot.isUnreachable
-                        return copy
-                    }(),
-                    notificationsEnabled: page.notificationsEnabled,
-                    pageName: page.name
-                   ) {
-                    toasts.append(toast)
-                }
-            }
-            return (config != beforeSave, config, toasts)
-        }
-        if changed {
-            try? store.save(toSave)
-        }
-        return toasts
+        return try applyPollResults(pollResults, for: pollIdentity, expectedPages: pages)
     }
 
     public func barSeverity() -> Severity {
-        withLock { Aggregator.fromSeverities(config.pages.map(\.displaySeverity)) }
+        withStateLock { Aggregator.fromSeverities(config.pages.map(\.displaySeverity)) }
     }
 
     public func displayedSeverity(at now: Date) -> Severity {
         let persistent: Severity
         let hasUnreachable: Bool
-        (persistent, hasUnreachable) = withLock {
+        (persistent, hasUnreachable) = withStateLock {
             (
                 Aggregator.fromSeverities(config.pages.map(\.displaySeverity)),
                 config.pages.contains { $0.snapshot?.isUnreachable == true }
@@ -203,13 +192,145 @@ public final class Monitor: @unchecked Sendable {
         return GreyPulse.displayedSeverity(persistent: persistent, hasUnreachable: hasUnreachable, now: now)
     }
 
-    private func withLock<T>(_ body: () -> T) -> T {
-        lock.lock()
-        defer { lock.unlock() }
+}
+
+private extension Monitor {
+    func startPoll() -> WatchedPagePollStart {
+        transitionLock.lock()
+        defer { transitionLock.unlock() }
+
+        return withStateLock {
+            latestPollIdentity &+= 1
+            return WatchedPagePollStart(
+                pages: config.pages,
+                bodies: lastBodies,
+                identity: latestPollIdentity
+            )
+        }
+    }
+
+    func commitWatchedPageMutation(
+        invalidatingBodyFor pageID: UUID? = nil,
+        _ body: (inout AppConfig) throws -> Void
+    ) throws {
+        transitionLock.lock()
+        defer { transitionLock.unlock() }
+
+        var next = withStateLock { config }
+        try body(&next)
+        try store.save(next)
+        withStateLock {
+            config = next
+            if let pageID {
+                lastBodies[pageID] = nil
+            }
+        }
+    }
+
+    func applyPollResults(
+        _ pollResults: [UUID: WatchedPagePollResult],
+        for pollIdentity: UInt64,
+        expectedPages: [WatchedPage]
+    ) throws -> [Toast] {
+        transitionLock.lock()
+        defer { transitionLock.unlock() }
+
+        let (currentConfig, currentPollIdentity) = withStateLock {
+            (config, latestPollIdentity)
+        }
+        guard pollIdentity == currentPollIdentity else { return [] }
+
+        guard let merge = mergePollResults(
+            currentConfig: currentConfig,
+            pollResults: pollResults,
+            expectedPages: expectedPages
+        ) else { return [] }
+        if merge.config != currentConfig {
+            try store.save(merge.config)
+        }
+        withStateLock {
+            for id in merge.acceptedIDs {
+                if let body = pollResults[id]?.body {
+                    lastBodies[id] = body
+                }
+            }
+            config = merge.config
+        }
+        return merge.toasts
+    }
+
+    func mergePollResults(
+        currentConfig: AppConfig,
+        pollResults: [UUID: WatchedPagePollResult],
+        expectedPages: [WatchedPage]
+    ) -> WatchedPagePollMerge? {
+        guard let expectedByID = expectedPagesByID(expectedPages) else { return nil }
+        var next = currentConfig
+        var acceptedIDs: Set<UUID> = []
+        var toasts: [Toast] = []
+        for index in next.pages.indices {
+            let id = next.pages[index].id
+            guard let expectedPage = expectedByID[id],
+                  next.pages[index] == expectedPage,
+                  let result = pollResults[id] else { continue }
+            acceptedIDs.insert(id)
+            let page = next.pages[index]
+            let previous = page.snapshot
+            let previousDisplay = page.displaySeverity
+            next.pages[index].snapshot = result.snapshot
+            if let toast = pollToast(
+                from: previous,
+                to: result.snapshot,
+                currentPage: next.pages[index],
+                previousDisplay: previousDisplay
+            ) {
+                toasts.append(toast)
+            }
+        }
+        return WatchedPagePollMerge(config: next, acceptedIDs: acceptedIDs, toasts: toasts)
+    }
+
+    func pollToast(
+        from previous: PageSnapshot?,
+        to current: PageSnapshot,
+        currentPage: WatchedPage,
+        previousDisplay: Severity
+    ) -> Toast? {
+        guard let previous,
+              previousDisplay != currentPage.displaySeverity else { return nil }
+        return ToastPolicy.toast(
+            previous: {
+                var copy = previous
+                copy.overall = previousDisplay
+                return copy
+            }(),
+            current: {
+                var copy = current
+                copy.overall = currentPage.displaySeverity
+                copy.isUnreachable = current.isUnreachable
+                return copy
+            }(),
+            notificationsEnabled: currentPage.notificationsEnabled,
+            pageName: currentPage.name
+        )
+    }
+
+    func expectedPagesByID(_ pages: [WatchedPage]) -> [UUID: WatchedPage]? {
+        var pagesByID: [UUID: WatchedPage] = [:]
+        for page in pages {
+            guard pagesByID[page.id] == nil else { return nil }
+            pagesByID[page.id] = page
+        }
+        return pagesByID
+    }
+
+    func withStateLock<T>(_ body: () -> T) -> T {
+        stateLock.lock()
+        defer { stateLock.unlock() }
         return body()
     }
 
-    private func trimmed(_ name: String?) -> String? {
+    func trimmed(_ name: String?) -> String? {
         guard let name else { return nil }
         let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? nil : value

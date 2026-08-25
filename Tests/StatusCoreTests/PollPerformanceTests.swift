@@ -43,7 +43,7 @@ final class PollPerformanceTests: XCTestCase {
         )
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let toasts = await monitor.pollAll()
+        let toasts = try await monitor.pollAll()
 
         XCTAssertEqual(monitor.pages.map { $0.snapshot?.provider }, [.statuspage, .statuspage, .statuspage])
         XCTAssertEqual(monitor.pages.map(\.displaySeverity), [.yellow, .yellow, .yellow])
@@ -68,7 +68,7 @@ final class PollPerformanceTests: XCTestCase {
         )
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let toasts = await monitor.pollAll()
+        let toasts = try await monitor.pollAll()
         let urls = recording.requested.map(\.absoluteString)
 
         XCTAssertEqual(monitor.pages.map { $0.snapshot?.provider }, [.statuspage, .instatus, .statuspal])
@@ -118,12 +118,12 @@ final class PollPerformanceTests: XCTestCase {
         )
         defer { try? FileManager.default.removeItem(at: dir) }
         ProviderProbe.resetCounts()
-        let first = await monitor.pollAll()
+        let first = try await monitor.pollAll()
         XCTAssertEqual(ProviderProbe.parseCount, 1)
         XCTAssertEqual(monitor.pages[0].displaySeverity, .yellow)
         XCTAssertEqual(first.map(\.body), ["Degraded"])
         ProviderProbe.resetCounts()
-        let second = await monitor.pollAll()
+        let second = try await monitor.pollAll()
         XCTAssertEqual(ProviderProbe.parseCount, 0)
         XCTAssertEqual(second, [])
         XCTAssertEqual(monitor.pages[0].displaySeverity, .yellow)
@@ -163,11 +163,11 @@ final class PollPerformanceTests: XCTestCase {
         )
         defer { try? FileManager.default.removeItem(at: dir) }
         let configURL = PageStore(directory: dir).configURL
-        _ = await monitor.pollAll()
+        _ = try await monitor.pollAll()
         XCTAssertEqual(monitor.pages[0].displaySeverity, .yellow)
         XCTAssertEqual(monitor.pages[0].snapshot?.incidents.first?.title, "API slow")
         let afterFirst = try inode(configURL)
-        _ = await monitor.pollAll()
+        _ = try await monitor.pollAll()
         let afterSecond = try inode(configURL)
         XCTAssertEqual(afterFirst, afterSecond)
         XCTAssertEqual(monitor.pages[0].displaySeverity, .yellow)
@@ -184,7 +184,7 @@ final class PollPerformanceTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: dir) }
         let configURL = PageStore(directory: dir).configURL
         let before = try inode(configURL)
-        _ = await monitor.pollAll()
+        _ = try await monitor.pollAll()
         let after = try inode(configURL)
         XCTAssertNotEqual(before, after)
         XCTAssertEqual(monitor.pages[0].displaySeverity, .yellow)
@@ -196,7 +196,7 @@ final class PollPerformanceTests: XCTestCase {
             pages: [Self.page(host: "offline.example", name: "Down", provider: .statuspage)]
         )
         defer { try? FileManager.default.removeItem(at: dir) }
-        let toasts = await monitor.pollAll()
+        let toasts = try await monitor.pollAll()
         XCTAssertEqual(monitor.pages[0].snapshot?.isUnreachable, true)
         XCTAssertEqual(monitor.pages[0].displaySeverity, .grey)
         XCTAssertEqual(monitor.barSeverity(), .grey)

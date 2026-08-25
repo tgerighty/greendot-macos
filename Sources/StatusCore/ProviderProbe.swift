@@ -15,10 +15,10 @@ public enum ProbeError: Error, Equatable, LocalizedError {
 }
 
 public enum ProviderProbe {
-    public static var parseCount: Int { parseBox.current }
-    public static var regexCompileCount: Int { regexBox.current }
+    static var parseCount: Int { parseBox.current }
+    static var regexCompileCount: Int { regexBox.current }
 
-    public static func resetCounts() {
+    static func resetCounts() {
         parseBox.reset()
         regexBox.reset()
     }
@@ -26,20 +26,12 @@ public enum ProviderProbe {
     public static func probe(
         pageURL: URL,
         client: HTTPClient,
-        prefer: StatusProvider? = nil,
-        previousBody: Data? = nil,
-        previousSnapshot: PageSnapshot? = nil
+        prefer: StatusProvider? = nil
     ) async throws -> PageSnapshot {
-        try await probeHit(
-            pageURL: pageURL,
-            client: client,
-            prefer: prefer,
-            previousBody: previousBody,
-            previousSnapshot: previousSnapshot
-        ).snapshot
+        try await probeHit(pageURL: pageURL, client: client, prefer: prefer).snapshot
     }
 
-    public static func probeHit(
+    static func probeHit(
         pageURL: URL,
         client: HTTPClient,
         prefer: StatusProvider? = nil,
@@ -236,9 +228,9 @@ public enum ProviderProbe {
     }
 }
 
-public struct ProbeHit: Sendable {
-    public var snapshot: PageSnapshot
-    public var body: Data
+struct ProbeHit: Sendable {
+    let snapshot: PageSnapshot
+    let body: Data
 }
 
 private final class CountBox: @unchecked Sendable {

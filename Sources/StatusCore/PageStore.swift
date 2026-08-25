@@ -55,7 +55,7 @@ public final class PageStore: @unchecked Sendable {
         }
         do {
             let decoded = try JSONDecoder().decode(AppConfig.self, from: data)
-            guard decoded.version <= AppConfig.currentVersion else { throw StoreError.corrupt }
+            try validate(decoded)
             return decoded
         } catch {
             throw StoreError.corrupt
@@ -63,9 +63,16 @@ public final class PageStore: @unchecked Sendable {
     }
 
     public func save(_ config: AppConfig) throws {
+        try validate(config)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let data = try JSONEncoder().encode(config)
         try data.write(to: configURL, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: configURL.path)
+    }
+
+    private func validate(_ config: AppConfig) throws {
+        guard config.version <= AppConfig.currentVersion else { throw StoreError.corrupt }
+        let pageIDs = config.pages.map(\.id)
+        guard Set(pageIDs).count == pageIDs.count else { throw StoreError.corrupt }
     }
 }
