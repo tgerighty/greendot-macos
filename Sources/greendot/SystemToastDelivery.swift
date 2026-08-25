@@ -14,9 +14,19 @@ protocol UserNotificationCenterClient: AnyObject, Sendable {
     func removeDeliveredNotifications(withIdentifiers identifiers: [String])
 }
 
-/// The center is created from main-actor delivery entry points before callbacks use it.
+/// Defers the process-bound system center until delivery starts, with synchronized first access.
 private final class LiveUserNotificationCenterClient: UserNotificationCenterClient, @unchecked Sendable {
-    private lazy var center = UNUserNotificationCenter.current()
+    private let centerLock = NSLock()
+    private var storedCenter: UNUserNotificationCenter?
+
+    private var center: UNUserNotificationCenter {
+        centerLock.lock()
+        defer { centerLock.unlock() }
+        if let storedCenter { return storedCenter }
+        let center = UNUserNotificationCenter.current()
+        storedCenter = center
+        return center
+    }
 
     func requestAuthorization(
         options: UNAuthorizationOptions,
