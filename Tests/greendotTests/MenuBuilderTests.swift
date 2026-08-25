@@ -100,7 +100,7 @@ final class MenuBuilderTests: XCTestCase {
         try store.save(config)
         let monitor = Monitor(store: store, client: Self.mixedProviderClient())
         try monitor.load()
-        let toasts = await monitor.pollAll()
+        let toasts = try await monitor.pollAll()
         XCTAssertEqual(toasts.map(\.pageName), ["GitHub"])
         XCTAssertEqual(toasts.first?.body, "Degraded")
 

@@ -142,7 +142,7 @@ final class PerformanceHarnessTests: XCTestCase {
         let monitor = Monitor(store: store, client: client)
         try monitor.load()
         let start = ContinuousClock.now
-        let toasts = await monitor.pollAll()
+        let toasts = try await monitor.pollAll()
         let elapsed = start.duration(to: .now)
         return (elapsed.milliseconds, toasts, monitor.pages.map(\.snapshot))
     }
@@ -208,9 +208,9 @@ final class PerformanceHarnessTests: XCTestCase {
         try store.save(config)
         let monitor = Monitor(store: store, client: client)
         try monitor.load()
-        _ = await monitor.pollAll()
+        _ = try await monitor.pollAll()
         ProviderProbe.resetCounts()
-        _ = await monitor.pollAll()
+        _ = try await monitor.pollAll()
         let secondParse = ProviderProbe.parseCount
 
         var pulse = 0
@@ -267,11 +267,11 @@ final class PerformanceHarnessTests: XCTestCase {
         try store.save(config)
         let monitor = Monitor(store: store, client: client)
         try monitor.load()
-        _ = await monitor.pollAll()
+        _ = try await monitor.pollAll()
         let path = store.configURL.path
         let before = try FileManager.default.attributesOfItem(atPath: path)
         let beforeInode = before[.systemFileNumber] as? NSNumber
-        _ = await monitor.pollAll()
+        _ = try await monitor.pollAll()
         let after = try FileManager.default.attributesOfItem(atPath: path)
         let afterInode = after[.systemFileNumber] as? NSNumber
         return beforeInode == afterInode ? 0 : 1

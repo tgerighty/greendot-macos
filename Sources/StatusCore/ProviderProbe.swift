@@ -15,10 +15,10 @@ public enum ProbeError: Error, Equatable, LocalizedError {
 }
 
 public enum ProviderProbe {
-    public static var parseCount: Int { parseBox.current }
-    public static var regexCompileCount: Int { regexBox.current }
+    static var parseCount: Int { parseBox.current }
+    static var regexCompileCount: Int { regexBox.current }
 
-    public static func resetCounts() {
+    static func resetCounts() {
         parseBox.reset()
         regexBox.reset()
     }
@@ -26,20 +26,12 @@ public enum ProviderProbe {
     public static func probe(
         pageURL: URL,
         client: HTTPClient,
-        prefer: StatusProvider? = nil,
-        previousBody: Data? = nil,
-        previousSnapshot: PageSnapshot? = nil
+        prefer: StatusProvider? = nil
     ) async throws -> PageSnapshot {
-        try await probeHit(
-            pageURL: pageURL,
-            client: client,
-            prefer: prefer,
-            previousBody: previousBody,
-            previousSnapshot: previousSnapshot
-        ).snapshot
+        try await probeHit(pageURL: pageURL, client: client, prefer: prefer).snapshot
     }
 
-    public static func probeHit(
+    static func probeHit(
         pageURL: URL,
         client: HTTPClient,
         prefer: StatusProvider? = nil,
@@ -63,8 +55,8 @@ public enum ProviderProbe {
             }
         }
 
-        func tryStatuspage() async -> ProbeHit? {
-            take(await attempt(
+        func tryStatuspage() async throws -> ProbeHit? {
+            take(try await attempt(
                 base.appendingPathComponent("api/v2/summary.json"),
                 client: client,
                 previousBody: previousBody,
@@ -73,8 +65,8 @@ public enum ProviderProbe {
             ))
         }
 
-        func tryInstatus() async -> ProbeHit? {
-            take(await attempt(
+        func tryInstatus() async throws -> ProbeHit? {
+            take(try await attempt(
                 base.appendingPathComponent("summary.json"),
                 client: client,
                 previousBody: previousBody,
@@ -83,8 +75,8 @@ public enum ProviderProbe {
             ))
         }
 
-        func tryStatuspal() async -> ProbeHit? {
-            await probeStatuspal(
+        func tryStatuspal() async throws -> ProbeHit? {
+            try await probeStatuspal(
                 base: base,
                 client: client,
                 flags: &sawHTTP,
@@ -97,11 +89,11 @@ public enum ProviderProbe {
         for provider in probeOrder(preferring: prefer) {
             switch provider {
             case .statuspage:
-                if let hit = await tryStatuspage() { return hit }
+                if let hit = try await tryStatuspage() { return hit }
             case .instatus:
-                if let hit = await tryInstatus() { return hit }
+                if let hit = try await tryInstatus() { return hit }
             case .statuspal:
-                if let hit = await tryStatuspal() { return hit }
+                if let hit = try await tryStatuspal() { return hit }
             }
         }
         if !sawHTTP && sawNetworkError {
@@ -146,9 +138,10 @@ public enum ProviderProbe {
         previousBody: Data?,
         previousSnapshot: PageSnapshot?,
         parse: (Data) throws -> PageSnapshot
-    ) async -> AttemptResult {
+    ) async throws -> AttemptResult {
         do {
             let (data, status) = try await client.get(url)
+            try Task.checkCancellation()
             guard status == 200 else { return .miss }
             if let previousBody, let previousSnapshot,
                !previousSnapshot.isUnreachable,
@@ -162,6 +155,7 @@ public enum ProviderProbe {
                 return .miss
             }
         } catch {
+            try throwIfCancelled(error)
             return .networkError
         }
     }
@@ -173,7 +167,7 @@ public enum ProviderProbe {
         network sawNetworkError: inout Bool,
         previousBody: Data?,
         previousSnapshot: PageSnapshot?
-    ) async -> ProbeHit? {
+    ) async throws -> ProbeHit? {
         let host = base.host ?? ""
         var subdomains: [String] = []
         if host.hasSuffix(".statuspal.io") || host.hasSuffix(".statuspal.eu") {
@@ -182,6 +176,7 @@ public enum ProviderProbe {
         if subdomains.isEmpty {
             do {
                 let htmlHit = try await client.get(base)
+                try Task.checkCancellation()
                 sawHTTP = true
                 if htmlHit.1 == 200,
                    let html = String(data: htmlHit.0, encoding: .utf8),
@@ -190,6 +185,7 @@ public enum ProviderProbe {
                     subdomains.append(extracted)
                 }
             } catch {
+                try throwIfCancelled(error)
                 sawNetworkError = true
             }
         }
@@ -198,7 +194,7 @@ public enum ProviderProbe {
         for subdomain in unique {
             for prefix in apiHosts {
                 guard let url = URL(string: prefix + subdomain + "/summary") else { continue }
-                switch await attempt(
+                switch try await attempt(
                     url,
                     client: client,
                     previousBody: previousBody,
@@ -215,6 +211,12 @@ public enum ProviderProbe {
             }
         }
         return nil
+    }
+
+    private static func throwIfCancelled(_ error: Error) throws {
+        guard !(error is CancellationError || Task.isCancelled) else {
+            throw CancellationError()
+        }
     }
 
     private static let statuspalRegex: NSRegularExpression? = {
@@ -236,9 +238,9 @@ public enum ProviderProbe {
     }
 }
 
-public struct ProbeHit: Sendable {
-    public var snapshot: PageSnapshot
-    public var body: Data
+struct ProbeHit: Sendable {
+    let snapshot: PageSnapshot
+    let body: Data
 }
 
 private final class CountBox: @unchecked Sendable {

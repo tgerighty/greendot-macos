@@ -152,6 +152,20 @@ final class ProbeAndMonitorTests: XCTestCase {
         }
     }
 
+    func testProbePropagatesCancellation() async {
+        do {
+            _ = try await ProviderProbe.probe(
+                pageURL: URL(string: "https://offline.example")!,
+                client: CancellationHTTPClient()
+            )
+            XCTFail("expected CancellationError")
+        } catch is CancellationError {
+            // Cancellation must not be converted into an unreachable result.
+        } catch {
+            XCTFail("expected CancellationError, got \(error)")
+        }
+    }
+
     func testStoreRoundTripAddEditRemove() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -194,7 +208,7 @@ final class ProbeAndMonitorTests: XCTestCase {
         let down = MapHTTPClient()
         let retry = Monitor(store: PageStore(directory: dir), client: down)
         try retry.load()
-        let toasts = await retry.pollAll()
+        let toasts = try await retry.pollAll()
         XCTAssertEqual(retry.pages[0].snapshot?.overall, .grey)
         XCTAssertEqual(retry.barSeverity(), .grey)
         XCTAssertEqual(toasts.count, 1)
@@ -277,5 +291,11 @@ private func assertSaveThrows(json: String, _ work: (Monitor) throws -> Void) as
 private struct FailingHTTPClient: HTTPClient {
     func get(_ url: URL) async throws -> (Data, Int) {
         throw URLError(.cannotConnectToHost)
+    }
+}
+
+private struct CancellationHTTPClient: HTTPClient {
+    func get(_: URL) async throws -> (Data, Int) {
+        throw CancellationError()
     }
 }
