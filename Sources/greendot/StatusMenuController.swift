@@ -1,6 +1,8 @@
 import AppKit
 import StatusCore
 
+typealias ScheduledMainActorWork = @MainActor @Sendable () -> Void
+
 @MainActor
 final class StatusMenuController: NSObject {
     private let statusItem: NSStatusItem
@@ -8,7 +10,7 @@ final class StatusMenuController: NSObject {
     private let builder: MenuBuilder
     private let activateApplication: @MainActor () -> Void
     private let presentMenu: @MainActor (NSMenu) -> Void
-    private let scheduleOnMain: (@escaping @MainActor () -> Void) -> Void
+    private let scheduleOnMain: (@escaping ScheduledMainActorWork) -> Void
     private var state: StatusMenuState
     private var needsReload = false
     private var needsPop = false
@@ -21,7 +23,7 @@ final class StatusMenuController: NSObject {
         clickOpener: MenuClickOpener = MenuClickOpener(),
         activateApplication: @escaping @MainActor () -> Void = { NSApp.activate(ignoringOtherApps: true) },
         presentMenu: @escaping @MainActor (NSMenu) -> Void = StatusMenuController.presentAtScreenCenter,
-        scheduleOnMain: @escaping (@escaping @MainActor () -> Void) -> Void = { work in
+        scheduleOnMain: @escaping (@escaping ScheduledMainActorWork) -> Void = { work in
             DispatchQueue.main.async { work() }
         }
     ) {

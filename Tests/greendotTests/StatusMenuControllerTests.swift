@@ -3,6 +3,8 @@ import StatusCore
 import XCTest
 @testable import greendot
 
+private typealias ScheduledMainActorWork = @MainActor @Sendable () -> Void
+
 @MainActor
 final class StatusMenuControllerTests: XCTestCase {
     func testSeverityOnlyUpdateReusesMenuAndUpdatesIcon() throws {
@@ -48,7 +50,7 @@ final class StatusMenuControllerTests: XCTestCase {
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         defer { NSStatusBar.system.removeStatusItem(statusItem) }
         let tracking = MenuClickOpener()
-        var scheduledWork: (() -> Void)?
+        var scheduledWork: ScheduledMainActorWork?
         var editedIDs: [UUID] = []
         let firstPage = Self.page(name: "First")
         let controller = StatusMenuController(
@@ -92,7 +94,7 @@ final class StatusMenuControllerTests: XCTestCase {
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         defer { NSStatusBar.system.removeStatusItem(statusItem) }
         let tracking = MenuClickOpener()
-        var scheduledWork: (() -> Void)?
+        var scheduledWork: ScheduledMainActorWork?
         var presentedMenus: [NSMenu] = []
         var activationCount = 0
         let controller = StatusMenuController(
@@ -161,7 +163,7 @@ final class StatusMenuControllerTests: XCTestCase {
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         defer { NSStatusBar.system.removeStatusItem(statusItem) }
         let tracking = MenuClickOpener()
-        var scheduledWork: [() -> Void] = []
+        var scheduledWork: [ScheduledMainActorWork] = []
         var presentedMenus: [NSMenu] = []
         var activationCount = 0
         let controller = StatusMenuController(
