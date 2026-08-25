@@ -23,6 +23,26 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
     }
     """
 
+    func testSuccessfulPollDeliversToastThroughInjectedAdapter() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pageURL = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
+        let store = try await seedStore(at: directory, pageURL: pageURL)
+        let monitor = Monitor(
+            store: store,
+            client: SequenceHTTPClient(responses: [Data(redJSON.utf8)])
+        )
+        try monitor.load()
+        let delivery = InMemoryToastDelivery()
+        let delegate = AppDelegate(toastDelivery: delivery)
+
+        await delegate.pollAndRefresh(monitor)
+
+        XCTAssertEqual(delivery.toasts, [
+            Toast(pageName: "GitHub", body: "Major outage", severity: .red)
+        ])
+    }
+
     func testPersistenceErrorsPresentOnceUntilSuccessfulPollResetsGate() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -37,7 +57,8 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
         ])
         let monitor = Monitor(store: store, client: sequence)
         try monitor.load()
-        let delegate = AppDelegate()
+        let delivery = InMemoryToastDelivery()
+        let delegate = AppDelegate(toastDelivery: delivery)
         var presentedErrors = 0
         delegate.presentError = { _ in presentedErrors += 1 }
 
@@ -45,21 +66,27 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
         await delegate.pollAndRefresh(monitor)
         XCTAssertEqual(presentedErrors, 1)
         XCTAssertEqual(monitor.pages[0].snapshot?.overall, .green)
+        XCTAssertTrue(delivery.toasts.isEmpty)
 
         await delegate.pollAndRefresh(monitor)
         XCTAssertEqual(presentedErrors, 1)
         XCTAssertEqual(monitor.pages[0].snapshot?.overall, .green)
+        XCTAssertTrue(delivery.toasts.isEmpty)
 
         try FileManager.default.removeItem(at: store.configURL)
         await delegate.pollAndRefresh(monitor)
         XCTAssertEqual(presentedErrors, 1)
         XCTAssertEqual(monitor.pages[0].snapshot?.overall, .red)
         XCTAssertEqual(try store.load().pages[0].snapshot?.overall, .red)
+        XCTAssertEqual(delivery.toasts, [
+            Toast(pageName: "GitHub", body: "Major outage", severity: .red)
+        ])
 
         try breakPersistence(at: store.configURL)
         await delegate.pollAndRefresh(monitor)
         XCTAssertEqual(presentedErrors, 2)
         XCTAssertEqual(monitor.pages[0].snapshot?.overall, .red)
+        XCTAssertEqual(delivery.toasts.count, 1)
     }
 
     func testStaleSuccessfulPollDoesNotResetPersistenceErrorGate() async throws {
@@ -72,7 +99,8 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
         defer { client.failAll() }
         let monitor = Monitor(store: store, client: client)
         try monitor.load()
-        let delegate = AppDelegate()
+        let delivery = InMemoryToastDelivery()
+        let delegate = AppDelegate(toastDelivery: delivery)
         var presentedErrors = 0
         delegate.presentError = { _ in presentedErrors += 1 }
         let pollA = Task { await delegate.pollAndRefresh(monitor) }
@@ -94,6 +122,7 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
         client.complete(request: 3, with: Data(redJSON.utf8))
         await pollC.value
         XCTAssertEqual(presentedErrors, 1)
+        XCTAssertTrue(delivery.toasts.isEmpty)
     }
 
     func testCancelledPollDoesNotPresentAnError() async throws {
