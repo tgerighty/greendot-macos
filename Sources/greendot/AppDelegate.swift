@@ -61,10 +61,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         pulseTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
-            guard let self, let monitor = self.monitor else { return }
-            let hasUnreachable = monitor.pages.contains { $0.snapshot?.isUnreachable == true }
-            guard Self.shouldRefreshIconOnPulse(hasUnreachable: hasUnreachable) else { return }
-            self.rebuild()
+            MainActor.assumeIsolated {
+                guard let self, let monitor = self.monitor else { return }
+                let hasUnreachable = monitor.pages.contains { $0.snapshot?.isUnreachable == true }
+                guard Self.shouldRefreshIconOnPulse(hasUnreachable: hasUnreachable) else { return }
+                self.rebuild()
+            }
         }
     }
 
@@ -97,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @discardableResult
+    @MainActor
     func performStoreChange(_ work: () throws -> Void) -> Bool {
         do {
             try work()
@@ -118,11 +121,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? await monitor.add(url: url, name: "OpenAI")
     }
 
+    @MainActor
     private func rebuild() {
         guard let monitor else { return }
         statusMenu?.update(makeStatusMenuState(monitor))
     }
 
+    @MainActor
     private func makeStatusMenuState(_ monitor: Monitor) -> StatusMenuState {
         StatusMenuState(
             pages: monitor.pages,
@@ -131,6 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    @MainActor
     private func makeStatusMenuHandlers() -> StatusMenuHandlers {
         StatusMenuHandlers(
             onAdd: { [weak self] in self?.openEditor(editingPageID: nil) },
@@ -156,6 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    @MainActor
     private func openEditor(editingPageID: UUID?) {
         Task { @MainActor [weak self] in
             guard let self, let monitor = self.monitor else { return }
@@ -182,6 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @MainActor
     private func installUITestHooks() {
         guard ProcessInfo.processInfo.environment["GREENDOT_UI_TEST"] != nil else { return }
         guard let configDir = ProcessInfo.processInfo.environment["GREENDOT_CONFIG_DIR"],
@@ -211,13 +219,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func observe(_ name: String, handle: @escaping (String) -> Void) {
+    @MainActor
+    private func observe(_ name: String, handle: @escaping @MainActor (String) -> Void) {
         DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("com.tgerighty.greendot.\(name)"),
             object: nil,
             queue: .main
         ) { note in
-            handle(note.object as? String ?? "")
+            MainActor.assumeIsolated {
+                handle(note.object as? String ?? "")
+            }
         }
     }
 

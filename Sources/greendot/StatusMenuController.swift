@@ -1,13 +1,14 @@
 import AppKit
 import StatusCore
 
+@MainActor
 final class StatusMenuController: NSObject {
     private let statusItem: NSStatusItem
     private let clickOpener: MenuClickOpener
     private let builder: MenuBuilder
-    private let activateApplication: () -> Void
-    private let presentMenu: (NSMenu) -> Void
-    private let scheduleOnMain: (@escaping () -> Void) -> Void
+    private let activateApplication: @MainActor () -> Void
+    private let presentMenu: @MainActor (NSMenu) -> Void
+    private let scheduleOnMain: (@escaping @MainActor () -> Void) -> Void
     private var state: StatusMenuState
     private var needsReload = false
     private var needsPop = false
@@ -18,10 +19,10 @@ final class StatusMenuController: NSObject {
         handlers: StatusMenuHandlers,
         statusItem: NSStatusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength),
         clickOpener: MenuClickOpener = MenuClickOpener(),
-        activateApplication: @escaping () -> Void = { NSApp.activate(ignoringOtherApps: true) },
-        presentMenu: @escaping (NSMenu) -> Void = StatusMenuController.presentAtScreenCenter,
-        scheduleOnMain: @escaping (@escaping () -> Void) -> Void = { work in
-            DispatchQueue.main.async(execute: work)
+        activateApplication: @escaping @MainActor () -> Void = { NSApp.activate(ignoringOtherApps: true) },
+        presentMenu: @escaping @MainActor (NSMenu) -> Void = StatusMenuController.presentAtScreenCenter,
+        scheduleOnMain: @escaping (@escaping @MainActor () -> Void) -> Void = { work in
+            DispatchQueue.main.async { work() }
         }
     ) {
         self.state = state
@@ -41,8 +42,7 @@ final class StatusMenuController: NSObject {
     }
 
     func update(_ state: StatusMenuState) {
-        let menuContentChanged = self.state.pages != state.pages
-            || self.state.launchAtLoginEnabled != state.launchAtLoginEnabled
+        let menuContentChanged = self.state.content != state.content
         self.state = state
         updateSeverity(state.severity)
         guard menuContentChanged else { return }
@@ -101,6 +101,7 @@ final class StatusMenuController: NSObject {
     }
 
     private func flushDeferredMenuWork() {
+        guard !clickOpener.isTracking else { return }
         if needsPop {
             needsPop = false
             needsReload = false

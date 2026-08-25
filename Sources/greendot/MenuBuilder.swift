@@ -2,9 +2,19 @@ import AppKit
 import StatusCore
 
 struct StatusMenuState: Equatable {
+    struct Content: Equatable {
+        let pages: [WatchedPage]
+        let launchAtLoginEnabled: Bool
+    }
+
     var pages: [WatchedPage]
     var severity: Severity
     var launchAtLoginEnabled: Bool
+
+    /// Values that affect the built menu. Severity only affects the status-item image.
+    var content: Content {
+        Content(pages: pages, launchAtLoginEnabled: launchAtLoginEnabled)
+    }
 }
 
 struct StatusMenuHandlers {
@@ -19,14 +29,10 @@ struct StatusMenuHandlers {
     var onQuit: () -> Void
 }
 
+@MainActor
 final class MenuBuilder {
-    private struct Content: Equatable {
-        var pages: [WatchedPage]
-        var launchAtLoginEnabled: Bool
-    }
-
     private let handlers: StatusMenuHandlers
-    private var cachedContent: Content?
+    private var cachedContent: StatusMenuState.Content?
     private var cachedMenu: NSMenu?
 
     init(handlers: StatusMenuHandlers) {
@@ -34,7 +40,7 @@ final class MenuBuilder {
     }
 
     func build(for state: StatusMenuState) -> NSMenu {
-        let content = Content(pages: state.pages, launchAtLoginEnabled: state.launchAtLoginEnabled)
+        let content = state.content
         if cachedContent == content, let cachedMenu {
             return cachedMenu
         }
