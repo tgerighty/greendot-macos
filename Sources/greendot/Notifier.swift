@@ -3,6 +3,9 @@ import StatusCore
 import UserNotifications
 
 final class Notifier {
+    /// Marks the toasts that clear themselves, so a stale one can be cleared at the next launch.
+    static let autoDismissCategory = "greendot-auto-dismiss"
+
     func requestPermissionIfNeeded() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, error in
             if let error {
@@ -26,11 +29,26 @@ final class Notifier {
         }
     }
 
+    /// Clears toasts that a quit cut short before they could clear themselves.
+    func clearStaleAutoDismissToasts() {
+        let center = UNUserNotificationCenter.current()
+        center.getDeliveredNotifications { delivered in
+            let stale = delivered
+                .filter { $0.request.content.categoryIdentifier == Self.autoDismissCategory }
+                .map(\.request.identifier)
+            guard !stale.isEmpty else { return }
+            center.removeDeliveredNotifications(withIdentifiers: stale)
+        }
+    }
+
     static func content(for toast: Toast) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
         content.title = toast.pageName
         content.body = toast.body
         content.sound = .default
+        if toast.autoDismissSeconds != nil {
+            content.categoryIdentifier = autoDismissCategory
+        }
         if let attachment = attachment(for: toast.severity) {
             content.attachments = [attachment]
         }
