@@ -4,6 +4,7 @@ import UserNotifications
 import XCTest
 @testable import greendot
 
+@MainActor
 final class SystemToastDeliveryTests: XCTestCase {
     func testStartRequestsPermissionThenClearsOnlyStaleAutoDismissToasts() {
         let notifications = RecordingUserNotificationCenter()
@@ -13,7 +14,9 @@ final class SystemToastDeliveryTests: XCTestCase {
         ]
         let delivery = SystemToastDelivery(
             notifications: notifications,
-            schedule: { _, _ in },
+            schedule: { _, _ in
+                XCTFail("Starting toast delivery must not schedule a removal")
+            },
             makeIdentifier: { "unused" }
         )
 
