@@ -52,40 +52,62 @@ public final class Monitor: @unchecked Sendable {
     }
 
     public func add(url: URL, name: String?) async throws {
+        try Task.checkCancellation()
         let snapshot = try await ProviderProbe.probe(pageURL: url, client: client)
+        try Task.checkCancellation()
         let page = WatchedPage(
             url: ProviderProbe.normalizedBase(url),
             name: trimmed(name) ?? snapshot.name,
             notificationsEnabled: true,
             snapshot: snapshot
         )
-        try commitWatchedPageMutation { $0.pages.append(page) }
+        try commitWatchedPageMutation {
+            $0.pages.append(page)
+            try Task.checkCancellation()
+        }
     }
 
     public func edit(id: UUID, url: URL, name: String?) async throws {
+        try Task.checkCancellation()
+        guard withStateLock({ config.pages.contains { $0.id == id } }) else {
+            throw MonitorError.pageNotFound(id)
+        }
         let snapshot = try await ProviderProbe.probe(pageURL: url, client: client)
+        try Task.checkCancellation()
         try commitWatchedPageMutation(invalidatingBodyFor: id) { next in
-            guard let index = next.pages.firstIndex(where: { $0.id == id }) else { return }
+            guard let index = next.pages.firstIndex(where: { $0.id == id }) else {
+                throw MonitorError.pageNotFound(id)
+            }
             next.pages[index].url = ProviderProbe.normalizedBase(url)
             next.pages[index].name = trimmed(name) ?? snapshot.name
             next.pages[index].snapshot = snapshot
+            try Task.checkCancellation()
         }
     }
 
     public func remove(id: UUID) throws {
-        try commitWatchedPageMutation(invalidatingBodyFor: id) { $0.pages.removeAll { $0.id == id } }
+        try commitWatchedPageMutation(invalidatingBodyFor: id) { next in
+            guard let index = next.pages.firstIndex(where: { $0.id == id }) else {
+                throw MonitorError.pageNotFound(id)
+            }
+            next.pages.remove(at: index)
+        }
     }
 
     public func toggleNotifications(id: UUID) throws {
         try commitWatchedPageMutation { next in
-            guard let index = next.pages.firstIndex(where: { $0.id == id }) else { return }
+            guard let index = next.pages.firstIndex(where: { $0.id == id }) else {
+                throw MonitorError.pageNotFound(id)
+            }
             next.pages[index].notificationsEnabled.toggle()
         }
     }
 
     public func toggleComponent(id: UUID, name: String) throws {
         try commitWatchedPageMutation { next in
-            guard let index = next.pages.firstIndex(where: { $0.id == id }) else { return }
+            guard let index = next.pages.firstIndex(where: { $0.id == id }) else {
+                throw MonitorError.pageNotFound(id)
+            }
             let tree = next.pages[index].snapshot?.components ?? []
             let node = ComponentTree.find(name, in: tree)
             let nodes = node.map(ComponentTree.collect) ?? []
@@ -103,7 +125,9 @@ public final class Monitor: @unchecked Sendable {
 
     public func setAllComponents(id: UUID, enabled: Bool) throws {
         try commitWatchedPageMutation { next in
-            guard let index = next.pages.firstIndex(where: { $0.id == id }) else { return }
+            guard let index = next.pages.firstIndex(where: { $0.id == id }) else {
+                throw MonitorError.pageNotFound(id)
+            }
             if enabled {
                 next.pages[index].disabledComponentNames.removeAll()
             } else {

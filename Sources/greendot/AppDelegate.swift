@@ -6,7 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var monitor: Monitor?
     private var pollTimer: Timer?
     private var pulseTimer: Timer?
-    private var panel: PagePanelController?
+    private var editor: StatusPageEditor?
     private var notifier: Notifier?
     private var pollRefreshState = (presentedError: false, latestInvocation: UInt64(0))
     var presentError: (Error) -> Void = { error in
@@ -135,8 +135,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pages: monitor.pages,
             launchAtLoginEnabled: LaunchAtLogin.isEnabled,
             actions: MenuActions(
-                onAdd: { [weak self] in self?.openPanel(editing: nil) },
-                onEdit: { [weak self] page in self?.openPanel(editing: page) },
+                onAdd: { [weak self] in self?.openEditor(editingPageID: nil) },
+                onEdit: { [weak self] page in self?.openEditor(editingPageID: page.id) },
                 onRemove: { [weak self] id in
                     self?.performStoreChange { try self?.monitor?.remove(id: id) }
                 },
@@ -159,50 +159,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func openPanel(editing: WatchedPage?) {
-        let previous = panel
-        previous?.close()
-        let panel = PagePanelController(
-            page: editing,
-            onSave: { [weak self] url, name in
-                guard let self, let monitor = self.monitor else { return }
-                Task {
-                    do {
-                        if let editing {
-                            try await monitor.edit(id: editing.id, url: url, name: name)
-                        } else {
-                            try await monitor.add(url: url, name: name)
-                        }
-                        await MainActor.run { self.rebuild() }
-                    } catch {
-                        await MainActor.run { self.presentError(error) }
-                    }
+    private func openEditor(editingPageID: UUID?) {
+        Task { @MainActor [weak self] in
+            guard let self, let monitor = self.monitor else { return }
+            let previous = self.editor
+            previous?.close()
+            let editor = StatusPageEditor(
+                monitor: monitor,
+                editingPageID: editingPageID,
+                onChange: { [weak self] in
+                    self?.rebuild()
+                },
+                presentError: { [weak self] error in
+                    self?.presentError(error)
                 }
-            },
-            onToggleComponent: editing.map { page in
-                { [weak self] name in
-                    self?.performStoreChange { try self?.monitor?.toggleComponent(id: page.id, name: name) } ?? false
-                }
-            },
-            onSetAll: editing.map { page in
-                { [weak self] enabled in
-                    self?.performStoreChange {
-                        try self?.monitor?.setAllComponents(id: page.id, enabled: enabled)
-                    } ?? false
-                }
-            },
-            onRemove: editing.map { page in
-                { [weak self] in
-                    self?.performStoreChange { try self?.monitor?.remove(id: page.id) }
-                }
+            )
+            self.editor = editor
+            // Releasing the previous dialog inside the status-item menu action
+            // over-releases AppKit view arrays (SIGSEGV in NSArray dealloc).
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.editor === editor else { return }
+                editor.show()
+                _ = previous
             }
-        )
-        self.panel = panel
-        // Releasing the previous dialog inside the status-item menu action
-        // over-releases AppKit view arrays (SIGSEGV in NSArray dealloc).
-        DispatchQueue.main.async { [weak self] in
-            _ = previous
-            self?.panel?.show()
         }
     }
 
