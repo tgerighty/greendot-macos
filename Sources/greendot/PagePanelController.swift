@@ -158,20 +158,16 @@ final class PagePanelController: NSObject, NSWindowDelegate {
             NSSound.beep()
             return
         }
-        operationInFlight = true
-        saveButton?.isEnabled = false
-        removeButton?.isEnabled = false
         let generation = operationGeneration
         let name = nameField.stringValue
+        setOperationInFlight(true)
         let save = onSave
         saveTask = Task { [weak self] in
             let saved = await save(url, name)
             await MainActor.run { [weak self] in
                 guard let self, self.operationGeneration == generation else { return }
                 self.saveTask = nil
-                self.operationInFlight = false
-                self.saveButton?.isEnabled = true
-                self.removeButton?.isEnabled = true
+                self.setOperationInFlight(false)
                 if saved {
                     self.window.close()
                 }
@@ -185,13 +181,9 @@ final class PagePanelController: NSObject, NSWindowDelegate {
 
     @objc private func removeTapped() {
         guard !operationInFlight else { return }
-        operationInFlight = true
-        saveButton?.isEnabled = false
-        removeButton?.isEnabled = false
+        setOperationInFlight(true)
         let removed = onRemove?() ?? false
-        operationInFlight = false
-        saveButton?.isEnabled = true
-        removeButton?.isEnabled = true
+        setOperationInFlight(false)
         if removed {
             window.close()
         }
@@ -201,8 +193,14 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         operationGeneration &+= 1
         saveTask?.cancel()
         saveTask = nil
-        operationInFlight = false
-        saveButton?.isEnabled = true
-        removeButton?.isEnabled = true
+        setOperationInFlight(false)
+    }
+
+    private func setOperationInFlight(_ inFlight: Bool) {
+        operationInFlight = inFlight
+        urlField.isEnabled = !inFlight
+        nameField.isEnabled = !inFlight
+        saveButton?.isEnabled = !inFlight
+        removeButton?.isEnabled = !inFlight
     }
 }

@@ -47,6 +47,7 @@ final class StatusMenuControllerTests: XCTestCase {
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         defer { NSStatusBar.system.removeStatusItem(statusItem) }
         let tracking = MenuClickOpener()
+        var scheduledWork: (() -> Void)?
         var editedIDs: [UUID] = []
         let firstPage = Self.page(name: "First")
         let controller = StatusMenuController(
@@ -54,8 +55,13 @@ final class StatusMenuControllerTests: XCTestCase {
             handlers: Self.handlers(onEdit: { editedIDs.append($0) }),
             statusItem: statusItem,
             clickOpener: tracking,
-            activateApplication: {},
-            presentMenu: { _ in }
+            activateApplication: {
+                XCTFail("Updating a tracked menu must not activate the application")
+            },
+            presentMenu: { _ in
+                XCTFail("Updating a tracked menu must not present it")
+            },
+            scheduleOnMain: { work in scheduledWork = work }
         )
         let firstMenu = try XCTUnwrap(statusItem.menu)
 
@@ -73,6 +79,7 @@ final class StatusMenuControllerTests: XCTestCase {
         XCTAssertEqual(editedIDs, [firstPage.id])
 
         tracking.menuDidClose(firstMenu)
+        try XCTUnwrap(scheduledWork)()
 
         XCTAssertFalse(statusItem.menu === firstMenu)
         XCTAssertTrue(controller.dumpMenu().contains("Latest"))
@@ -84,6 +91,7 @@ final class StatusMenuControllerTests: XCTestCase {
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         defer { NSStatusBar.system.removeStatusItem(statusItem) }
         let tracking = MenuClickOpener()
+        var scheduledWork: (() -> Void)?
         var presentedMenus: [NSMenu] = []
         var activationCount = 0
         let controller = StatusMenuController(
@@ -92,7 +100,8 @@ final class StatusMenuControllerTests: XCTestCase {
             statusItem: statusItem,
             clickOpener: tracking,
             activateApplication: { activationCount += 1 },
-            presentMenu: { presentedMenus.append($0) }
+            presentMenu: { presentedMenus.append($0) },
+            scheduleOnMain: { work in scheduledWork = work }
         )
         let trackedMenu = try XCTUnwrap(statusItem.menu)
 
@@ -106,10 +115,42 @@ final class StatusMenuControllerTests: XCTestCase {
         XCTAssertTrue(statusItem.menu === trackedMenu)
 
         tracking.menuDidClose(trackedMenu)
+        XCTAssertTrue(presentedMenus.isEmpty)
+        try XCTUnwrap(scheduledWork)()
 
         XCTAssertEqual(presentedMenus.count, 1)
         XCTAssertTrue(presentedMenus.first === statusItem.menu)
         XCTAssertTrue(controller.dumpMenu().contains("Latest"))
+    }
+
+    func testDeferredPopPresentationWaitsUntilNextMainRunLoopTurnAfterTrackingEnds() throws {
+        _ = NSApplication.shared
+        let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        defer { NSStatusBar.system.removeStatusItem(statusItem) }
+        let tracking = MenuClickOpener()
+        var presentedMenus: [NSMenu] = []
+        let didPresent = expectation(description: "deferred menu presentation")
+        let controller = StatusMenuController(
+            state: Self.state(page: Self.page(name: "Tracked")),
+            handlers: Self.handlers(),
+            statusItem: statusItem,
+            clickOpener: tracking,
+            activateApplication: {},
+            presentMenu: { menu in
+                presentedMenus.append(menu)
+                didPresent.fulfill()
+            }
+        )
+        let trackedMenu = try XCTUnwrap(statusItem.menu)
+
+        tracking.menuWillOpen(trackedMenu)
+        controller.popMenuOnScreen()
+
+        tracking.menuDidClose(trackedMenu)
+
+        XCTAssertTrue(presentedMenus.isEmpty)
+        wait(for: [didPresent], timeout: 1)
+        XCTAssertEqual(presentedMenus.count, 1)
     }
 
     func testControllersOwnIndependentMenusAndStableHandlers() throws {
@@ -157,17 +198,19 @@ final class StatusMenuControllerTests: XCTestCase {
         WatchedPage(url: URL(string: "https://status.example")!, name: name)
     }
 
-    private static func handlers(onEdit: @escaping (UUID) -> Void = { _ in }) -> StatusMenuHandlers {
+    private static func handlers(
+        onEdit: @escaping (UUID) -> Void = { _ in XCTFail("Unexpected edit action") }
+    ) -> StatusMenuHandlers {
         StatusMenuHandlers(
-            onAdd: {},
+            onAdd: { XCTFail("Unexpected add action") },
             onEdit: onEdit,
-            onRemove: { _ in },
-            onToggleNotifications: { _ in },
-            onOpen: { _ in },
-            onRefresh: {},
-            onToggleLaunchAtLogin: {},
-            onAbout: {},
-            onQuit: {}
+            onRemove: { _ in XCTFail("Unexpected remove action") },
+            onToggleNotifications: { _ in XCTFail("Unexpected notification action") },
+            onOpen: { _ in XCTFail("Unexpected open action") },
+            onRefresh: { XCTFail("Unexpected refresh action") },
+            onToggleLaunchAtLogin: { XCTFail("Unexpected launch-at-login action") },
+            onAbout: { XCTFail("Unexpected about action") },
+            onQuit: { XCTFail("Unexpected quit action") }
         )
     }
 }

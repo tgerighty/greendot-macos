@@ -44,22 +44,8 @@ final class StatusPageEditor {
                 guard let self else { return false }
                 return await self.save(pageID: currentPageID, url: url, name: name)
             },
-            onToggleComponent: currentPageID.map { pageID in
-                { [weak self] name in
-                    guard let self else { return false }
-                    return self.performChange {
-                        try self.monitor.toggleComponent(id: pageID, name: name)
-                    }
-                }
-            },
-            onSetAll: currentPageID.map { pageID in
-                { [weak self] enabled in
-                    guard let self else { return false }
-                    return self.performChange {
-                        try self.monitor.setAllComponents(id: pageID, enabled: enabled)
-                    }
-                }
-            },
+            onToggleComponent: toggleComponentHandler(pageID: currentPageID),
+            onSetAll: setAllComponentsHandler(pageID: currentPageID),
             onRemove: currentPageID.map { pageID in
                 { [weak self] in
                     guard let self else { return false }
@@ -85,6 +71,26 @@ final class StatusPageEditor {
 }
 
 private extension StatusPageEditor {
+    func toggleComponentHandler(pageID: UUID?) -> ((String) -> Bool)? {
+        guard let pageID else { return nil }
+        return { [weak self] name in
+            guard let self else { return false }
+            return self.performChange {
+                try self.monitor.toggleComponent(id: pageID, name: name)
+            }
+        }
+    }
+
+    func setAllComponentsHandler(pageID: UUID?) -> ((Bool) -> Bool)? {
+        guard let pageID else { return nil }
+        return { [weak self] enabled in
+            guard let self else { return false }
+            return self.performChange {
+                try self.monitor.setAllComponents(id: pageID, enabled: enabled)
+            }
+        }
+    }
+
     func save(pageID: UUID?, url: URL, name: String?) async -> Bool {
         do {
             if let pageID {
