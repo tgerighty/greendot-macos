@@ -295,7 +295,7 @@ private struct FailingHTTPClient: HTTPClient {
 }
 
 private struct CancellationHTTPClient: HTTPClient {
-    func get(_ url: URL) async throws -> (Data, Int) {
+    func get(_: URL) async throws -> (Data, Int) {
         throw CancellationError()
     }
 }
