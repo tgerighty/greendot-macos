@@ -2,10 +2,6 @@ import AppKit
 import Foundation
 
 enum BuildInfo {
-    static var gitHash: String {
-        gitHash(from: Bundle.main.infoDictionary)
-    }
-
     static func gitHash(from info: [String: Any]?) -> String {
         let hash = info?["GitCommitHash"] as? String ?? ""
         return hash.isEmpty ? "unknown" : hash
