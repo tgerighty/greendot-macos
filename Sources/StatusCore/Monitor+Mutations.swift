@@ -15,14 +15,18 @@ extension Monitor {
     }
 
     public func enableLaunchAtLoginOnFirstRun() {
-        let already = withStateLock { config.didSetLaunchAtLogin }
-        guard !already else { return }
-        do {
-            try commitWatchedPageMutation { $0.didSetLaunchAtLogin = true }
-        } catch {
-            return
-        }
-        onLaunchAtLoginEnable?()
+        let didChange: Bool = {
+            transitionLock.lock()
+            defer { transitionLock.unlock() }
+            guard !withStateLock({ config.didSetLaunchAtLogin }) else { return false }
+            do {
+                try commitWatchedPageMutationLocked { $0.didSetLaunchAtLogin = true }
+                return true
+            } catch {
+                return false
+            }
+        }()
+        if didChange { onLaunchAtLoginEnable?() }
     }
 
     public func add(url: URL, name: String?) async throws {
@@ -119,6 +123,13 @@ extension Monitor {
         transitionLock.lock()
         defer { transitionLock.unlock() }
 
+        try commitWatchedPageMutationLocked(invalidatingBodyFor: pageID, body)
+    }
+
+    private func commitWatchedPageMutationLocked(
+        invalidatingBodyFor pageID: UUID? = nil,
+        _ body: (inout AppConfig) throws -> Void
+    ) throws {
         var next = withStateLock { config }
         try body(&next)
         try store.save(next)
