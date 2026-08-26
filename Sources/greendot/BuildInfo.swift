@@ -19,8 +19,14 @@ enum AboutPanel {
         [.version: gitHash]
     }
 
-    static func show(gitHash: String = BuildInfo.shortHash(from: Bundle.main.infoDictionary)) {
+    @MainActor
+    static func show(gitHash: String) {
         NSApp.activate(ignoringOtherApps: true)
         NSApp.orderFrontStandardAboutPanel(options: options(gitHash: gitHash))
+    }
+
+    @MainActor
+    static func show() {
+        show(gitHash: BuildInfo.shortHash(from: Bundle.main.infoDictionary))
     }
 }

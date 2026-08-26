@@ -1,6 +1,7 @@
 import XCTest
 @testable import greendot
 
+@MainActor
 final class CopyrightTests: XCTestCase {
     func testLicenseFileReservesAllRightsToTerryGerighty() throws {
         let body = try String(contentsOf: repoRoot.appendingPathComponent("LICENSE"), encoding: .utf8)
