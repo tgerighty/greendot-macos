@@ -1,6 +1,7 @@
 import AppKit
 import StatusCore
 
+@MainActor
 enum StatusDot {
     private struct Key: Hashable {
         var severity: Severity
