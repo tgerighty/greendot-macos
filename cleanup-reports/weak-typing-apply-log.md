@@ -3,7 +3,7 @@
 Date: 2026-08-26
 Branch: `cleanup/apply-20260826-weak-typing`
 Worktree: `/Users/terry.gerighty/coding/greendot.cleanup-apply-20260826-weak-typing`
-Base: `b7769c7` (`main` before this pass)
+Rebased base: `fd2a667` (`main` before merge)
 
 ## Scope and gate
 
@@ -19,7 +19,7 @@ The initial tree was clean. Baseline checks passed:
 - `swift build`: PASS.
 - `swift test`: PASS, 150 tests passed, 1 benchmark test skipped, 0 failed.
 - `swift build -Xswiftc -swift-version -Xswiftc 6`: RED as required.
-- RED commit: `aed488b` (`[TEST] Capture strict Swift 6 isolation failures`).
+- RED commit: `c9d6465` (`[TEST] Capture strict Swift 6 isolation failures`).
 
 The initial strict Swift 6 RED had these source diagnostic counts (the
 compiler printed duplicate module diagnostics): AppDelegate 2 errors and 3
@@ -42,14 +42,14 @@ UITestDriver.swift:63:31: error: non-Sendable 'String'-typed result can not be r
 
 | Item | Recommendation | Disposition | Evidence / reason |
 |---|---|---|---|
-| `typing-001` | STRENGTHEN | **APPLIED** | `compactMap` creates `(groupID: String, row: Row)` pairs; dictionary grouping keeps input row order. GREEN `2adabad`. |
+| `typing-001` | STRENGTHEN | **APPLIED** | `compactMap` creates `(groupID: String, row: Row)` pairs; dictionary grouping keeps input row order. GREEN `6fb3b0e`. |
 | `typing-002` | REVIEW | **SKIPPED** | Verification was partial and `verified: false`; no `ProviderProbe.swift` edit. |
-| `typing-003` | STRENGTHEN | **APPLIED** | Menu test casts `representedObject as? TargetAction` and calls `invoke()`. GREEN `2adabad`. |
+| `typing-003` | STRENGTHEN | **APPLIED** | Menu test casts `representedObject as? TargetAction` and calls `invoke()`. GREEN `6fb3b0e`. |
 | `typing-004` | STRENGTHEN | **SKIPPED** | Likely, `verified: false`; no PageStore type redesign. |
-| `typing-005` | ISOLATE | **APPLIED** | `StatusDot` is `@MainActor`; cache reuse and rendering stay unchanged. Toast attachment/content paths use the actor boundary. GREEN `d5847aa`. |
+| `typing-005` | ISOLATE | **APPLIED** | `StatusDot` is `@MainActor`; cache reuse and rendering stay unchanged. Toast attachment/content paths use the actor boundary. GREEN `e0544f8`. |
 | `typing-006` | ISOLATE | **DEFERRED** | `AppDelegate.swift` is owned by the defensive pass. Exact serial plan is in `weak-typing-deferred.md`. |
-| `typing-007` | ISOLATE | **APPLIED** | `PagePanelController` is `@MainActor`; weak task capture, cancellation, generation gating, delegate clearing, and panel lifecycle remain. GREEN `455fc8c`. |
-| `typing-008` | ISOLATE | **PARTIALLY APPLIED** | ComponentPicker, UITestDriver, AppEditMenu, and MenuClickOpener are actor-isolated. `AboutPanel.show` and its required AppDelegate call-site propagation are deferred with `typing-006`; BuildInfo is restored to base. GREEN `f53a7be`; correction `c682fc8`. |
+| `typing-007` | ISOLATE | **APPLIED** | `PagePanelController` is `@MainActor`; weak task capture, cancellation, generation gating, delegate clearing, and panel lifecycle remain. GREEN `e59ddaa`. |
+| `typing-008` | ISOLATE | **PARTIALLY APPLIED** | ComponentPicker, UITestDriver, AppEditMenu, and MenuClickOpener are actor-isolated. `AboutPanel.show` and its required AppDelegate call-site propagation are deferred with `typing-006`; BuildInfo is restored to base. GREEN `75b569b`; correction `461c2e7`. |
 | `typing-009` | REVIEW | **SKIPPED** | Likely, `verified: false`; Monitor lock/sendability design was not changed. |
 | `typing-010` | STRENGTHEN | **SKIPPED** | Likely, `verified: false`; callback defaults were not changed. |
 | `typing-011` | STRENGTHEN | **SKIPPED** | Likely, `verified: false`; poll outcome was not redesigned. |
@@ -65,15 +65,15 @@ UITestDriver.swift:63:31: error: non-Sendable 'String'-typed result can not be r
 | `typing-021` | KEEP | **RETAINED** | Non-fatal diagnostic and cleanup `try?` calls remain unchanged. |
 | `typing-022` | KEEP | **RETAINED** | Domain optionals and migration defaults remain unchanged. |
 
-RED commit for this pass: `aed488b`.
+RED commit for this pass: `c9d6465`.
 
 GREEN commits:
 
-- `2adabad` — direct typing cleanup (`typing-001`, `typing-003`).
-- `d5847aa` — StatusDot actor group (`typing-005`).
-- `455fc8c` — PagePanelController actor group (`typing-007`).
-- `f53a7be` — AppKit helper actor group (`typing-008`, partial).
-- `c682fc8` — restore BuildInfo and defer AboutPanel actor propagation.
+- `6fb3b0e` — direct typing cleanup (`typing-001`, `typing-003`).
+- `e0544f8` — StatusDot actor group (`typing-005`).
+- `e59ddaa` — PagePanelController actor group (`typing-007`).
+- `75b569b` — AppKit helper actor group (`typing-008`, partial).
+- `461c2e7` — restore BuildInfo and defer AboutPanel actor propagation.
 
 ## Actor boundary notes
 
@@ -93,34 +93,35 @@ captures or change the AppKit monitor boundary.
 
 ## Verification after each group
 
-### Direct typing group (`2adabad`)
+### Direct typing group (`6fb3b0e`)
 
 - `swift test --filter ParserTests`: PASS, 8 tests.
 - `swift test --filter MenuBuilderTests`: PASS, 9 tests.
 - `swift build`: PASS.
 - `swift test`: PASS, 150 passed, 1 skipped, 0 failed.
 
-### StatusDot group (`d5847aa`)
+### StatusDot group (`e0544f8`)
 
 - `swift test --filter PanelLifecycleTests`: PASS, 15 tests.
 - `swift test --filter SystemToastDeliveryTests`: PASS, 4 tests.
 - `swift build`: PASS.
 - `swift test`: PASS, 150 passed, 1 skipped, 0 failed.
 
-### Page panel group (`455fc8c`)
+### Page panel group (`e59ddaa`)
 
 - `swift test --filter PanelLifecycleTests`: PASS, 15 tests.
 - `swift test --filter StatusPageEditorTests`: PASS, 7 tests.
 - `swift build`: PASS.
 - `swift test`: PASS, 150 passed, 1 skipped, 0 failed.
 
-### AppKit helper group (`f53a7be`, corrected by `c682fc8`)
+### AppKit helper group (`75b569b`, corrected by `461c2e7`)
 
 Focused helper tests passed:
 
 - PanelLifecycleTests: 15; StatusMenuControllerTests: 7;
   CopyrightTests: 4; AboutTests: 4.
-- Normal build and full tests passed 150/1 skipped after `c682fc8`.
+- Normal build and full tests passed 150/1 skipped before rebase, then 158/1
+  skipped after rebase onto the defensive-programming and LOC results.
 
 The strict probe after the correction reports only the deferred BuildInfo
 warning and AppDelegate diagnostics:
@@ -145,9 +146,8 @@ deferred AppDelegate diagnostics.
 
 ## Final checks
 
-- `swiftlint lint --format json`: PASS, JSON produced; 11 existing warnings,
-  0 serious findings. The warnings are in ProviderProbe, MonitorRefresh tests,
-  and PerformanceHarnessTests. `PerformanceHarnessTests.swift` was not edited.
+- `swiftlint lint --reporter json`: PASS, JSON produced; 8 existing findings,
+  0 serious findings. No new finding was introduced by this branch.
 - `git diff --check`: PASS for the source/test changes and report edits.
 - Source/test change from base: 11 allowlisted source/test files,
   25 insertions and 8 deletions. BuildInfo is unchanged from base. The two
