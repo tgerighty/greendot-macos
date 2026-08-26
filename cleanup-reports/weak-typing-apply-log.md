@@ -49,7 +49,7 @@ UITestDriver.swift:63:31: error: non-Sendable 'String'-typed result can not be r
 | `typing-005` | ISOLATE | **APPLIED** | `StatusDot` is `@MainActor`; cache reuse and rendering stay unchanged. Toast attachment/content paths use the actor boundary. GREEN `d5847aa`. |
 | `typing-006` | ISOLATE | **DEFERRED** | `AppDelegate.swift` is owned by the defensive pass. Exact serial plan is in `weak-typing-deferred.md`. |
 | `typing-007` | ISOLATE | **APPLIED** | `PagePanelController` is `@MainActor`; weak task capture, cancellation, generation gating, delegate clearing, and panel lifecycle remain. GREEN `455fc8c`. |
-| `typing-008` | ISOLATE | **APPLIED** | ComponentPicker, UITestDriver, AppEditMenu, AboutPanel.show, and MenuClickOpener are actor-isolated. Pure BuildInfo/AboutPanel option calculations stay nonisolated. GREEN `f53a7be`. |
+| `typing-008` | ISOLATE | **PARTIALLY APPLIED** | ComponentPicker, UITestDriver, AppEditMenu, and MenuClickOpener are actor-isolated. `AboutPanel.show` and its required AppDelegate call-site propagation are deferred with `typing-006`; BuildInfo is restored to base. GREEN `f53a7be`; correction `c682fc8`. |
 | `typing-009` | REVIEW | **SKIPPED** | Likely, `verified: false`; Monitor lock/sendability design was not changed. |
 | `typing-010` | STRENGTHEN | **SKIPPED** | Likely, `verified: false`; callback defaults were not changed. |
 | `typing-011` | STRENGTHEN | **SKIPPED** | Likely, `verified: false`; poll outcome was not redesigned. |
@@ -72,15 +72,16 @@ GREEN commits:
 - `2adabad` — direct typing cleanup (`typing-001`, `typing-003`).
 - `d5847aa` — StatusDot actor group (`typing-005`).
 - `455fc8c` — PagePanelController actor group (`typing-007`).
-- `f53a7be` — AppKit helper actor group (`typing-008`).
+- `f53a7be` — AppKit helper actor group (`typing-008`, partial).
+- `c682fc8` — restore BuildInfo and defer AboutPanel actor propagation.
 
 ## Actor boundary notes
 
-`AboutPanel.options`, `BuildInfo.gitHash`, and `BuildInfo.shortHash` remain
-nonisolated pure calculations. Both `AboutPanel.show()` and
-`AboutPanel.show(gitHash:)` are direct `@MainActor` methods. The current
-AppDelegate call site is intentionally deferred, and is recorded as
-`AppDelegate.swift:98:20` in the strict probe.
+`AboutPanel.options`, `BuildInfo.gitHash`, `BuildInfo.shortHash`, and
+`AboutPanel.show` remain in the base form. The `AboutPanel.show` actor boundary
+and its AppDelegate call site are deferred with `typing-006`; no
+`assumeIsolated` or async wrapper is used. BuildInfo has no effective diff from
+the base branch.
 
 `MenuClickOpener` needs `override nonisolated init()` because
 `StatusMenuController` has a default `MenuClickOpener()` argument whose
@@ -113,35 +114,31 @@ captures or change the AppKit monitor boundary.
 - `swift build`: PASS.
 - `swift test`: PASS, 150 passed, 1 skipped, 0 failed.
 
-### AppKit helper group (`f53a7be`)
+### AppKit helper group (`f53a7be`, corrected by `c682fc8`)
 
-Before the final direct-actor correction, focused helper tests passed:
+Focused helper tests passed:
 
 - PanelLifecycleTests: 15; StatusMenuControllerTests: 7;
   CopyrightTests: 4; AboutTests: 4.
-- Normal build and full tests passed 150/1 skipped with the same actor group.
+- Normal build and full tests passed 150/1 skipped after `c682fc8`.
 
-After the required correction, `AboutPanel.show()` is directly `@MainActor`
-and `MenuClickOpener` uses `isolated deinit`. A fresh `swift build` and
-`swift test` cannot complete on this unmerged branch because the forbidden
-AppDelegate call site now reports:
+The strict probe after the correction reports only the deferred BuildInfo
+warning and AppDelegate diagnostics:
 
 ```text
-Sources/greendot/AppDelegate.swift:98:20: error: call to main actor-isolated static method 'show()' in a synchronous nonisolated context [#ActorIsolatedCall]
-```
-
-This is the planned `typing-006` serial catch-up, not an owned-file error.
-The strict probe after the correction reports only AppDelegate diagnostics:
-
-```text
+BuildInfo.swift:23:15: warning: call to main actor-isolated instance method 'activate(ignoringOtherApps:)' in a synchronous nonisolated context [#ActorIsolatedCall]
+BuildInfo.swift:23:9: warning: main actor-isolated var 'NSApp' can not be referenced from a nonisolated context
+BuildInfo.swift:24:15: warning: call to main actor-isolated instance method 'orderFrontStandardAboutPanel(options:)' in a synchronous nonisolated context [#ActorIsolatedCall]
+BuildInfo.swift:24:9: warning: main actor-isolated var 'NSApp' can not be referenced from a nonisolated context
 AppDelegate.swift:12:9: error: main actor-isolated default value in a nonisolated context
 AppDelegate.swift:60:30: warning: capture of 'self' with non-Sendable type 'AppDelegate?' in a '@Sendable' closure [#SendableClosureCaptures]
 AppDelegate.swift:60:30: warning: capture of 'self' with non-Sendable type 'AppDelegate?' in an isolated closure
 AppDelegate.swift:65:27: warning: capture of 'self' with non-Sendable type 'AppDelegate?' in a '@Sendable' closure [#SendableClosureCaptures]
-AppDelegate.swift:98:20: error: call to main actor-isolated static method 'show()' in a synchronous nonisolated context [#ActorIsolatedCall]
 ```
 
-No strict error remains in an owned file.
+The strict command returned exit code 1. The AppDelegate diagnostics and the
+four known BuildInfo warnings are deferred; there is no strict error in an
+owned file.
 
 The post-correction strict command returned exit code 1, as expected for the
 deferred AppDelegate diagnostics.
@@ -152,8 +149,9 @@ deferred AppDelegate diagnostics.
   0 serious findings. The warnings are in ProviderProbe, MonitorRefresh tests,
   and PerformanceHarnessTests. `PerformanceHarnessTests.swift` was not edited.
 - `git diff --check`: PASS for the source/test changes and report edits.
-- Source/test change from base: 12 allowlisted source/test files,
-  32 insertions and 7 deletions. The two report files are documentation-only.
+- Source/test change from base: 11 allowlisted source/test files,
+  25 insertions and 8 deletions. BuildInfo is unchanged from base. The two
+  report files are documentation-only.
 - `AppDelegate.swift` unchanged.
 - `PerformanceHarnessTests.swift` unchanged.
 - Worktree is clean after the documentation commit.

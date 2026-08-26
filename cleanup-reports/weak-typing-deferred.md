@@ -25,10 +25,10 @@ did not edit `AppDelegate.swift`.
    Keep Monitor network work outside the UI actor and return its typed result
    to AppDelegate. Do not remove cancellation, weak ownership, or the poll
    generation gate.
-4. Keep `AboutPanel.show()` as a direct `@MainActor` call. After AppDelegate
-   is isolated, check whether its call site can use the actor method directly;
-   remove no dynamic AppKit boundary unless the compiler and focused tests
-   prove that the synchronous behaviour is unchanged.
+4. In the same serial catch-up, add a direct `@MainActor` boundary to
+   `AboutPanel.show` and update its AppDelegate call site after AppDelegate is
+   isolated. Keep the synchronous AppKit behaviour. Do not use
+   `MainActor.assumeIsolated`, an async wrapper, or a changed dynamic boundary.
 5. Run `swift test --filter AppDelegateRefreshErrorTests`,
    `swift test --filter PanelLifecycleTests`,
    `swift test --filter StatusMenuControllerTests`,
@@ -42,20 +42,25 @@ did not edit `AppDelegate.swift`.
 
 ## Current evidence for the catch-up
 
-After the helper actor group, the strict probe reports only AppDelegate source
-diagnostics. The exact source messages are:
+After the helper actor group and BuildInfo restoration, the strict probe
+reports the known BuildInfo warnings and AppDelegate diagnostics. The exact
+source messages are:
 
 ```text
+Sources/greendot/BuildInfo.swift:23:15: warning: call to main actor-isolated instance method 'activate(ignoringOtherApps:)' in a synchronous nonisolated context [#ActorIsolatedCall]
+Sources/greendot/BuildInfo.swift:23:9: warning: main actor-isolated var 'NSApp' can not be referenced from a nonisolated context
+Sources/greendot/BuildInfo.swift:24:15: warning: call to main actor-isolated instance method 'orderFrontStandardAboutPanel(options:)' in a synchronous nonisolated context [#ActorIsolatedCall]
+Sources/greendot/BuildInfo.swift:24:9: warning: main actor-isolated var 'NSApp' can not be referenced from a nonisolated context
 Sources/greendot/AppDelegate.swift:12:9: error: main actor-isolated default value in a nonisolated context
 Sources/greendot/AppDelegate.swift:60:30: warning: capture of 'self' with non-Sendable type 'AppDelegate?' in a '@Sendable' closure [#SendableClosureCaptures]
 Sources/greendot/AppDelegate.swift:60:30: warning: capture of 'self' with non-Sendable type 'AppDelegate?' in an isolated closure
 Sources/greendot/AppDelegate.swift:65:27: warning: capture of 'self' with non-Sendable type 'AppDelegate?' in a '@Sendable' closure [#SendableClosureCaptures]
-Sources/greendot/AppDelegate.swift:98:20: error: call to main actor-isolated static method 'show()' in a synchronous nonisolated context [#ActorIsolatedCall]
 ```
 
 The compiler prints the same module diagnostics more than once. No error is
 reported in StatusDot, PagePanelController, ComponentPicker, UITestDriver,
-AppEditMenu, BuildInfo, MenuClickOpener, or SystemToastDelivery.
+AppEditMenu, MenuClickOpener, or SystemToastDelivery. The four BuildInfo
+warnings are the known deferred `AboutPanel.show` boundary.
 
 The post-correction strict command returned exit code 1, as expected until the
 serial AppDelegate catch-up is complete.
