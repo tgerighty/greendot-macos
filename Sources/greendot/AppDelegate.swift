@@ -245,7 +245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @MainActor
-    private func observe(_ name: String, handle: @escaping @MainActor (String) -> Void) {
+    private func observe(_ name: String, handle: @escaping @MainActor @Sendable (String) -> Void) {
         DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("com.tgerighty.greendot.\(name)"),
             object: nil,
