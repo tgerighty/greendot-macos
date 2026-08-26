@@ -294,10 +294,13 @@ extension ProbeAndMonitorTests {
     }
 
     private func assertProbeError(_ expected: ProbeError, status: Int) async {
-        let client = MapHTTPClient(byPath: [
-            "/api/v2/summary.json": (Data(), status)
-        ])
         let pageURL = testURL(host: "example.com")
+        let summaryURL = pageURL
+            .appendingPathComponent("api")
+            .appendingPathComponent("v2")
+            .appendingPathComponent("summary.json")
+        var client = MapHTTPClient()
+        client.byURL[summaryURL.absoluteString] = (Data(), status)
 
         do {
             _ = try await ProviderProbe.probe(
