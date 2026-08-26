@@ -17,11 +17,11 @@ The untouched baseline passed:
 
 The final pre-change reference gate used these searches:
 
-+ `rg --hidden --glob '!.git' --glob '!.build' -n -S 'BuildInfo\.gitHash|gitHash|shortHash' .`
-+ `rg --hidden --glob '!.git' --glob '!.build' -n -S 'BuildInfo\.gitHash|\.gitHash' .`
-+ `git grep -n -I -E 'BuildInfo\.gitHash|gitHash|shortHash' -- . ':!.build'`
-+ `git log --all --full-history --oneline -G 'BuildInfo\.gitHash|\.gitHash' --`
-+ `git log --all --full-history --oneline -S 'static var gitHash' -- Sources/greendot/BuildInfo.swift`
+- `rg --hidden --glob '!.git' --glob '!.build' -n -S 'BuildInfo\.gitHash|gitHash|shortHash' .`
+- `rg --hidden --glob '!.git' --glob '!.build' -n -S 'BuildInfo\.gitHash|\.gitHash' .`
+- `git grep -n -I -E 'BuildInfo\.gitHash|gitHash|shortHash' -- . ':!.build'`
+- `git log --all --full-history --oneline -G 'BuildInfo\.gitHash|\.gitHash' --`
+- `git log --all --full-history --oneline -S 'static var gitHash' -- Sources/greendot/BuildInfo.swift`
 
 The executable source and test matches were only `gitHash(from:)` and
 `shortHash(from:)`. There was no zero-argument computed-property use, selector,
