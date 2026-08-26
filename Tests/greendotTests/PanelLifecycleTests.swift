@@ -201,6 +201,29 @@ final class PanelLifecycleTests: XCTestCase {
         XCTAssertTrue(monitor.pages.isEmpty)
     }
 
+    func testPollIntervalUsesDefaultForInvalidValues() {
+        let invalidValues: [String?] = [
+            nil,
+            "",
+            "not-a-number",
+            "0",
+            "-10",
+            "NaN",
+            "infinity",
+            "-infinity"
+        ]
+
+        for value in invalidValues {
+            XCTAssertEqual(AppDelegate.pollInterval(from: value), 60, "Expected default for \(value ?? "missing")")
+        }
+    }
+
+    func testPollIntervalAcceptsFinitePositiveValues() {
+        for value in ["0.25", "60", "3600"] {
+            XCTAssertEqual(AppDelegate.pollInterval(from: value), Double(value))
+        }
+    }
+
     func testLoadMonitorPresentsCorruptStoreErrorAndLeavesFile() throws {
         let (dir, configURL) = try writeTempConfig(Data("{".utf8))
         defer { try? FileManager.default.removeItem(at: dir) }
