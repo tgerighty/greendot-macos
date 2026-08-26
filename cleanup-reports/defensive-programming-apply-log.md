@@ -147,8 +147,20 @@ The following table gives a disposition for every record in the assessment. Unve
 
 - Final `swift build`: passed.
 - Final full `swift test`: 158 passed, 1 intentional skip, 0 failures.
-- Final `swiftlint lint --format json`: exit 0; 13 warning violations in 61 files and 0 serious violations. The findings are existing size/style issues, including the expected `ProviderProbe` size findings and test type-body size findings. No lint fix was in scope.
+- Final `swiftlint lint --format json`: exit 0; 11 warning violations in 61 files and 0 serious violations. This matches the Phase 2 baseline. The findings are existing size/style issues, including the expected `ProviderProbe` size findings and unrelated test findings. No lint fix was in scope.
 - Final `git diff --check`: passed with no output.
 - Final worktree: clean after the apply-log commit.
+
+## Post-merge lint correction
+
+The first pre-merge lint comparison found two new `type_body_length` warnings caused only by the added tests. The tests were moved into focused same-file extensions in `ComponentToggleTests.swift` and `PanelLifecycleTests.swift`. This changed no production behavior and kept the test names and coverage unchanged.
+
+Correction evidence:
+
+- Focused defensive tests: passed.
+- `swift build`: passed.
+- Full `swift test`: 158 passed, 1 skipped, 0 failures.
+- `swiftlint lint --format json`: 11 warnings, 0 serious findings; no new findings versus the Phase 2 baseline.
+- `git diff --check`: passed.
 
 No merge, push, or pull request was performed.

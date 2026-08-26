@@ -171,59 +171,6 @@ final class PanelLifecycleTests: XCTestCase {
         XCTAssertFalse(AppDelegate.shouldPoll(loadSucceeded: false))
     }
 
-    func testSeedFailureIsReportedWithoutFailingStartup() async throws {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let monitor = Monitor(store: PageStore(directory: directory), client: MapHTTPClient())
-        try monitor.load()
-        let delegate = AppDelegate()
-        var reported: Error?
-        delegate.seedFailureDiagnostic = { reported = $0 }
-
-        await delegate.maybeSeedOpenAI(monitor: monitor, loadSucceeded: true, skipSeed: false)
-
-        XCTAssertEqual(reported as? ProbeError, .unsupported)
-        XCTAssertTrue(monitor.pages.isEmpty)
-    }
-
-    func testSeedCancellationIsNotReported() async throws {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let monitor = Monitor(store: PageStore(directory: directory), client: CancellationHTTPClient())
-        try monitor.load()
-        let delegate = AppDelegate()
-        var reported: Error?
-        delegate.seedFailureDiagnostic = { reported = $0 }
-
-        await delegate.maybeSeedOpenAI(monitor: monitor, loadSucceeded: true, skipSeed: false)
-
-        XCTAssertNil(reported)
-        XCTAssertTrue(monitor.pages.isEmpty)
-    }
-
-    func testPollIntervalUsesDefaultForInvalidValues() {
-        let invalidValues: [String?] = [
-            nil,
-            "",
-            "not-a-number",
-            "0",
-            "-10",
-            "NaN",
-            "infinity",
-            "-infinity"
-        ]
-
-        for value in invalidValues {
-            XCTAssertEqual(AppDelegate.pollInterval(from: value), 60, "Expected default for \(value ?? "missing")")
-        }
-    }
-
-    func testPollIntervalAcceptsFinitePositiveValues() {
-        for value in ["0.25", "60", "3600"] {
-            XCTAssertEqual(AppDelegate.pollInterval(from: value), Double(value))
-        }
-    }
-
     func testLoadMonitorPresentsCorruptStoreErrorAndLeavesFile() throws {
         let (dir, configURL) = try writeTempConfig(Data("{".utf8))
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -317,6 +264,61 @@ final class PanelLifecycleTests: XCTestCase {
                 isUnreachable: false
             )
         )
+    }
+}
+
+extension PanelLifecycleTests {
+    func testSeedFailureIsReportedWithoutFailingStartup() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let monitor = Monitor(store: PageStore(directory: directory), client: MapHTTPClient())
+        try monitor.load()
+        let delegate = AppDelegate()
+        var reported: Error?
+        delegate.seedFailureDiagnostic = { reported = $0 }
+
+        await delegate.maybeSeedOpenAI(monitor: monitor, loadSucceeded: true, skipSeed: false)
+
+        XCTAssertEqual(reported as? ProbeError, .unsupported)
+        XCTAssertTrue(monitor.pages.isEmpty)
+    }
+
+    func testSeedCancellationIsNotReported() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let monitor = Monitor(store: PageStore(directory: directory), client: CancellationHTTPClient())
+        try monitor.load()
+        let delegate = AppDelegate()
+        var reported: Error?
+        delegate.seedFailureDiagnostic = { reported = $0 }
+
+        await delegate.maybeSeedOpenAI(monitor: monitor, loadSucceeded: true, skipSeed: false)
+
+        XCTAssertNil(reported)
+        XCTAssertTrue(monitor.pages.isEmpty)
+    }
+
+    func testPollIntervalUsesDefaultForInvalidValues() {
+        let invalidValues: [String?] = [
+            nil,
+            "",
+            "not-a-number",
+            "0",
+            "-10",
+            "NaN",
+            "infinity",
+            "-infinity"
+        ]
+
+        for value in invalidValues {
+            XCTAssertEqual(AppDelegate.pollInterval(from: value), 60, "Expected default for \(value ?? "missing")")
+        }
+    }
+
+    func testPollIntervalAcceptsFinitePositiveValues() {
+        for value in ["0.25", "60", "3600"] {
+            XCTAssertEqual(AppDelegate.pollInterval(from: value), Double(value))
+        }
     }
 }
 
