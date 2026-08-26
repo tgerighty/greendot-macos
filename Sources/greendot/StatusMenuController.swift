@@ -4,7 +4,7 @@ import StatusCore
 typealias ScheduledMainActorWork = @MainActor @Sendable () -> Void
 
 @MainActor
-final class StatusMenuController: NSObject {
+final class StatusMenuController {
     private let statusItem: NSStatusItem
     private let clickOpener: MenuClickOpener
     private let builder: MenuBuilder
@@ -34,7 +34,6 @@ final class StatusMenuController: NSObject {
         self.activateApplication = activateApplication
         self.presentMenu = presentMenu
         self.scheduleOnMain = scheduleOnMain
-        super.init()
         configureStatusItem()
         clickOpener.onTrackingEnded = { [weak self] in
             self?.scheduleDeferredMenuWork()
