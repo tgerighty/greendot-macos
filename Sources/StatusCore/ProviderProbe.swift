@@ -96,15 +96,19 @@ public enum ProviderProbe {
     }
 
     private struct ProbeFlags {
-        var sawHTTP = false
         var sawNetworkError = false
+
+        mutating func recordHTTP(status: Int) {
+            if ProviderProbe.isReachabilityStatus(status) {
+                sawNetworkError = true
+            }
+        }
 
         mutating func record(_ result: AttemptResult) -> ProbeHit? {
             switch result {
             case .hit(let hit):
                 return hit
             case .miss:
-                sawHTTP = true
                 return nil
             case .networkError:
                 sawNetworkError = true
@@ -113,11 +117,12 @@ public enum ProviderProbe {
         }
 
         var finalError: ProbeError {
-            if !sawHTTP && sawNetworkError {
-                return .unreachable
-            }
-            return .unsupported
+            sawNetworkError ? .unreachable : .unsupported
         }
+    }
+
+    private static func isReachabilityStatus(_ status: Int) -> Bool {
+        status == 0 || status == 429 || (500...599).contains(status)
     }
 
     private static func standardAttempt(
@@ -155,7 +160,9 @@ public enum ProviderProbe {
         do {
             let (data, status) = try await client.get(url)
             try Task.checkCancellation()
-            guard status == 200 else { return .miss }
+            guard status == 200 else {
+                return isReachabilityStatus(status) ? .networkError : .miss
+            }
             if let previousBody, let previousSnapshot,
                !previousSnapshot.isUnreachable,
                data == previousBody {
@@ -186,7 +193,7 @@ public enum ProviderProbe {
             do {
                 let htmlHit = try await context.client.get(context.base)
                 try Task.checkCancellation()
-                flags.sawHTTP = true
+                flags.recordHTTP(status: htmlHit.1)
                 if htmlHit.1 == 200,
                    let html = String(data: htmlHit.0, encoding: .utf8),
                    html.lowercased().contains("statuspal"),
