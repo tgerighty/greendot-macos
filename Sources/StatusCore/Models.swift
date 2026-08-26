@@ -125,7 +125,9 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
     }
 
     public var displaySeverity: Severity {
-        if snapshot?.isUnreachable == true { return .grey }
+        guard let snapshot else { return .grey }
+        if snapshot.isUnreachable { return .grey }
+        if snapshot.components.isEmpty { return snapshot.overall }
         return Aggregator.severity(from: leaves(enabledComponents))
     }
 
