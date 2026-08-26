@@ -114,7 +114,7 @@ final class MenuBuilder {
             }
         } else if snapshot?.isUnreachable != true {
             let row = NSMenuItem(
-                title: overallText(page.displaySeverity),
+                title: page.displaySeverity.displayName,
                 action: nil,
                 keyEquivalent: ""
             )
@@ -180,15 +180,6 @@ final class MenuBuilder {
         }
         TargetAction.install(row) { onOpen(url) }
         return row
-    }
-
-    private func overallText(_ severity: Severity) -> String {
-        switch severity {
-        case .green: return "Operational"
-        case .yellow: return "Degraded"
-        case .red: return "Major outage"
-        case .grey: return "Unreachable"
-        }
     }
 
     private func actionItem(
