@@ -44,8 +44,58 @@ dedup-009, and dedup-010 remain skipped because they are `verified:false` and
 
 ## Handoff rule
 
-The serial catch-up agent runs after type consolidation merges. It must
-re-read the assessment and the resulting type-consolidation diff, then
-re-verify the five deferred records before applying any source or test edit.
-This file records deferral only; it is not evidence that any consolidation is
-complete.
+The serial catch-up agent ran after type consolidation merged. It re-read the
+assessment and the resulting type-consolidation diff, then re-verified the
+five deferred records before applying any source or test edit. The rest of
+this file records the final result of that handoff.
+
+## Handoff and catch-up result
+
+This file recorded the phase-2 file collision. Type consolidation owned the
+overlapping files, so five verified records were deferred. The serial
+catch-up ran after the type-consolidation merge on current main
+`531c3b1b649ea0aef9204e8b10ff963d712a3d23`.
+
+Catch-up RED commit:
+`65f43d8829e22566a6abe8d98a95ca331d793a20`.
+
+The catch-up result is **4 APPLIED, 1 RESOLVED-UPSTREAM, 6 SKIPPED**.
+
+## Deferred records
+
+| Finding | Final status | Catch-up result | RED commit | GREEN commit |
+| --- | --- | --- | --- | --- |
+| dedup-001 | RESOLVED-UPSTREAM | `Severity.displayName` is used by MenuBuilder and ToastPolicy. ToastPolicy keeps the unreachable check. Statuspal keeps scheduled `Maintenance`. | `65f43d8829e22566a6abe8d98a95ca331d793a20` | `1fedc1a0fe471f4893747fb6571d63628e902c59` upstream |
+| dedup-002 | APPLIED | Shared benchmark delay and green page fixture moved to `TestSupport`. | `65f43d8829e22566a6abe8d98a95ca331d793a20` | `9bcc849ded276f7e78ced261935444b8469abaa8` |
+| dedup-003 | APPLIED | Shared `Duration.milliseconds` moved to the same benchmark support file. | `65f43d8829e22566a6abe8d98a95ca331d793a20` | `9bcc849ded276f7e78ced261935444b8469abaa8` |
+| dedup-005 | APPLIED | One private generic `NSView` finder now serves the field and button helpers. | `65f43d8829e22566a6abe8d98a95ca331d793a20` | `f0e0a7d088b0d10019e8f0861d0efea21bf40227` |
+| dedup-008 | APPLIED | One `TestSupport` persistence-break helper now serves both error-test files. | `65f43d8829e22566a6abe8d98a95ca331d793a20` | `3f07ee0788bc16063855d96467fc283d9548bdc1` |
+
+`dedup-001` has no catch-up GREEN commit because its source change was
+already complete upstream. The upstream GREEN commit is listed only as
+evidence for the resolved status.
+
+## Verification
+
+Before the RED commit, `swift build` passed and `swift test` passed with 150
+tests, 1 skipped test, and 0 failures. After each catch-up group, the focused
+tests passed, then `swift build` passed and `swift test` passed with 150 tests,
+1 skipped test, and 0 failures.
+
+The skipped test is
+`PerformanceHarnessTests.testEmitBenchTimings`; it requires `make bench`.
+
+## Records not eligible for catch-up
+
+These six records remain skipped and were not changed:
+
+- `dedup-004` — `verified:false`.
+- `dedup-006` — `verified:false`.
+- `dedup-007` — `verified:false`, KEEP SEPARATE.
+- `dedup-009` — `verified:false`, KEEP SEPARATE.
+- `dedup-010` — `verified:false`, KEEP SEPARATE.
+- `dedup-011` — `verified:false`.
+
+No unverified or KEEP SEPARATE record was changed.
+
+No item remains deferred.
