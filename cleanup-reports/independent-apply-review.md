@@ -36,10 +36,11 @@ approved allowlists. The review was read-only except for this report.
   unchanged config rewrites, one cached menu object, one regex compilation,
   and no reachable-page pulse refreshes.
 - `git diff --check -- Sources Tests`: PASS.
-- `swiftlint lint --strict --reporter json`: exit 2 with 8 existing serious
-  findings, all in test or benchmark files (`MonitorRefreshTransactionTests`
-  and `PerformanceHarnessTests`); no production-source lint finding was
-  reported. These were outside the cleanup scope.
+- `swiftlint lint --strict --reporter json`: exit 2 because strict mode promotes
+  warnings. The JSON contained 8 Warning findings and 0 serious findings, all
+  in test or benchmark files (`MonitorRefreshTransactionTests` and
+  `PerformanceHarnessTests`); no production-source lint finding was reported.
+  These were outside the cleanup scope.
 - UI tests were not run. `UITests/GreenDotUITests.xcodeproj` is not present in
   this worktree; generating it with `xcodegen` would create an artifact during
   this read-only review. AppKit lifecycle unit tests did run in `swift test`.
