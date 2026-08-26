@@ -5,7 +5,9 @@
 This is the phase-2 ownership record for the verified deduplication findings
 in `deduplication-assessment.md`. The type-consolidation pass owns complete
 cross-file sets where a deduplication move would otherwise collide. All five
-verified `CONSOLIDATE` records are **DEFERRED** here; none was applied.
+verified `CONSOLIDATE` records were marked **DEFERRED** during the partition
+pass; no deduplication change was applied in that pass. The catch-up closure
+is recorded below.
 
 ## Baseline at deferral
 
@@ -25,9 +27,9 @@ The single skipped test was
 `make bench`). No production or test source was changed before or during this
 deferral pass.
 
-## Deferred items and exact collision ownership
+## Deferred items and exact collision ownership (partition pass)
 
-| Finding | Status | Deduplication change | Collision owner and complete set | Catch-up action |
+| Finding | Phase 2 status | Deduplication change | Collision owner and complete set | Catch-up action |
 | --- | --- | --- | --- | --- |
 | dedup-001 | DEFERRED | Centralize the baseline `Severity` display text used by `MenuBuilder` and `ToastPolicy`. | **types-004** owns `Sources/StatusCore/Severity.swift`, `Sources/greendot/MenuBuilder.swift`, and `Sources/StatusCore/ToastPolicy.swift`. Preserve `ToastPolicy` unreachable handling and `StatuspalParser` scheduled-maintenance handling. | After types-004, verify both call sites. Mark **RESOLVED-UPSTREAM** only if types-004 completed the shared mapping. |
 | dedup-002 | DEFERRED | Move the identical benchmark page fixture and delay constant to `Tests/TestSupport`. | **types-002** owns the import migration for `Tests/StatusCoreTests/PollPerformanceTests.swift` and `Tests/greendotTests/PerformanceHarnessTests.swift`. | Rebase the fixture move after types-002 and compile both test targets. |
