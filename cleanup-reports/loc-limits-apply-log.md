@@ -122,7 +122,7 @@ Code LOC is from `cloc` 2.10. Physical LOC is `wc -l`. For the split
 
 | Scope | Before code / physical | After code / physical | Change |
 |---|---:|---:|---:|
-| `Monitor` plus three extension files | 352 / 384 | 321 / 390 | -31 / +6 |
+| `Monitor` plus three extension files | 352 / 384 | 359 / 390 | +7 / +6 |
 | `ProviderProbe.swift` | 245 / 270 | 247 / 272 | +2 / +2 |
 | `PerformanceHarnessTests.swift` | 348 / 375 | 358 / 385 | +10 / +10 |
 | Exempt `StatusPageEditorTests.swift` | 313 / 357 | 313 / 357 | 0 / 0 |
@@ -132,10 +132,10 @@ Code LOC is from `cloc` 2.10. Physical LOC is `wc -l`. For the split
 Final `cloc --by-file` values for the changed files:
 
 ```text
-Sources/StatusCore/Monitor.swift                 6 code
+Sources/StatusCore/Monitor.swift                29 code
 Sources/StatusCore/Monitor+Mutations.swift     134 code
 Sources/StatusCore/Monitor+Polling.swift       179 code
-Sources/StatusCore/Monitor+Presentation.swift    2 code
+Sources/StatusCore/Monitor+Presentation.swift   17 code
 Sources/StatusCore/ProviderProbe.swift         247 code
 Tests/greendotTests/PerformanceHarnessTests.swift 358 code
 ```
