@@ -1,5 +1,7 @@
 # Independent defensive-programming review
 
+_Review performed 2026-08-21 against commit `e2ce1ea537e86346841a05224fb2011740df58f7`._
+
 ## Verdict
 
 REQUEST_CHANGES
