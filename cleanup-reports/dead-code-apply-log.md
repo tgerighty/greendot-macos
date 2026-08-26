@@ -17,11 +17,11 @@ The untouched baseline passed:
 
 The final pre-change reference gate used these searches:
 
-- `rg --hidden --glob '!.git' --glob '!.build' -n -S 'BuildInfo\\.gitHash|gitHash|shortHash' .`
-- `rg --hidden --glob '!.git' --glob '!.build' -n -S 'BuildInfo\\.gitHash|\\.gitHash' .`
-- `git grep -n -I -E 'BuildInfo\\.gitHash|gitHash|shortHash' -- . ':!.build'`
-- `git log --all --full-history --oneline -G 'BuildInfo\\.gitHash|\\.gitHash' --`
-- `git log --all --full-history --oneline -S 'static var gitHash' -- Sources/greendot/BuildInfo.swift`
++ `rg --hidden --glob '!.git' --glob '!.build' -n -S 'BuildInfo\.gitHash|gitHash|shortHash' .`
++ `rg --hidden --glob '!.git' --glob '!.build' -n -S 'BuildInfo\.gitHash|\.gitHash' .`
++ `git grep -n -I -E 'BuildInfo\.gitHash|gitHash|shortHash' -- . ':!.build'`
++ `git log --all --full-history --oneline -G 'BuildInfo\.gitHash|\.gitHash' --`
++ `git log --all --full-history --oneline -S 'static var gitHash' -- Sources/greendot/BuildInfo.swift`
 
 The executable source and test matches were only `gitHash(from:)` and
 `shortHash(from:)`. There was no zero-argument computed-property use, selector,
@@ -68,4 +68,3 @@ The GREEN commit is `b2698a8d1b94baf41198cae0f9593acae87098a0`:
   require a separate test-support or compile-time seam decision.
 - `dead-006` — SKIPPED. `REVIEW` and `verified:false`; the PNG may be the
   maintained editable source for the packaged ICNS.
-
