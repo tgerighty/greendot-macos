@@ -36,7 +36,7 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
     func testSuccessfulPollDeliversToastThroughInjectedAdapter() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let pageURL = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
+        let pageURL = testURL(host: "www.githubstatus.com")
         let store = try await seedStore(at: directory, pageURL: pageURL)
         let monitor = Monitor(
             store: store,
@@ -56,7 +56,7 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
     func testPageOverallWithNoComponentsStillDeliversToast() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let pageURL = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
+        let pageURL = testURL(host: "www.githubstatus.com")
         let store = try await seedStore(at: directory, pageURL: pageURL)
         let monitor = Monitor(
             store: store,
@@ -77,7 +77,7 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
     func testPersistenceErrorsPresentOnceUntilSuccessfulPollResetsGate() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let pageURL = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
+        let pageURL = testURL(host: "www.githubstatus.com")
         let store = try await seedStore(at: directory, pageURL: pageURL)
 
         let sequence = SequenceHTTPClient(responses: [
@@ -123,7 +123,7 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
     func testStaleSuccessfulPollDoesNotResetPersistenceErrorGate() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let pageURL = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
+        let pageURL = testURL(host: "www.githubstatus.com")
         let store = try await seedStore(at: directory, pageURL: pageURL)
 
         let client = ControllableHTTPClient()
@@ -159,7 +159,7 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
     func testCancelledPollDoesNotPresentAnError() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let pageURL = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
+        let pageURL = testURL(host: "www.githubstatus.com")
         let store = try await seedStore(at: directory, pageURL: pageURL)
         let client = ControllableHTTPClient()
         defer { client.failAll() }

@@ -258,12 +258,13 @@ final class ComponentToggleTests: XCTestCase {
     }
 
     private func pageWith(components: [ComponentStatus], unreachable: Bool = false) -> WatchedPage {
-        WatchedPage(
-            url: URL(string: "https://status.openai.com")!,
+        let pageURL = testURL(host: "status.openai.com")
+        return WatchedPage(
+            url: pageURL,
             name: "OpenAI",
             snapshot: PageSnapshot(
                 name: "OpenAI",
-                url: URL(string: "https://status.openai.com")!,
+                url: pageURL,
                 provider: .statuspage,
                 overall: unreachable ? .grey : Aggregator.severity(from: components),
                 components: components,
@@ -277,7 +278,7 @@ final class ComponentToggleTests: XCTestCase {
 extension ComponentToggleTests {
     func testMissingSnapshotIsGrey() {
         let page = WatchedPage(
-            url: URL(string: "https://status.openai.com")!,
+            url: testURL(host: "status.openai.com"),
             name: "OpenAI"
         )
 
@@ -306,12 +307,13 @@ extension ComponentToggleTests {
         components: [ComponentStatus] = [],
         unreachable: Bool = false
     ) -> WatchedPage {
-        WatchedPage(
-            url: URL(string: "https://status.openai.com")!,
+        let pageURL = testURL(host: "status.openai.com")
+        return WatchedPage(
+            url: pageURL,
             name: "OpenAI",
             snapshot: PageSnapshot(
                 name: "OpenAI",
-                url: URL(string: "https://status.openai.com")!,
+                url: pageURL,
                 provider: .statuspage,
                 overall: overall,
                 components: components,

@@ -279,11 +279,12 @@ extension ProbeAndMonitorTests {
 
     func testProbeTreatsStatuspalDiscoveryServerErrorAsUnreachable() async {
         var client = MapHTTPClient()
-        client.byURL["https://example.com"] = (Data(), 503)
+        let pageURL = testURL(host: "example.com")
+        client.byURL[pageURL.absoluteString] = (Data(), 503)
 
         do {
             _ = try await ProviderProbe.probe(
-                pageURL: URL(string: "https://example.com")!,
+                pageURL: pageURL,
                 client: client
             )
             XCTFail("expected unreachable")
@@ -296,10 +297,11 @@ extension ProbeAndMonitorTests {
         let client = MapHTTPClient(byPath: [
             "/api/v2/summary.json": (Data(), status)
         ])
+        let pageURL = testURL(host: "example.com")
 
         do {
             _ = try await ProviderProbe.probe(
-                pageURL: URL(string: "https://example.com")!,
+                pageURL: pageURL,
                 client: client
             )
             XCTFail("expected \(expected)")
