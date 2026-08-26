@@ -1,5 +1,6 @@
 import XCTest
 @testable import StatusCore
+import TestSupport
 
 final class ComponentToggleTests: XCTestCase {
     func testDisplaySeverityIgnoresDisabledRedComponent() {

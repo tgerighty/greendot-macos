@@ -1,5 +1,6 @@
 import XCTest
 @testable import StatusCore
+import TestSupport
 
 final class PollPerformanceTests: XCTestCase {
     private static let delayNs: UInt64 = 80_000_000

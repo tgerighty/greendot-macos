@@ -2,6 +2,7 @@ import AppKit
 import StatusCore
 import XCTest
 @testable import greendot
+import TestSupport
 
 @MainActor
 final class PanelLifecycleTests: XCTestCase {
