@@ -13,8 +13,9 @@ Authorized apply set was legacy-001, 003, 005, 007. Those four are in
    - User said skip. No rename. External planner links were not searched.
 
 2. **legacy-004 — `NSUserNotificationAlertStyle` in `Resources/Info.plist`**
-   - Classification: SAFE-TO-REMOVE in the report; `verified: false`.
-   - User said skip. `Resources/Info.plist` is also outside this allowlist.
+   - Classification: NEEDS-VERIFICATION / REVIEW; `verified: false`.
+   - Banner behavior was not tested. User said skip. `Resources/Info.plist` is
+     also outside this allowlist.
 
 3. **legacy-006 — unused `WatchedPage.isComponentEnabled(_ name: String)`**
    - Classification: SAFE-TO-REMOVE.

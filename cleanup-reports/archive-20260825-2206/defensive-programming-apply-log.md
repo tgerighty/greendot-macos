@@ -31,6 +31,21 @@ No revert. No files outside the allowlist.
 
 HEAD: `8fd764ac20da474000d0e1738e45d9922c26dda6`
 
+## Later resolution
+
+Commit `a58e8de` later resolved all three `REQUEST_CHANGES` findings in the
+independent review:
+
+- `Monitor` now changes a copied configuration and updates memory only after a
+  successful save. Save-failure tests confirm that memory remains unchanged.
+- Startup polling and its timer now run only after `loadMonitor` succeeds, so a
+  corrupt configuration is not replaced by a later poll.
+- `StoreError` now conforms to `LocalizedError` and supplies tested user-facing
+  text for a corrupt configuration.
+
+Current source and tests retain these changes. No additional production change
+is pending from those archived findings.
+
 ## TDD
 
 ### RED

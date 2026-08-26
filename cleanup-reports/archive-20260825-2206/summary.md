@@ -2,6 +2,10 @@
 
 Date: 2026-08-21. Scope: `Sources/`, `Tests/`, config, spec. No product code was changed.
 
+Identifiers in this archived summary belong to the 2026-08-21 assessments in
+this directory. Later cleanup runs reuse some prefixes with different mappings;
+do not remap these historical IDs.
+
 Independent verifiers read the live tree and tried to refute every **HIGH** finding and every **CERTAIN** finding that could drive an automated delete. All of those **survived**. `verified: true` below means that gate, not a second product review.
 
 ## Totals (analysis agents)

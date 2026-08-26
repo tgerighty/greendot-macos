@@ -64,7 +64,7 @@ Corroborating checks (static only):
 
 ### Module import graph
 
-```
+```text
 StatusCore          (Foundation only)
     ^
     | import StatusCore  (8 app files)
@@ -96,7 +96,7 @@ an unused import, not a cycle.
 
 Edges are type references, not `import` lines.
 
-```
+```text
 PathSafety.swift
 HTTPClient.swift
 Severity.swift  <──────────────────────────────┐
@@ -123,7 +123,7 @@ GreyPulse.swift → Severity.swift
 
 ### greendot file graph
 
-```
+```text
 main.swift → AppDelegate.swift
                 │
                 ├── AppEditMenu.swift
@@ -157,17 +157,19 @@ None. There are no HIGH / BREAKING import cycles. A `StatusCore` →
 
 Type chain:
 
-    Sources/StatusCore/Models.swift:12
-      ComponentStatus.severity: Severity
-    Sources/StatusCore/Models.swift:64
-      PageSnapshot.overall: Severity
-    Sources/StatusCore/Models.swift:118
-      WatchedPage.displaySeverity → Aggregator.severity(from:)
-          -> Sources/StatusCore/Severity.swift:12
-             Aggregator.barSeverity(from snapshots: [PageSnapshot])
-          -> Sources/StatusCore/Severity.swift:24
-             Aggregator.severity(from components: [ComponentStatus])
-                 -> Models.swift
+```text
+Sources/StatusCore/Models.swift:12
+  ComponentStatus.severity: Severity
+Sources/StatusCore/Models.swift:64
+  PageSnapshot.overall: Severity
+Sources/StatusCore/Models.swift:118
+  WatchedPage.displaySeverity → Aggregator.severity(from:)
+      -> Sources/StatusCore/Severity.swift:12
+         Aggregator.barSeverity(from snapshots: [PageSnapshot])
+      -> Sources/StatusCore/Severity.swift:24
+         Aggregator.severity(from components: [ComponentStatus])
+             -> Models.swift
+```
 
 Why it exists: `Severity` is the primitive colour enum. `Aggregator` was
 placed in the same file. `Aggregator` then takes `PageSnapshot` and

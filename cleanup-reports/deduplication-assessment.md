@@ -136,7 +136,10 @@ The exact benchmark helper copies were introduced together in commit `e56941e`, 
 - `jscpd` is unavailable in the environment. The report uses `cloc`, `rg`, manual comparison, and a temporary normalized line-block scan; no clone-percentage claim is made.
 - Existing `cleanup-reports/archive-*` assessments were not used, as required. Generated UI project files and build artifacts were not inspected.
 - This is a read-only analysis. No source, test, dependency, configuration, git state, or archived report was changed; only this assessment was created.
-- The HIGH/CERTAIN labels are analysis-stage confidence labels. All machine-readable entries remain `verified: false` and require the independent verification gate before any automated remediation.
+- The HIGH/CERTAIN labels are analysis-stage confidence labels. At the initial
+  assessment, all machine-readable entries were `verified: false`; the
+  independent verification disposition and final JSON below are authoritative,
+  with 5 entries `verified: true` and 6 entries `verified: false`.
 - Recent history shows deliberate prior consolidation: `9afaaeb` moved component-tree walking into `ComponentTree`, and `276f0cb` moved the shared controllable HTTP client into `TestSupport`. Any follow-up should preserve those boundaries.
 
 ## Independent Verification Disposition

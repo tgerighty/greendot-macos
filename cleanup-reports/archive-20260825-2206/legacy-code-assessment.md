@@ -4,13 +4,13 @@
 
 - Total issues found: 8
 - Severity breakdown: HIGH=0, MEDIUM=0, LOW=8
-- Classification breakdown: SAFE-TO-REMOVE=5, ACTIVE-DEPRECATED=1, NEEDS-VERIFICATION=2, KEEP=0
+- Classification breakdown: SAFE-TO-REMOVE=4, ACTIVE-DEPRECATED=1, NEEDS-VERIFICATION=3, KEEP=0
 - Top priorities:
   1. Delete the leftover `Status Menu.app` entries from `.swiftlint.yml` and `.gitignore`. The product bundle is `greendot.app`; no `Status Menu.app` tree exists in this checkout.
   2. Replace deprecated `NSImage.lockFocus` / `unlockFocus` in `StatusDot` with `NSImage(size:flipped:drawingHandler:)`.
   3. Remove the unused `WatchedPage.isComponentEnabled(_ name:)` overload and the stale UI-test “HTTP server” sentence in the design spec.
 - Estimated impact: 6 source/config files plus 1 spec file. About 8–12 LOC of product code and a few ignore/lint lines can go now. The drawing change is a replacement, not a deletion.
-- Estimated possible LOC reduction: approximately 10 LOC if the SAFE-TO-REMOVE items are applied. There is no large compatibility facade to retire.
+- Estimated possible LOC reduction: approximately 8 LOC if the SAFE-TO-REMOVE items are applied. There is no large compatibility facade to retire.
 - This is a brand-new app (initial commit 2026-08-21). There are no TODO/FIXME markers in product Swift, no `status-app` leftover string, and no concluded A/B flag. The GREENDOT_* environment switches are live UI-test seams, not dormant product flags.
 
 ## Critical Findings
@@ -50,10 +50,15 @@ None. The leftover product name and deprecated drawing API are small and local.
 ### legacy-004 — `NSUserNotificationAlertStyle` remains in Info.plist after the UserNotifications cutover
 
 - Location: `Resources/Info.plist:27-28`
-- Classification: **SAFE-TO-REMOVE**
-- Evidence: `Notifier.swift` posts through `UNUserNotificationCenter`. The plist still sets `NSUserNotificationAlertStyle` to `banner`, which belonged to the deprecated `NSUserNotification` API. `Notifier` never reads the key. For `UNNotification`, that plist value does not select banner vs alert.
-- Risk: none for current posting. Removing it does not change the UserNotifications permission flow.
-- Recommendation: delete the key/value from `Resources/Info.plist` (the built `greendot.app` copy is generated).
+- Classification: **NEEDS-VERIFICATION**
+- Evidence: `Notifier.swift` posts through `UNUserNotificationCenter`. The plist
+  key belonged to the deprecated `NSUserNotification` API, but its effect on
+  modern notification presentation was not independently verified.
+- Risk: the key may still affect banner presentation on supported macOS versions;
+  that behavior was not tested.
+- Recommendation: **REVIEW** banner behavior with `UNUserNotificationCenter`
+  alone before deleting the key/value from `Resources/Info.plist` (the built
+  `greendot.app` copy is generated).
 
 ### legacy-005 — `StatusDot` still draws with deprecated `NSImage.lockFocus`
 
@@ -109,7 +114,7 @@ No always-on/off product flag or unused env toggle was found. `swiftlint` disabl
 | Bundle `greendot.app` | Ignore/lint entry `Status Menu.app` | Remove the leftover name (`legacy-001`) |
 | `URLSessionHTTPClient` in normal launch | `DirectoryHTTPClient` when `GREENDOT_FIXTURE_DIR` is set | Keep; UI-test fixture, not a superseded client |
 | `MapHTTPClient` in `StatusCore` | Same type used only from `StatusCoreTests` | Keep as the unit-test HTTP double; not a compatibility facade |
-| `UNUserNotificationCenter` | Plist `NSUserNotificationAlertStyle` | Remove the plist key (`legacy-004`) |
+| `UNUserNotificationCenter` | Plist `NSUserNotificationAlertStyle` | Review banner behavior before removing the key (`legacy-004`) |
 | `NSStatusItem` + `MenuClickOpener` | Spec-rejected SwiftUI `MenuBarExtra`; comments still say “extra” | Keep the AppKit path; edit comments (`legacy-007`) |
 | Statuspal `current_status_type` | Fallback `status_page.current_incident_type` | Keep; external JSON shapes |
 | Statuspage incident `name` / `shortlink` | Fallback `title` / `url` | Keep; external JSON shapes |
@@ -139,7 +144,9 @@ No always-on/off product flag or unused env toggle was found. `swiftlint` disabl
 - HTML status scraping is listed as out of v1 in the spec and is not implemented. Statuspal HTML is only used to find a subdomain. That is current probe behaviour, not a leftover scraper.
 - `AppEditMenu` “Quit greendot” and the status-item “Quit greendot” are both required (application menu vs menu-bar menu).
 - External/operator scripts outside this repository were not searched. The unused public `isComponentEnabled(String)` assumption is in-repo only.
-- Apple SDK deprecation of `lockFocus` was confirmed from current AppKit docs; this report’s JSON `verified` flags remain false per assessment rules.
+- Apple SDK deprecation of `lockFocus` was confirmed from current AppKit docs.
+  The final JSON includes later independent-verification flags; `legacy-004`
+  remains `verified: false` pending the banner-behavior check.
 
 ## Machine-Readable Findings
 
@@ -182,8 +189,8 @@ No always-on/off product flag or unused env toggle was found. `swiftlint` disabl
       "line": 27,
       "severity": "LOW",
       "confidence": "LIKELY",
-      "recommendation": "REMOVE",
-      "detail": "NSUserNotificationAlertStyle remains in Info.plist although Notifier posts only through UNUserNotificationCenter.",
+      "recommendation": "REVIEW",
+      "detail": "NSUserNotificationAlertStyle remains in Info.plist although Notifier posts only through UNUserNotificationCenter; verify banner behavior before removal.",
       "verified": false
     },
     {

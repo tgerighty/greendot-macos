@@ -5,6 +5,7 @@ Scope: `Sources/` and `Tests/` (plus UITests for comparison). Product code was n
 DRY was applied only where a shared helper would shrink the code and keep behaviour in one place. Three similar lines, protocol wrappers around one-off parsers, and parallel tests of different paths were left alone.
 
 ## Executive Summary
+
 - Total issues found: 16
 - Severity breakdown: HIGH=2, MEDIUM=8, LOW=6
 - Top 3 priorities
