@@ -1,7 +1,6 @@
 # Deduplication Deferred
 
 Date: 2026-08-21
-Worktree: `/Users/terry.gerighty/coding/greendot-deduplication`
 Branch: `cleanup/deduplication`
 Source: `cleanup-reports/deduplication-assessment.md`
 

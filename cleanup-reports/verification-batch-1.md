@@ -134,7 +134,14 @@ Severity: HIGH. Confidence: HIGH. Recommendation: Mark the controller and its Ap
 
 ### typing-008 — SURVIVES
 
-Evidence: `ComponentPicker.swift` and `UITestDriver.swift` contain AppKit state and methods with no explicit `@MainActor` boundary. A fresh strict build reports numerous actor-isolated AppKit warnings and `ComponentPicker` sendability errors at lines 36/84 plus `UITestDriver` non-Sendable `String` results at lines 51/63. The same build reports AppKit actor warnings in `AppEditMenu.swift:6`, `BuildInfo.swift:27-28` (`AboutPanel.show`), and `MenuClickOpener.swift:69`.
+Evidence: At baseline `310032b`, `ComponentPicker.swift` and
+`UITestDriver.swift` contained AppKit state and methods with no explicit
+`@MainActor` boundary. A fresh strict build reported actor-isolated AppKit
+warnings and `ComponentPicker` sendability errors at lines 36/84. At
+`UITestDriver` lines 51/63, results from the main-actor-isolated
+`accessibilityIdentifier()` call crossed into a nonisolated context. The same
+build reported AppKit actor warnings in `AppEditMenu.swift:6`,
+`BuildInfo.swift:27-28` (`AboutPanel.show`), and `MenuClickOpener.swift:69`.
 
 Corrected narrow claim: All listed helpers lack an explicit boundary; `ComponentPicker` and `UITestDriver` produce hard Swift 6 diagnostics, while `AppEditMenu`, `AboutPanel.show`, and `MenuClickOpener` at minimum produce actor-isolation warnings that should be resolved rather than suppressed.
 
@@ -166,7 +173,7 @@ Severity: MEDIUM. Confidence: HIGH. Recommendation: Keep the workaround document
   {"id":"typing-005","disposition":"SURVIVES","evidence":"StatusDot.swift:11 has mutable static cache; Swift 6 build reports nonisolated global shared mutable state at that line.","corrected_claim":"The lock-backed AppKit cache is still rejected by strict Swift 6 concurrency checking.","severity":"HIGH","confidence":"HIGH","recommendation":"Isolate cache access on MainActor or use a reviewed safe design.","verified":true},
   {"id":"typing-006","disposition":"SURVIVES","evidence":"AppDelegate.swift:12 and timer closures at :60/:65 produce Swift 6 main-actor default-value and non-Sendable self-capture diagnostics.","corrected_claim":"AppDelegate needs explicit actor isolation and an actor-aware callback type.","severity":"HIGH","confidence":"HIGH","recommendation":"Mark class/callback boundary MainActor and resolve timer captures.","verified":true},
   {"id":"typing-007","disposition":"SURVIVES","evidence":"PagePanelController.swift:11-12 default-initializes AppKit controls without MainActor; Swift 6 reports errors there and warnings throughout AppKit access.","corrected_claim":"The panel controller lacks required MainActor isolation under strict Swift 6.","severity":"HIGH","confidence":"HIGH","recommendation":"Mark controller and AppKit helpers MainActor and rebuild strictly.","verified":true},
-  {"id":"typing-008","disposition":"SURVIVES","evidence":"Strict build reports ComponentPicker sendability/actor diagnostics, UITestDriver actor and String-result errors, and AppEditMenu, BuildInfo.AboutPanel.show, and MenuClickOpener actor warnings.","corrected_claim":"All listed AppKit helpers lack explicit boundaries; some are hard errors and the rest produce actor warnings.","severity":"HIGH","confidence":"HIGH","recommendation":"Apply a consistent MainActor boundary and require a clean strict build.","verified":true},
+  {"id":"typing-008","disposition":"SURVIVES","evidence":"At baseline 310032b, strict build reports ComponentPicker sendability/actor diagnostics, UITestDriver accessibilityIdentifier results crossing a main-actor boundary, and AppEditMenu, BuildInfo.AboutPanel.show, and MenuClickOpener actor warnings.","corrected_claim":"All listed AppKit helpers lack explicit boundaries; some are hard errors and the rest produce actor warnings.","severity":"HIGH","confidence":"HIGH","recommendation":"Apply a consistent MainActor boundary and require a clean strict build.","verified":true},
   {"id":"legacy-001","disposition":"PARTIAL","evidence":"AppDelegate.swift:169-188 retains previous and defers show; git commit 889a31d records the SIGSEGV rationale. Current tests cover analogous replacements but not private AppDelegate.openEditor and its identity guard.","corrected_claim":"History and analogous lifecycle tests support the workaround, but exact AppDelegate wiring is not directly tested.","severity":"MEDIUM","confidence":"HIGH","recommendation":"Add an AppDelegate-level replacement test before marking fully verified.","verified":false}
 ]
 ```

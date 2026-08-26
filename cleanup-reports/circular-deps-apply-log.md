@@ -1,7 +1,6 @@
 # Circular Dependency Apply Log
 
 Date: 2026-08-26
-Worktree: `/Users/terry.gerighty/coding/greendot.cleanup-apply-20260826-circular`
 Branch: `cleanup/apply-20260826-circular`
 Base: `7347b965d278856b63660ae8f3f33931c1b17d34`
 

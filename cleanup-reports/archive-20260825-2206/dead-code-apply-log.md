@@ -1,7 +1,6 @@
 # Dead Code Apply Log
 
 Date: 2026-08-21
-Worktree: `/Users/terry.gerighty/coding/greendot`
 Branch: `cleanup/apply`
 Base: `50df55e`
 

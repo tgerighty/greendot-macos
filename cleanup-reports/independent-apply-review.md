@@ -1,4 +1,11 @@
+# Independent cleanup apply review
+
 APPROVE
+
+This verdict covers the reviewed implementation through `9c5b4f2`. PR #15
+later exposed a concurrent first-run callback race with RED `b80b782`; GREEN
+`c02efef` serializes the check and save. The PR review gate verifies that
+follow-up separately.
 
 ## Findings
 

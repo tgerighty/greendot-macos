@@ -4,7 +4,9 @@
 
 This is a read-only size audit at commit `310032b`. The audit measured every Swift file under `Package.swift`, `Sources`, `Tests`, and `UITests`. `cloc` code counts exclude blank lines and comments; `wc -l` is the physical-line baseline.
 
-- Six findings: one HIGH, one MEDIUM, and four LOW. All six have `verified: false` in the machine-readable section.
+- Six findings: one HIGH, one MEDIUM, and four LOW. All six were
+  `verified: false` in the initial assessment; independent verification later
+  confirmed all six, as recorded below.
 - Four files exceed 300 code LOC. The production offender is `Sources/StatusCore/Monitor.swift`; the other three are tests and are LOW by policy.
 - Two functions exceed 50 logical body lines: `ProviderProbe.probeHit` (57) and `PerformanceHarnessTests.measureRemaining` (51).
 - The affected files contain 1,342 code LOC and 1,493 physical lines. This is 142 code LOC above the file threshold in total; the two function bodies exceed their threshold by eight logical lines in total.
@@ -133,7 +135,9 @@ These files are below 300 code LOC and are not findings. They are listed to prev
 - No source, test, dependency, configuration, Git, archive, generated-project, resource, or binary files were modified.
 - This report does not assess runtime correctness, dead code, duplication, type quality, security, performance results, or formal test validity.
 - No lizard-based measurement was possible because lizard is not installed; SwiftLint plus manual boundary inspection was used for function bodies.
-- Threshold findings are not independent verification or release approval. The JSON entries intentionally retain `verified: false`.
+- The initial threshold findings were not independent verification or release
+  approval. The later independent disposition and final JSON flags below
+  supersede that initial state.
 
 ## Independent Verification Disposition
 

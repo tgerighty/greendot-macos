@@ -3,6 +3,8 @@
 This is an independent, read-only verification of the 20 supplied findings. I
 did not change Sources, Tests, UITests, dependencies, configuration, Git, or
 the existing assessment reports. The only written file is this report.
+Source baseline: `310032baadea24dd7ea32a97ddc5af8df9a52845`. Later apply
+commits consolidated the `types-004` consumers through `Severity.displayName`.
 
 Fresh checks used as supporting evidence:
 

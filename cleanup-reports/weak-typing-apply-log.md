@@ -2,11 +2,9 @@
 
 Date: 2026-08-26
 Branch: `cleanup/apply-20260826-weak-typing`
-Worktree: `/Users/terry.gerighty/coding/greendot.cleanup-apply-20260826-weak-typing`
 Merged weak-typing phase base: `ed38cde` (weak-typing phase merged into `main`)
 
 Serial catch-up branch: `cleanup/apply-20260826-typing-catchup`
-Serial catch-up worktree: `/Users/terry.gerighty/coding/greendot.cleanup-apply-20260826-typing-catchup`
 Serial catch-up base: `7154506` (merged `main` before this catch-up)
 
 ## Scope and gate

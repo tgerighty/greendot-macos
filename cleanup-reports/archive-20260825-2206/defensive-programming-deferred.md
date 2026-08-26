@@ -2,7 +2,6 @@
 
 Date: 2026-08-21
 Source: `cleanup-reports/defensive-programming-assessment.md`
-Worktree: `/Users/terry.gerighty/coding/greendot-defensive-programming`
 Branch: `cleanup/defensive-programming`
 
 The apply pass only changes items with `verified: true` and `ERROR-HIDING` or `NEEDS-REFACTOR`. LEGITIMATE items stay. Unverified items stay.

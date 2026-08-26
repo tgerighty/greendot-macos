@@ -1,7 +1,6 @@
 # Deduplication Apply Log
 
 Date: 2026-08-21
-Worktree: `/Users/terry.gerighty/coding/greendot-deduplication`
 Branch: `cleanup/deduplication`
 Base: `930daa9693a0712cfbdcc78dae5a647d78d4172f` (`cleanup/apply`, phase 1 merged)
 

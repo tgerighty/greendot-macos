@@ -4,7 +4,6 @@ Applying `cleanup-reports/legacy-code-assessment.md` (legacy-001, legacy-003,
 legacy-005, legacy-007). Skip legacy-002, 004, 006, 008 as instructed.
 
 Branch: `cleanup/legacy-code`
-Worktree: `/Users/terry.gerighty/coding/greendot-legacy-code`
 HEAD before this cycle: `50df55e43f489d4e1daf701b8a08522b0c23ce42`
 HEAD after this cycle: `f0a3ed7c877a896b4dd05b4da29afa7ac1737736`
 

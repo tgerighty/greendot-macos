@@ -1,11 +1,13 @@
 # AI Slop Deferred and Skipped Items
 
 Date: 2026-08-21
-Worktree: `/Users/terry.gerighty/coding/greendot.ai-slop`
 Branch: `cleanup/ai-slop`
 Apply commit (for applied items only): `fa9273c2bd91a0e561a31addb23450229182d12c`
 
-This apply did not edit files outside the allowlist. `Models.swift`, `Monitor.swift`, `PagePanelController.swift`, and `UITestDriver.swift` were out of scope.
+This apply considered only `verified: true` findings in the authorized apply
+list whose files were inside the allowlist. It did not edit files outside that
+scope. `Models.swift`, `Monitor.swift`, `PagePanelController.swift`, and
+`UITestDriver.swift` were out of scope.
 
 ## Deferred
 

@@ -1,7 +1,6 @@
 # Defensive Programming Apply Log
 
 Date: 2026-08-21
-Worktree: `/Users/terry.gerighty/coding/greendot-defensive-programming`
 Branch: `cleanup/defensive-programming`
 Base: `00b9d00bd5afa562e86198a402d97ac01b9b27fb` (`cleanup/apply`, phase 2 merged)
 

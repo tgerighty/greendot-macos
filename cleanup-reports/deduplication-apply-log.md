@@ -4,7 +4,6 @@
 
 - Assessment: `cleanup-reports/deduplication-assessment.md`.
 - Catch-up branch: `cleanup/apply-20260826-dedup-catchup`.
-- Worktree: `/Users/terry.gerighty/coding/greendot.cleanup-apply-20260826-dedup-catchup`.
 - Current main before the catch-up: `531c3b1b649ea0aef9204e8b10ff963d712a3d23`.
 - Selected records: `dedup-001`, `dedup-002`, `dedup-003`, `dedup-005`, `dedup-008`.
 - Code and test files changed: only the files in the allowlist.

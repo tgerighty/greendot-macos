@@ -1,7 +1,6 @@
 # AI Slop Removal — Apply Log
 
 Date: 2026-08-21
-Worktree: `/Users/terry.gerighty/coding/greendot.ai-slop`
 Branch: `cleanup/ai-slop`
 Baseline HEAD: `50df55e43f489d4e1daf701b8a08522b0c23ce42`
 Apply commit: `fa9273c2bd91a0e561a31addb23450229182d12c`

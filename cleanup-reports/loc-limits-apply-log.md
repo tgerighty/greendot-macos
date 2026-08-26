@@ -2,7 +2,6 @@
 
 Date: 2026-08-26
 Branch: `cleanup/apply-20260826-loc`
-Worktree: `/Users/terry.gerighty/coding/greendot.cleanup-apply-20260826-loc`
 Starting commit: `b7769c73d6f5c7018aa7c37bef1a26d8a488b22e`
 
 ## Scope and RED baseline

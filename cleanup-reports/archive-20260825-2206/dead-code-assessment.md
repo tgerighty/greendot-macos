@@ -1,6 +1,9 @@
 # Dead Code Analysis Assessment
 
-_Assessment date: 2026-08-21. Scope: current working tree at `50df55e` (`main`). Product code under `Sources/` was read-only; this file is the only write. All machine-readable findings remain `verified: false`; the independent adversarial verification stage must run before any automated application._
+_Assessment date: 2026-08-21. Scope: working tree at `50df55e` (`main`).
+Product code under `Sources/` was read-only during the initial assessment.
+Independent adversarial verification later confirmed `dead-001` through
+`dead-004`; the final machine-readable flags record that later gate._
 
 ## Executive Summary
 

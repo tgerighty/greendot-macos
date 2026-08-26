@@ -4,7 +4,6 @@
 
 - Assessment: `cleanup-reports/legacy-code-assessment.md`
 - Branch: `cleanup/apply-20260826-legacy`
-- Worktree: `/Users/terry.gerighty/coding/greendot.cleanup-apply-20260826-legacy`
 - Date: 2026-08-26
 - Source changes: none
 

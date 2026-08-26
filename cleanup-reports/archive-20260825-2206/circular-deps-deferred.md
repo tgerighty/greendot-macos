@@ -2,7 +2,6 @@
 
 Date: 2026-08-21
 Source: `cleanup-reports/circular-deps-assessment.md`
-Worktree: `/Users/terry.gerighty/coding/greendot-circular-deps`
 Branch: `cleanup/circular-deps`
 
 Authorized apply set was **cycle-001 only**. That item is in `circular-deps-apply-log.md`. No cycle-001 work was deferred.

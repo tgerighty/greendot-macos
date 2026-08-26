@@ -2,8 +2,9 @@
 
 _Fresh read-only audit performed 2026-08-21 against commit `50df55e4`._
 
-This is a static source read. No compiler dump, no SCC tool, and no
-import-order experiment was run. JSON `verified` is therefore `false`.
+The initial assessment was a static source read. It did not use a compiler
+dump, SCC tool, or import-order experiment. Independent verification later
+confirmed `cycle-001`; the final JSON `verified` flag records that later gate.
 
 ## Executive Summary
 
