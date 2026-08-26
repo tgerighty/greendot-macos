@@ -144,11 +144,3 @@ extension Monitor {
         return value.isEmpty ? nil : value
     }
 }
-
-extension Monitor {
-    func withStateLock<T>(_ body: () -> T) -> T {
-        stateLock.lock()
-        defer { stateLock.unlock() }
-        return body()
-    }
-}

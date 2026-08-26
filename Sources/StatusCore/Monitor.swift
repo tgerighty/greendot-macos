@@ -26,4 +26,10 @@ public final class Monitor: @unchecked Sendable {
     public var pages: [WatchedPage] {
         withStateLock { config.pages }
     }
+
+    func withStateLock<T>(_ body: () -> T) -> T {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return body()
+    }
 }
