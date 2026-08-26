@@ -5,6 +5,10 @@ Branch: `cleanup/apply-20260826-weak-typing`
 Worktree: `/Users/terry.gerighty/coding/greendot.cleanup-apply-20260826-weak-typing`
 Rebased base: `fd2a667` (`main` before merge)
 
+Serial catch-up branch: `cleanup/apply-20260826-typing-catchup`
+Serial catch-up worktree: `/Users/terry.gerighty/coding/greendot.cleanup-apply-20260826-typing-catchup`
+Serial catch-up base: `7154506` (merged `main` before this catch-up)
+
 ## Scope and gate
 
 The verified weak-typing assessment and the cleanup summary were the change
@@ -37,6 +41,23 @@ ComponentPicker.swift:84:26: error: sending value of non-Sendable type 'Componen
 UITestDriver.swift:51:17: error: non-Sendable 'String'-typed result can not be returned from main actor-isolated instance method 'accessibilityIdentifier()' to nonisolated context
 UITestDriver.swift:63:31: error: non-Sendable 'String'-typed result can not be returned from main actor-isolated instance method 'accessibilityIdentifier()' to nonisolated context
 ```
+
+## Serial catch-up RED baseline
+
+At merged catch-up base `7154506`, fresh baseline checks were run before any
+serial catch-up source edit:
+
+- `swift build`: PASS.
+- `swift test`: PASS, 163 tests passed, 1 intentional skip, 0 failures.
+- `swift build -Xswiftc -swift-version -Xswiftc 6`: RED, exit 1.
+- RED evidence marker: this documentation commit.
+
+The strict command's source-owned diagnostics were unchanged in kind from the
+deferred plan: `AppDelegate.swift` had the `presentError` main-actor default
+value error, `Task` captures of weak `AppDelegate` warnings in both poll and
+pulse timer callbacks, and the `MainActor.assumeIsolated` pulse callback;
+`BuildInfo.swift` had four `AboutPanel.show` AppKit actor warnings. No strict
+diagnostic was reported in the already-isolated helper or panel sources.
 
 ## Item dispositions and commits
 

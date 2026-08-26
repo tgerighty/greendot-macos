@@ -4,6 +4,10 @@ Date: 2026-08-26
 Branch: `cleanup/apply-20260826-weak-typing`
 Worktree: `/Users/terry.gerighty/coding/greendot.cleanup-apply-20260826-weak-typing`
 
+Serial catch-up branch: `cleanup/apply-20260826-typing-catchup`
+Serial catch-up worktree: `/Users/terry.gerighty/coding/greendot.cleanup-apply-20260826-typing-catchup`
+Serial catch-up base: `7154506` (merged `main` before this catch-up)
+
 ## Deferred item
 
 `typing-006` is deferred. It owns `Sources/greendot/AppDelegate.swift`, and
@@ -64,3 +68,18 @@ warnings are the known deferred `AboutPanel.show` boundary.
 
 The post-correction strict command returned exit code 1, as expected until the
 serial AppDelegate catch-up is complete.
+
+## Serial catch-up RED evidence
+
+Fresh checks at merged base `7154506`, before any serial source edit:
+
+- `swift build`: PASS.
+- `swift test`: PASS, 163 tests passed, 1 intentional skip, 0 failures.
+- `swift build -Xswiftc -swift-version -Xswiftc 6`: RED, exit 1.
+- RED evidence marker: this documentation commit.
+
+The fresh strict output reported the known `AppDelegate.swift` default-value
+error and weak `AppDelegate` captures in the poll and pulse timer closures,
+plus the four `BuildInfo.swift` warnings caused by the deferred
+`AboutPanel.show` boundary. The compiler emitted duplicate module diagnostics;
+no error was reported in the already-isolated helper or panel sources.
