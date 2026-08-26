@@ -2,6 +2,7 @@ import AppKit
 
 /// NSMenu ignores an item's action when that item has a submenu. This fires the
 /// action on click so a page or group row still opens its URL.
+@MainActor
 final class MenuClickOpener: NSObject, NSMenuDelegate {
     private(set) var isTracking = false
     var onTrackingEnded: (() -> Void)?
@@ -10,7 +11,11 @@ final class MenuClickOpener: NSObject, NSMenuDelegate {
     private var monitor: Any?
     private var openCount = 0
 
-    deinit {
+    override nonisolated init() {
+        super.init()
+    }
+
+    isolated deinit {
         removeMonitor()
     }
 

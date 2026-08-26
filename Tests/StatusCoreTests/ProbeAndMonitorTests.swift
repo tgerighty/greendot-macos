@@ -1,5 +1,6 @@
 import XCTest
 @testable import StatusCore
+import TestSupport
 
 final class ProbeAndMonitorTests: XCTestCase {
     private let statuspageJSON = """
@@ -256,6 +257,60 @@ final class ProbeAndMonitorTests: XCTestCase {
 
     func testStoreErrorCorruptHasUserFacingText() {
         XCTAssertEqual(StoreError.corrupt.errorDescription, "The saved status list could not be read.")
+    }
+}
+
+extension ProbeAndMonitorTests {
+    func testProbeTreatsHTTP429AsUnreachable() async {
+        await assertProbeError(.unreachable, status: 429)
+    }
+
+    func testProbeTreatsRepresentative5xxAsUnreachable() async {
+        await assertProbeError(.unreachable, status: 503)
+    }
+
+    func testProbeTreatsMissingHTTPStatusAsUnreachable() async {
+        await assertProbeError(.unreachable, status: 0)
+    }
+
+    func testProbeKeepsHTTP404AsUnsupported() async {
+        await assertProbeError(.unsupported, status: 404)
+    }
+
+    func testProbeTreatsStatuspalDiscoveryServerErrorAsUnreachable() async {
+        var client = MapHTTPClient()
+        let pageURL = testURL(host: "example.com")
+        client.byURL[pageURL.absoluteString] = (Data(), 503)
+
+        do {
+            _ = try await ProviderProbe.probe(
+                pageURL: pageURL,
+                client: client
+            )
+            XCTFail("expected unreachable")
+        } catch {
+            XCTAssertEqual(error as? ProbeError, .unreachable)
+        }
+    }
+
+    private func assertProbeError(_ expected: ProbeError, status: Int) async {
+        let pageURL = testURL(host: "example.com")
+        let summaryURL = pageURL
+            .appendingPathComponent("api")
+            .appendingPathComponent("v2")
+            .appendingPathComponent("summary.json")
+        var client = MapHTTPClient()
+        client.byURL[summaryURL.absoluteString] = (Data(), status)
+
+        do {
+            _ = try await ProviderProbe.probe(
+                pageURL: pageURL,
+                client: client
+            )
+            XCTFail("expected \(expected)")
+        } catch {
+            XCTAssertEqual(error as? ProbeError, expected)
+        }
     }
 }
 

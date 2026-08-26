@@ -1,5 +1,6 @@
 import XCTest
 @testable import StatusCore
+import TestSupport
 
 final class ComponentToggleTests: XCTestCase {
     func testDisplaySeverityIgnoresDisabledRedComponent() {
@@ -257,14 +258,64 @@ final class ComponentToggleTests: XCTestCase {
     }
 
     private func pageWith(components: [ComponentStatus], unreachable: Bool = false) -> WatchedPage {
-        WatchedPage(
-            url: URL(string: "https://status.openai.com")!,
+        let pageURL = testURL(host: "status.openai.com")
+        return WatchedPage(
+            url: pageURL,
             name: "OpenAI",
             snapshot: PageSnapshot(
                 name: "OpenAI",
-                url: URL(string: "https://status.openai.com")!,
+                url: pageURL,
                 provider: .statuspage,
                 overall: unreachable ? .grey : Aggregator.severity(from: components),
+                components: components,
+                incidents: [],
+                isUnreachable: unreachable
+            )
+        )
+    }
+}
+
+extension ComponentToggleTests {
+    func testMissingSnapshotIsGrey() {
+        let page = WatchedPage(
+            url: testURL(host: "status.openai.com"),
+            name: "OpenAI"
+        )
+
+        XCTAssertEqual(page.displaySeverity, .grey)
+    }
+
+    func testEmptyComponentsUsePageOverall() {
+        for severity in [Severity.red, .yellow] {
+            let page = pageWith(overall: severity)
+            XCTAssertEqual(page.displaySeverity, severity)
+        }
+    }
+
+    func testAllDisabledComponentsRemainGreenWhenPageOverallIsRed() {
+        var page = pageWith(
+            overall: .red,
+            components: [ComponentStatus(name: "API", severity: .red, statusText: "Major outage")]
+        )
+        page.disabledComponentNames = ["API"]
+
+        XCTAssertEqual(page.displaySeverity, .green)
+    }
+
+    private func pageWith(
+        overall: Severity,
+        components: [ComponentStatus] = [],
+        unreachable: Bool = false
+    ) -> WatchedPage {
+        let pageURL = testURL(host: "status.openai.com")
+        return WatchedPage(
+            url: pageURL,
+            name: "OpenAI",
+            snapshot: PageSnapshot(
+                name: "OpenAI",
+                url: pageURL,
+                provider: .statuspage,
+                overall: overall,
                 components: components,
                 incidents: [],
                 isUnreachable: unreachable

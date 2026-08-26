@@ -1,20 +1,29 @@
 import AppKit
 import StatusCore
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusMenu: StatusMenuController?
     private var monitor: Monitor?
     private var pollTimer: Timer?
     private var pulseTimer: Timer?
     private var editor: StatusPageEditor?
-    private let toastDelivery: any ToastDelivery
+    private var toastDelivery: any ToastDelivery = SystemToastDelivery()
     private var pollRefreshState = (presentedError: false, latestInvocation: UInt64(0))
-    var presentError: (Error) -> Void = { error in
+    var presentError: @MainActor (Error) -> Void = { error in
         _ = NSAlert(error: error).runModal()
     }
+    var seedFailureDiagnostic: @MainActor (Error) -> Void = { error in
+        NSLog("greendot: OpenAI seed failed: \(error.localizedDescription)")
+    }
 
-    init(toastDelivery: any ToastDelivery = SystemToastDelivery()) {
+    @MainActor
+    init(toastDelivery: any ToastDelivery) {
         self.toastDelivery = toastDelivery
+        super.init()
+    }
+
+    override nonisolated init() {
         super.init()
     }
 
@@ -53,15 +62,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if Self.shouldPoll(loadSucceeded: loadSucceeded) {
-            let poll = TimeInterval(
-                ProcessInfo.processInfo.environment["GREENDOT_POLL_SECONDS"].flatMap(Double.init) ?? 60
-            )
+            let poll = Self.pollInterval(from: ProcessInfo.processInfo.environment["GREENDOT_POLL_SECONDS"])
             pollTimer = Timer.scheduledTimer(withTimeInterval: poll, repeats: true) { [weak self] _ in
-                Task { await self?.pollAndRefresh() }
+                Task { @MainActor [weak self] in
+                    await self?.pollAndRefresh()
+                }
             }
         }
         pulseTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
+            Task { @MainActor [weak self] in
                 guard let self, let monitor = self.monitor else { return }
                 let hasUnreachable = monitor.pages.contains { $0.snapshot?.isUnreachable == true }
                 guard Self.shouldRefreshIconOnPulse(hasUnreachable: hasUnreachable) else { return }
@@ -80,17 +89,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    static func shouldSeedOpenAI(loadSucceeded: Bool, pagesEmpty: Bool, skipSeed: Bool) -> Bool {
+    nonisolated static func shouldSeedOpenAI(loadSucceeded: Bool, pagesEmpty: Bool, skipSeed: Bool) -> Bool {
         loadSucceeded && pagesEmpty && !skipSeed
     }
 
-    static func shouldPoll(loadSucceeded: Bool) -> Bool {
+    nonisolated static func shouldPoll(loadSucceeded: Bool) -> Bool {
         loadSucceeded
+    }
+
+    nonisolated static func pollInterval(from rawValue: String?) -> TimeInterval {
+        guard let rawValue,
+              let interval = Double(rawValue),
+              interval.isFinite,
+              interval > 0 else {
+            return 60
+        }
+        return interval
     }
 
     /// Pulse flashes grey while a page is unreachable.
     /// Skip icon refreshes when all pages are reachable.
-    static func shouldRefreshIconOnPulse(hasUnreachable: Bool) -> Bool {
+    nonisolated static func shouldRefreshIconOnPulse(hasUnreachable: Bool) -> Bool {
         hasUnreachable
     }
 
@@ -111,14 +130,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func maybeSeedOpenAI(monitor: Monitor, loadSucceeded: Bool) async {
-        let skipSeed = ProcessInfo.processInfo.environment["GREENDOT_SKIP_SEED"] != nil
+    func maybeSeedOpenAI(monitor: Monitor, loadSucceeded: Bool, skipSeed: Bool? = nil) async {
+        let skipSeed = skipSeed ?? (ProcessInfo.processInfo.environment["GREENDOT_SKIP_SEED"] != nil)
         guard Self.shouldSeedOpenAI(
             loadSucceeded: loadSucceeded,
             pagesEmpty: monitor.pages.isEmpty,
             skipSeed: skipSeed
         ), let url = URL(string: "https://status.openai.com") else { return }
-        try? await monitor.add(url: url, name: "OpenAI")
+        do {
+            try await monitor.add(url: url, name: "OpenAI")
+        } catch is CancellationError {
+            return
+        } catch {
+            seedFailureDiagnostic(error)
+        }
     }
 
     @MainActor
@@ -220,14 +245,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @MainActor
-    private func observe(_ name: String, handle: @escaping @MainActor (String) -> Void) {
+    private func observe(_ name: String, handle: @escaping @MainActor @Sendable (String) -> Void) {
         DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("com.tgerighty.greendot.\(name)"),
             object: nil,
             queue: .main
         ) { note in
+            let value = note.object as? String ?? ""
             MainActor.assumeIsolated {
-                handle(note.object as? String ?? "")
+                handle(value)
             }
         }
     }

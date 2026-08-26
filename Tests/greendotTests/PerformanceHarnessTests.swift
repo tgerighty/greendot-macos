@@ -2,13 +2,24 @@ import AppKit
 import XCTest
 @testable import greendot
 @testable import StatusCore
+import TestSupport
 
 /// Repeatable in-memory timings for the shipped parse, poll, menu, and icon paths.
 /// Prints `BENCH name=ms` lines. Does not gate on absolute microseconds.
 @MainActor
 final class PerformanceHarnessTests: XCTestCase {
-    private static let delayNs: UInt64 = 80_000_000
     private static let delayMs = 80.0
+    private static let noopHandlers = StatusMenuHandlers(
+        onAdd: {},
+        onEdit: { _ in },
+        onRemove: { _ in },
+        onToggleNotifications: { _ in },
+        onOpen: { _ in },
+        onRefresh: {},
+        onToggleLaunchAtLogin: {},
+        onAbout: {},
+        onQuit: {}
+    )
 
     func testEmitBenchTimings() async throws {
         guard ProcessInfo.processInfo.environment["GREENDOT_BENCH"] == "1" else {
@@ -56,8 +67,10 @@ final class PerformanceHarnessTests: XCTestCase {
         XCTAssertGreaterThan(poll.getCount, 0)
         XCTAssertGreaterThan(remaining.statuspalGets, 0)
     }
+}
 
-    private func measureParse() -> (statuspage: Double, instatus: Double, statuspal: Double) {
+private extension PerformanceHarnessTests {
+    func measureParse() -> ParseMetrics {
         let statuspage = Self.statuspageJSON(name: "GitHub", components: 40)
         let instatus = Data("""
         {"page": {"name": "Instatus", "url": "https://instat.us", "status": "UP"},
@@ -80,30 +93,30 @@ final class PerformanceHarnessTests: XCTestCase {
         let statuspageURL = URL(string: "https://www.githubstatus.com")!
         let instatusURL = URL(string: "https://instat.us")!
         let statuspalURL = URL(string: "https://acme.statuspal.io")!
-        return (
-            elapsedMs(iterations: 400) {
+        return ParseMetrics(
+            statuspage: elapsedMs(iterations: 400) {
                 _ = try StatuspageParser.parse(data: statuspage, sourceURL: statuspageURL)
             },
-            elapsedMs(iterations: 400) {
+            instatus: elapsedMs(iterations: 400) {
                 _ = try InstatusParser.parse(data: instatus, sourceURL: instatusURL)
             },
-            elapsedMs(iterations: 400) {
+            statuspal: elapsedMs(iterations: 400) {
                 _ = try StatuspalParser.parse(data: statuspal, sourceURL: statuspalURL)
             }
         )
     }
 
-    private func measurePoll() async throws -> (elapsedMs: Double, getCount: Int, mixedGetCount: Int) {
+    func measurePoll() async throws -> PollMetrics {
         let json = Self.statuspageJSON(name: "GitHub", components: 8)
         let sequential = MapHTTPClient(byPath: ["/api/v2/summary.json": (json, 200)])
-        let delayClient = DelayHTTPClient(inner: sequential, nanoseconds: Self.delayNs)
+        let delayClient = DelayHTTPClient(inner: sequential, nanoseconds: BenchmarkFixtures.delayNanoseconds)
         let counting = RecordingHTTPClient(delayClient)
         let threePage = try await pollPages(
             client: counting,
             pages: [
-                Self.page(host: "a.example", name: "A", provider: .statuspage),
-                Self.page(host: "b.example", name: "B", provider: .statuspage),
-                Self.page(host: "c.example", name: "C", provider: .statuspage)
+                BenchmarkFixtures.greenPage(host: "a.example", name: "A", provider: .statuspage),
+                BenchmarkFixtures.greenPage(host: "b.example", name: "B", provider: .statuspage),
+                BenchmarkFixtures.greenPage(host: "c.example", name: "C", provider: .statuspage)
             ]
         )
 
@@ -124,18 +137,22 @@ final class PerformanceHarnessTests: XCTestCase {
         _ = try await pollPages(
             client: mixedCounting,
             pages: [
-                Self.page(host: "www.githubstatus.com", name: "GitHub", provider: .statuspage),
-                Self.page(host: "instat.us", name: "Instatus", provider: .instatus),
-                Self.page(host: "acme.statuspal.io", name: "Acme", provider: .statuspal)
+                BenchmarkFixtures.greenPage(host: "www.githubstatus.com", name: "GitHub", provider: .statuspage),
+                BenchmarkFixtures.greenPage(host: "instat.us", name: "Instatus", provider: .instatus),
+                BenchmarkFixtures.greenPage(host: "acme.statuspal.io", name: "Acme", provider: .statuspal)
             ]
         )
-        return (threePage.elapsedMs, counting.requested.count, mixedCounting.requested.count)
+        return PollMetrics(
+            elapsedMs: threePage.elapsedMs,
+            getCount: counting.requested.count,
+            mixedGetCount: mixedCounting.requested.count
+        )
     }
 
-    private func pollPages(
+    func pollPages(
         client: HTTPClient,
         pages: [WatchedPage]
-    ) async throws -> (elapsedMs: Double, toasts: [Toast], snapshots: [PageSnapshot?]) {
+    ) async throws -> PollPageMetrics {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -148,16 +165,20 @@ final class PerformanceHarnessTests: XCTestCase {
         let start = ContinuousClock.now
         let toasts = try await monitor.pollAll()
         let elapsed = start.duration(to: .now)
-        return (elapsed.milliseconds, toasts, monitor.pages.map(\.snapshot))
+        return PollPageMetrics(
+            elapsedMs: elapsed.milliseconds,
+            toasts: toasts,
+            snapshots: monitor.pages.map(\.snapshot)
+        )
     }
 
-    private struct MenuMetrics {
+    struct MenuMetrics {
         var uncachedBuildMs: Double
         var cachedBuildMs: Double
         var uniqueCount: Int
     }
 
-    private func measureMenu() -> MenuMetrics {
+    func measureMenu() -> MenuMetrics {
         let pages = (0..<6).map { index in
             Self.nestedPage(name: "Page \(index)", host: "status\(index).example")
         }
@@ -179,14 +200,23 @@ final class PerformanceHarnessTests: XCTestCase {
         )
     }
 
-    private struct RemainingMetrics {
+    struct RemainingMetrics {
         var statuspalGets: Int
         var regexCompiles: Int
         var secondParseCount: Int
         var pulseWhenReachable: Int
     }
 
-    private func measureRemaining() async throws -> RemainingMetrics {
+    func measureRemaining() async throws -> RemainingMetrics {
+        RemainingMetrics(
+            statuspalGets: try await measureStatuspalProbe(),
+            regexCompiles: measureRegexCompilation(),
+            secondParseCount: try await measureSecondPollParseCount(),
+            pulseWhenReachable: measureReachablePulseRefresh()
+        )
+    }
+
+    func measureStatuspalProbe() async throws -> Int {
         var statuspalMap = MapHTTPClient()
         statuspalMap.byURL["https://statuspal.io/api/v2/status_pages/acme/summary"] = (Data("""
         {
@@ -201,14 +231,19 @@ final class PerformanceHarnessTests: XCTestCase {
             pageURL: URL(string: "https://acme.statuspal.io")!,
             client: statuspalRecording
         )
+        return statuspalRecording.requested.count
+    }
 
+    func measureRegexCompilation() -> Int {
         ProviderProbe.resetCounts()
         let html = String(repeating: "statuspal.io/api/v2/status_pages/acme plus filler ", count: 40)
         for _ in 0..<500 {
             _ = ProviderProbe.extractStatuspalSubdomain(from: html)
         }
-        let regexCompiles = ProviderProbe.regexCompileCount
+        return ProviderProbe.regexCompileCount
+    }
 
+    func measureSecondPollParseCount() async throws -> Int {
         let json = Self.statuspageJSON(name: "GitHub", components: 8)
         let client = MapHTTPClient(byPath: ["/api/v2/summary.json": (json, 200)])
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -217,9 +252,9 @@ final class PerformanceHarnessTests: XCTestCase {
         let store = PageStore(directory: dir)
         var config = AppConfig()
         config.pages = [
-            Self.page(host: "a.example", name: "A", provider: .statuspage),
-            Self.page(host: "b.example", name: "B", provider: .statuspage),
-            Self.page(host: "c.example", name: "C", provider: .statuspage)
+            BenchmarkFixtures.greenPage(host: "a.example", name: "A", provider: .statuspage),
+            BenchmarkFixtures.greenPage(host: "b.example", name: "B", provider: .statuspage),
+            BenchmarkFixtures.greenPage(host: "c.example", name: "C", provider: .statuspage)
         ]
         try store.save(config)
         let monitor = Monitor(store: store, client: client)
@@ -227,27 +262,23 @@ final class PerformanceHarnessTests: XCTestCase {
         _ = try await monitor.pollAll()
         ProviderProbe.resetCounts()
         _ = try await monitor.pollAll()
-        let secondParse = ProviderProbe.parseCount
+        return ProviderProbe.parseCount
+    }
+}
 
+private extension PerformanceHarnessTests {
+    func measureReachablePulseRefresh() -> Int {
         var pulse = 0
-        for _ in 0..<240 {
-            if AppDelegate.shouldRefreshIconOnPulse(hasUnreachable: false) {
-                pulse += 1
-            }
+        for _ in 0..<240 where AppDelegate.shouldRefreshIconOnPulse(hasUnreachable: false) {
+            pulse += 1
         }
-
-        return RemainingMetrics(
-            statuspalGets: statuspalRecording.requested.count,
-            regexCompiles: regexCompiles,
-            secondParseCount: secondParse,
-            pulseWhenReachable: pulse
-        )
+        return pulse
     }
 
-    private func measureStatusDot() -> (elapsedMs: Double, uniqueCount: Int) {
+    func measureStatusDot() -> (elapsedMs: Double, uniqueCount: Int) {
         var images: [NSImage] = []
         images.reserveCapacity(2_000)
-        let ms = elapsedMs(iterations: 1) {
+        let durationMs = elapsedMs(iterations: 1) {
             for _ in 0..<500 {
                 for severity in [Severity.green, .yellow, .red, .grey] {
                     images.append(StatusDot.image(severity, size: 14))
@@ -255,23 +286,25 @@ final class PerformanceHarnessTests: XCTestCase {
             }
         }
         let unique = Set(images.map(ObjectIdentifier.init)).count
-        return (ms, unique)
+        return (durationMs, unique)
     }
 
-    private func measureStoreSave() -> Double {
+    func measureStoreSave() -> Double {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = PageStore(directory: dir)
         var config = AppConfig()
-        config.pages = (0..<6).map { Self.page(host: "p\($0).example", name: "P\($0)", provider: .statuspage) }
+        config.pages = (0..<6).map {
+            BenchmarkFixtures.greenPage(host: "p\($0).example", name: "P\($0)", provider: .statuspage)
+        }
         return elapsedMs(iterations: 40) {
             try store.save(config)
         }
     }
 
     /// Second poll of identical JSON: 1 if config.json was replaced, 0 if not.
-    private func measureUnchangedPollWrites() async throws -> Int {
+    func measureUnchangedPollWrites() async throws -> Int {
         let json = Self.statuspageJSON(name: "GitHub", components: 8)
         let client = MapHTTPClient(byPath: ["/api/v2/summary.json": (json, 200)])
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -279,7 +312,7 @@ final class PerformanceHarnessTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = PageStore(directory: dir)
         var config = AppConfig()
-        config.pages = [Self.page(host: "a.example", name: "A", provider: .statuspage)]
+        config.pages = [BenchmarkFixtures.greenPage(host: "a.example", name: "A", provider: .statuspage)]
         try store.save(config)
         let monitor = Monitor(store: store, client: client)
         try monitor.load()
@@ -293,7 +326,7 @@ final class PerformanceHarnessTests: XCTestCase {
         return beforeInode == afterInode ? 0 : 1
     }
 
-    private func elapsedMs(iterations: Int, _ body: () throws -> Void) -> Double {
+    func elapsedMs(iterations: Int, _ body: () throws -> Void) -> Double {
         do {
             let start = ContinuousClock.now
             for _ in 0..<iterations {
@@ -306,17 +339,18 @@ final class PerformanceHarnessTests: XCTestCase {
         }
     }
 
-    private func fmt(_ value: Double) -> String {
+    func fmt(_ value: Double) -> String {
         String(format: "%.3f", value)
     }
 
-    private static func statuspageJSON(name: String, components: Int) -> Data {
+    static func statuspageJSON(name: String, components: Int) -> Data {
         var rows: [String] = [
             #"{"id":"g1","name":"Web","status":"operational","group":true}"#
         ]
         for index in 0..<components {
             rows.append(
-                #"{"id":"c\#(index)","name":"Component \#(index)","status":"operational","group":false,"group_id":"g1"}"#
+                #"{"id":"c\#(index)","name":"Component \#(index)","status":"operational","group":false,"#
+                    + #""group_id":"g1"}"#
             )
         }
         let joined = rows.joined(separator: ",")
@@ -330,24 +364,7 @@ final class PerformanceHarnessTests: XCTestCase {
         """.utf8)
     }
 
-    private static func page(host: String, name: String, provider: StatusProvider) -> WatchedPage {
-        let url = URL(string: "https://\(host)")!
-        return WatchedPage(
-            url: url,
-            name: name,
-            snapshot: PageSnapshot(
-                name: name,
-                url: url,
-                provider: provider,
-                overall: .green,
-                components: [ComponentStatus(name: "API", severity: .green, statusText: "Operational")],
-                incidents: [],
-                isUnreachable: false
-            )
-        )
-    }
-
-    private static func nestedPage(name: String, host: String) -> WatchedPage {
+    static func nestedPage(name: String, host: String) -> WatchedPage {
         let url = URL(string: "https://\(host)")!
         let group = ComponentStatus(
             name: "Web Application",
@@ -374,24 +391,5 @@ final class PerformanceHarnessTests: XCTestCase {
                 isUnreachable: false
             )
         )
-    }
-
-    private static let noopHandlers = StatusMenuHandlers(
-        onAdd: {},
-        onEdit: { _ in },
-        onRemove: { _ in },
-        onToggleNotifications: { _ in },
-        onOpen: { _ in },
-        onRefresh: {},
-        onToggleLaunchAtLogin: {},
-        onAbout: {},
-        onQuit: {}
-    )
-}
-
-private extension Duration {
-    var milliseconds: Double {
-        let parts = components
-        return Double(parts.seconds) * 1_000 + Double(parts.attoseconds) / 1e15
     }
 }

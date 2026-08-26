@@ -1,6 +1,7 @@
 import AppKit
 
 /// Accessory apps have no Edit menu, so Cmd+C / Cmd+V never reach a text field.
+@MainActor
 enum AppEditMenu {
     static func install() {
         NSApp.mainMenu = makeMainMenu()

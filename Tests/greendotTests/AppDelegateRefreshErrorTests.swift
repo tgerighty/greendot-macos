@@ -4,6 +4,7 @@ import StatusCore
 import TestSupport
 @testable import greendot
 
+@MainActor
 final class AppDelegateRefreshErrorTests: XCTestCase {
     private let greenJSON = """
     {
@@ -23,10 +24,19 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
     }
     """
 
+    private let redWithoutComponentsJSON = """
+    {
+      "page": {"name": "GitHub", "url": "https://www.githubstatus.com"},
+      "status": {"indicator": "major"},
+      "components": [],
+      "incidents": []
+    }
+    """
+
     func testSuccessfulPollDeliversToastThroughInjectedAdapter() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let pageURL = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
+        let pageURL = testURL(host: "www.githubstatus.com")
         let store = try await seedStore(at: directory, pageURL: pageURL)
         let monitor = Monitor(
             store: store,
@@ -43,10 +53,31 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
         ])
     }
 
+    func testPageOverallWithNoComponentsStillDeliversToast() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pageURL = testURL(host: "www.githubstatus.com")
+        let store = try await seedStore(at: directory, pageURL: pageURL)
+        let monitor = Monitor(
+            store: store,
+            client: SequenceHTTPClient(responses: [Data(redWithoutComponentsJSON.utf8)])
+        )
+        try monitor.load()
+        let delivery = InMemoryToastDelivery()
+        let delegate = AppDelegate(toastDelivery: delivery)
+
+        await delegate.pollAndRefresh(monitor)
+
+        XCTAssertEqual(monitor.pages[0].displaySeverity, .red)
+        XCTAssertEqual(delivery.toasts, [
+            Toast(pageName: "GitHub", body: "Major outage", severity: .red)
+        ])
+    }
+
     func testPersistenceErrorsPresentOnceUntilSuccessfulPollResetsGate() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let pageURL = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
+        let pageURL = testURL(host: "www.githubstatus.com")
         let store = try await seedStore(at: directory, pageURL: pageURL)
 
         let sequence = SequenceHTTPClient(responses: [
@@ -92,7 +123,7 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
     func testStaleSuccessfulPollDoesNotResetPersistenceErrorGate() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let pageURL = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
+        let pageURL = testURL(host: "www.githubstatus.com")
         let store = try await seedStore(at: directory, pageURL: pageURL)
 
         let client = ControllableHTTPClient()
@@ -128,7 +159,7 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
     func testCancelledPollDoesNotPresentAnError() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let pageURL = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
+        let pageURL = testURL(host: "www.githubstatus.com")
         let store = try await seedStore(at: directory, pageURL: pageURL)
         let client = ControllableHTTPClient()
         defer { client.failAll() }
@@ -160,10 +191,6 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
         return store
     }
 
-    private func breakPersistence(at configURL: URL) throws {
-        try? FileManager.default.removeItem(at: configURL)
-        try FileManager.default.createDirectory(at: configURL, withIntermediateDirectories: true)
-    }
 }
 
 private final class SequenceHTTPClient: HTTPClient, @unchecked Sendable {

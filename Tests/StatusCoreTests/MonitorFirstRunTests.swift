@@ -1,7 +1,54 @@
+import Foundation
 import XCTest
 @testable import StatusCore
+import TestSupport
 
 final class MonitorFirstRunTests: XCTestCase {
+    func testConcurrentFirstRunCallsEnableLaunchAtLoginOnce() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PageStore(directory: directory)
+        try store.save(AppConfig(didSetLaunchAtLogin: false))
+        let transitionLock = ControllableLock()
+        let monitor = Monitor(
+            store: store,
+            client: MapHTTPClient(),
+            transitionLock: transitionLock
+        )
+        try monitor.load()
+
+        let callbackLock = NSLock()
+        var callbackCount = 0
+        let firstCallback = expectation(description: "first launch-at-login callback")
+        monitor.onLaunchAtLoginEnable = {
+            callbackLock.lock()
+            callbackCount += 1
+            let isFirst = callbackCount == 1
+            callbackLock.unlock()
+            if isFirst { firstCallback.fulfill() }
+        }
+
+        transitionLock.blockNextAcquisition()
+        let firstCall = DispatchWorkItem { monitor.enableLaunchAtLoginOnFirstRun() }
+        DispatchQueue.global().async(execute: firstCall)
+        XCTAssertTrue(transitionLock.waitUntilAcquisitionBlocked())
+
+        let secondCall = expectation(description: "second first-run call completes")
+        DispatchQueue.global().async {
+            monitor.enableLaunchAtLoginOnFirstRun()
+            secondCall.fulfill()
+        }
+        wait(for: [firstCallback, secondCall], timeout: 2)
+        transitionLock.resumeBlockedAcquisition()
+        firstCall.wait()
+
+        callbackLock.lock()
+        let finalCallbackCount = callbackCount
+        callbackLock.unlock()
+        XCTAssertEqual(finalCallbackCount, 1)
+        XCTAssertTrue(try store.load().didSetLaunchAtLogin)
+    }
+
     func testFirstRunSaveFailureDoesNotEnableLaunchAtLogin() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

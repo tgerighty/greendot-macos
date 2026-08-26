@@ -3,8 +3,6 @@ import StatusCore
 import XCTest
 @testable import greendot
 
-private typealias ScheduledMainActorWork = @MainActor @Sendable () -> Void
-
 @MainActor
 final class StatusMenuControllerTests: XCTestCase {
     func testSeverityOnlyUpdateReusesMenuAndUpdatesIcon() throws {

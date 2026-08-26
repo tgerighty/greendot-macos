@@ -38,68 +38,24 @@ public enum ProviderProbe {
         previousBody: Data? = nil,
         previousSnapshot: PageSnapshot? = nil
     ) async throws -> ProbeHit {
-        let base = normalizedBase(pageURL)
-        var sawHTTP = false
-        var sawNetworkError = false
-
-        func take(_ result: AttemptResult) -> ProbeHit? {
-            switch result {
-            case .hit(let snapshot, let data):
-                return ProbeHit(snapshot: snapshot, body: data)
-            case .miss:
-                sawHTTP = true
-                return nil
-            case .networkError:
-                sawNetworkError = true
-                return nil
-            }
-        }
-
-        func tryStatuspage() async throws -> ProbeHit? {
-            take(try await attempt(
-                base.appendingPathComponent("api/v2/summary.json"),
-                client: client,
-                previousBody: previousBody,
-                previousSnapshot: previousSnapshot,
-                parse: { try StatuspageParser.parse(data: $0, sourceURL: base) }
-            ))
-        }
-
-        func tryInstatus() async throws -> ProbeHit? {
-            take(try await attempt(
-                base.appendingPathComponent("summary.json"),
-                client: client,
-                previousBody: previousBody,
-                previousSnapshot: previousSnapshot,
-                parse: { try InstatusParser.parse(data: $0, sourceURL: base) }
-            ))
-        }
-
-        func tryStatuspal() async throws -> ProbeHit? {
-            try await probeStatuspal(
-                base: base,
-                client: client,
-                flags: &sawHTTP,
-                network: &sawNetworkError,
-                previousBody: previousBody,
-                previousSnapshot: previousSnapshot
-            )
-        }
-
+        let context = ProbeContext(
+            base: normalizedBase(pageURL),
+            client: client,
+            previousBody: previousBody,
+            previousSnapshot: previousSnapshot
+        )
+        var flags = ProbeFlags()
         for provider in probeOrder(preferring: prefer) {
             switch provider {
-            case .statuspage:
-                if let hit = try await tryStatuspage() { return hit }
-            case .instatus:
-                if let hit = try await tryInstatus() { return hit }
+            case .statuspage, .instatus:
+                if let hit = flags.record(try await standardAttempt(for: provider, context: context)) {
+                    return hit
+                }
             case .statuspal:
-                if let hit = try await tryStatuspal() { return hit }
+                if let hit = try await probeStatuspal(context: context, flags: &flags) { return hit }
             }
         }
-        if !sawHTTP && sawNetworkError {
-            throw ProbeError.unreachable
-        }
-        throw ProbeError.unsupported
+        throw flags.finalError
     }
 
     static func probeOrder(preferring prefer: StatusProvider?) -> [StatusProvider] {
@@ -127,9 +83,71 @@ public enum ProviderProbe {
     }
 
     private enum AttemptResult {
-        case hit(PageSnapshot, Data)
+        case hit(ProbeHit)
         case miss
         case networkError
+    }
+
+    private struct ProbeContext: Sendable {
+        let base: URL
+        let client: HTTPClient
+        let previousBody: Data?
+        let previousSnapshot: PageSnapshot?
+    }
+
+    private struct ProbeFlags {
+        var sawNetworkError = false
+
+        mutating func recordHTTP(status: Int) {
+            if ProviderProbe.isReachabilityStatus(status) {
+                sawNetworkError = true
+            }
+        }
+
+        mutating func record(_ result: AttemptResult) -> ProbeHit? {
+            switch result {
+            case .hit(let hit):
+                return hit
+            case .miss:
+                return nil
+            case .networkError:
+                sawNetworkError = true
+                return nil
+            }
+        }
+
+        var finalError: ProbeError {
+            sawNetworkError ? .unreachable : .unsupported
+        }
+    }
+
+    private static func isReachabilityStatus(_ status: Int) -> Bool {
+        status == 0 || status == 429 || (500...599).contains(status)
+    }
+
+    private static func standardAttempt(
+        for provider: StatusProvider,
+        context: ProbeContext
+    ) async throws -> AttemptResult {
+        let endpoint: URL
+        let parse: (Data) throws -> PageSnapshot
+        switch provider {
+        case .statuspage:
+            endpoint = context.base.appendingPathComponent("api/v2/summary.json")
+            parse = { try StatuspageParser.parse(data: $0, sourceURL: context.base) }
+        case .instatus:
+            endpoint = context.base.appendingPathComponent("summary.json")
+            parse = { try InstatusParser.parse(data: $0, sourceURL: context.base) }
+        case .statuspal:
+            return .miss
+        }
+        return try await attempt(
+            endpoint,
+            client: context.client,
+            previousBody: context.previousBody,
+            previousSnapshot: context.previousSnapshot,
+            parse: parse
+        )
     }
 
     private static func attempt(
@@ -142,15 +160,17 @@ public enum ProviderProbe {
         do {
             let (data, status) = try await client.get(url)
             try Task.checkCancellation()
-            guard status == 200 else { return .miss }
+            guard status == 200 else {
+                return isReachabilityStatus(status) ? .networkError : .miss
+            }
             if let previousBody, let previousSnapshot,
                !previousSnapshot.isUnreachable,
                data == previousBody {
-                return .hit(previousSnapshot, data)
+                return .hit(ProbeHit(snapshot: previousSnapshot, body: data))
             }
             do {
                 parseBox.increment()
-                return .hit(try parse(data), data)
+                return .hit(ProbeHit(snapshot: try parse(data), body: data))
             } catch {
                 return .miss
             }
@@ -161,23 +181,19 @@ public enum ProviderProbe {
     }
 
     private static func probeStatuspal(
-        base: URL,
-        client: HTTPClient,
-        flags sawHTTP: inout Bool,
-        network sawNetworkError: inout Bool,
-        previousBody: Data?,
-        previousSnapshot: PageSnapshot?
+        context: ProbeContext,
+        flags: inout ProbeFlags
     ) async throws -> ProbeHit? {
-        let host = base.host ?? ""
+        let host = context.base.host ?? ""
         var subdomains: [String] = []
         if host.hasSuffix(".statuspal.io") || host.hasSuffix(".statuspal.eu") {
             subdomains.append(host.split(separator: ".").first.map(String.init) ?? host)
         }
         if subdomains.isEmpty {
             do {
-                let htmlHit = try await client.get(base)
+                let htmlHit = try await context.client.get(context.base)
                 try Task.checkCancellation()
-                sawHTTP = true
+                flags.recordHTTP(status: htmlHit.1)
                 if htmlHit.1 == 200,
                    let html = String(data: htmlHit.0, encoding: .utf8),
                    html.lowercased().contains("statuspal"),
@@ -186,7 +202,7 @@ public enum ProviderProbe {
                 }
             } catch {
                 try throwIfCancelled(error)
-                sawNetworkError = true
+                flags.sawNetworkError = true
             }
         }
         let unique = Array(NSOrderedSet(array: subdomains)) as? [String] ?? subdomains
@@ -194,20 +210,13 @@ public enum ProviderProbe {
         for subdomain in unique {
             for prefix in apiHosts {
                 guard let url = URL(string: prefix + subdomain + "/summary") else { continue }
-                switch try await attempt(
+                if let hit = flags.record(try await attempt(
                     url,
-                    client: client,
-                    previousBody: previousBody,
-                    previousSnapshot: previousSnapshot,
-                    parse: { try StatuspalParser.parse(data: $0, sourceURL: base) }
-                ) {
-                case .hit(let snapshot, let data):
-                    return ProbeHit(snapshot: snapshot, body: data)
-                case .miss:
-                    sawHTTP = true
-                case .networkError:
-                    sawNetworkError = true
-                }
+                    client: context.client,
+                    previousBody: context.previousBody,
+                    previousSnapshot: context.previousSnapshot,
+                    parse: { try StatuspalParser.parse(data: $0, sourceURL: context.base) }
+                )) { return hit }
             }
         }
         return nil

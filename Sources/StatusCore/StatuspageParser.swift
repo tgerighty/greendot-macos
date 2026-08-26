@@ -1,17 +1,5 @@
 import Foundation
 
-enum ParserError: Error, Equatable, LocalizedError {
-    case notThisProvider
-    case invalidJSON
-
-    var errorDescription: String? {
-        switch self {
-        case .notThisProvider: return "JSON is not this status-page format"
-        case .invalidJSON: return "Status page returned invalid JSON"
-        }
-    }
-}
-
 public enum StatuspageParser {
     public static func parse(data: Data, sourceURL: URL) throws -> PageSnapshot {
         let json = try decode(data)
@@ -61,11 +49,14 @@ public enum StatuspageParser {
                 groupID: item["group_id"] as? String
             )
         }
-        let grouped = parsed.filter { $0.groupID != nil && !$0.isGroup }
-        let childrenByGroup = Dictionary(grouping: grouped) { $0.groupID! }
+        let grouped = parsed.compactMap { row -> (groupID: String, row: Row)? in
+            guard let groupID = row.groupID, !row.isGroup else { return nil }
+            return (groupID: groupID, row: row)
+        }
+        let childrenByGroup = Dictionary(grouping: grouped) { $0.groupID }
         return parsed.compactMap { item in
             if item.isGroup {
-                let kids = (childrenByGroup[item.id] ?? []).map { leaf($0) }
+                let kids = (childrenByGroup[item.id] ?? []).map { leaf($0.row) }
                 return ComponentStatus(
                     name: item.name,
                     severity: StatusMapping.statuspageComponent(item.status),
