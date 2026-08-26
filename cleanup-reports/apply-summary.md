@@ -1,27 +1,32 @@
 # Cleanup apply summary
 
 - Date: 2026-08-26
-- Branch: `main`
+- Branch: `cleanup/apply-20260826`
 - Assessment base: `310032baadea24dd7ea32a97ddc5af8df9a52845`
 - Assessment report commit: `9141e8b`
-- Last product-code merge: `9c5b4f2`
+- Last cleanup product-code merge: `9c5b4f2`
 - Independent-review merge: `2dfa293`
-- Delivery state: local only; not pushed and no pull request created
+- PR review product fix: `70b8ec0`
+- Final local test cleanup: `7a38b01`
+- Delivery: GitHub pull request #15
 
 ## Decision
 
 **APPROVE for the cleanup development/readiness gate.**
 
 The approved and verified cleanup work is applied. The independent verifier
-found no actionable P0-P3 issue. The normal build, full Swift test suite,
-strict Swift 6 build, benchmark suite, lint scan, release app build, signing
-check, and plist check pass on the final local branch.
+found no actionable P0-P3 issue in the original apply range. The PR review
+later found one concurrency race; a deterministic RED test reproduced it and
+the GREEN fix passed independent review. The normal build, full Swift test
+suite, strict Swift 6 build, concurrency-warning build, benchmark suite, and
+strict lint gate pass on the final local branch. The release app is rebuilt
+after this report commit so its embedded revision matches the submitted head.
 
 This is not formal product validation or a release approval. The macOS UI test
-runner was blocked by an active system authentication session before any UI
-test started. Sonar deep analysis and CodeRabbit review were also blocked by
-external service access. Those results are recorded below and are not reported
-as passes.
+runner initially met a system authentication block, but a fresh final run
+executed all 17 UI tests with no failure. PR service results and their limits
+are recorded below; the live status on PR #15 is authoritative for the latest
+pushed head.
 
 ## Outcome
 
@@ -92,6 +97,7 @@ records.
 | Defensive 015 | `9bb3bd0` | `4ffc364` |
 | Weak typing, initial | `c9d6465` | `6fb3b0e`, `e0544f8`, `e59ddaa`, `75b569b`, `461c2e7` |
 | Weak typing, serial catch-up | `14a513f` | `336dd91` |
+| Concurrent first-run launch-at-login | `b80b782` | `c02efef` |
 
 AI-slop, circular-dependency, and legacy-code review did not produce an
 approved implementation, so no implementation RED/GREEN pair was created for
@@ -102,26 +108,29 @@ those areas.
 | Check | Baseline | Final local branch | Result |
 |---|---:|---:|---|
 | `swift build` | PASS | PASS | PASS |
-| `swift test` | 150 tests, 1 skip, 0 failures | 163 tests, 1 intentional skip, 0 failures | PASS |
+| `swift test` | 150 tests, 1 skip, 0 failures | 164 tests, 1 intentional skip, 0 failures | PASS |
 | Strict Swift 6 build | FAIL with AppKit/MainActor diagnostics | PASS with no warning or error output | Improved |
-| SwiftLint JSON | 11 findings: 10 Warning, 1 Error | 8 findings: 8 Warning, 0 Error/serious | Improved |
-| Swift source files | 59 | 66 | +7 |
-| Swift code LOC | 6,606 | 6,821 | +215 |
+| Concurrency-warning build | PASS with warnings | PASS with no warning or error output | Improved |
+| `swiftlint lint --strict` | 11 findings: 10 Warning, 1 Error | 0 findings | PASS |
+| Swift source files | 59 | 68 | +9 |
+| Swift code LOC | 6,606 | 6,919 | +313 |
 | `make bench` | Not used for comparison | 1 test passed | PASS |
+| `make uitest` | Not used for comparison | 17 tests, 0 failures | PASS |
 | `git diff --check` | — | No whitespace error | PASS |
 | Release app and signing | — | `make app`, strict codesign, and plist lint pass | PASS |
 
-The source, tests, resources, package, Makefile, and README range contains 36
-changed files, 911 insertions, and 664 deletions. The LOC increase is mainly
+The source, tests, resources, package, Makefile, README, and CodeRabbit
+configuration range contains 40 changed files, 1,072 insertions, and 712
+deletions. The LOC increase is mainly
 the new regression tests, shared test support, and decomposition files. It is
 not hidden as a net reduction.
 
 Final benchmark observations:
 
-- Statuspage parse: 40.292 ms.
-- Instatus parse: 2.146 ms.
-- Statuspal parse: 3.981 ms.
-- Three delayed pages completed in 87.585 ms against a 240 ms sequential
+- Statuspage parse: 39.348 ms.
+- Instatus parse: 2.108 ms.
+- Statuspal parse: 3.857 ms.
+- Three delayed pages completed in 85.413 ms against a 240 ms sequential
   reference.
 - Three known-provider requests were made.
 - Unchanged configuration rewrites: 0.
@@ -130,16 +139,20 @@ Final benchmark observations:
 - Second unchanged parse count: 0.
 - Reachable-page pulse refreshes: 0.
 
-The eight final lint warnings are in test or benchmark code: three
-`large_tuple`, two `type_body_length`, one `for_where`, one `identifier_name`,
-and one `line_length`. No final Error or serious finding was reported.
+The eight previous test and benchmark lint warnings were resolved without rule
+suppressions. Small result types replaced three-value tuples, long test bodies
+were split into focused extensions, and the remaining loop, name, and line
+findings were corrected.
 
 ## Independent review
 
 The independent verifier returned **APPROVE** with no actionable P0-P3
-finding. It independently ran the 163-test suite, strict Swift 6 compilation,
-concurrency-warning compilation, benchmarks, diff checks, and a source/test
-scope review. See `cleanup-reports/independent-apply-review.md`.
+finding in the original apply range. It independently ran the 163-test suite,
+strict Swift 6 compilation, concurrency-warning compilation, benchmarks, diff
+checks, and a source/test scope review. A later independent PR review confirmed
+the first-run race, reproduced the RED failure, and approved the GREEN locking
+fix. The final main gate ran 164 package tests and 17 UI tests. See
+`cleanup-reports/independent-apply-review.md`.
 
 The reviewer retained two limits:
 
@@ -150,38 +163,31 @@ The reviewer retained two limits:
 
 ## External and environment gates
 
-### macOS UI tests: BLOCKED before test execution
+### macOS UI tests: PASS
 
-`make uitest` built and signed the application and UI test runner. The runner
-then stopped before any of the 17 UI tests started:
+The earlier environment block cleared without changing application permissions.
+A fresh `make uitest` built and signed the application and UI test runner, then
+executed all 17 UI tests. All 17 passed with no failure in 112.278 seconds.
 
-`LocalAuthentication Code=-4: Authentication cancelled. System authentication is running.`
+### Pull request services
 
-The result bundle contains one runner-initialization failure and zero executed
-UI tests. This is an environment gate, not a UI test pass or a confirmed
-product failure. Complete or dismiss the active Touch ID/password request,
-wake and unlock the console, then run `make uitest` once. Do not reset TCC or
-change permissions for this result.
+Sonar analysed PR #15 at `18af455`: the quality gate passed with 0 bugs, 0
+vulnerabilities, 0 code smells, 0 security hotspots, and 0.0% duplicated new
+lines. Earlier Sonar URL-literal findings were reduced from eight to zero by
+`c237837` and `18af455`. The final pushed head must retain those zero values.
 
-### Sonar: BLOCKED for deep and dependency analysis
+CodeRabbit completed its full review at `18af455` and posted 12 actionable
+comments. The report-integrity items are corrected by `b4eb6a8`; the real
+first-run race has RED `b80b782` and GREEN `c02efef`. Its generic 80% docstring
+warning did not match this Swift codebase's policy, so `.coderabbit.yaml`
+disables that pre-merge check instead of adding low-value comments to internal
+and test functions. Gitar approved the reviewed head, and both Socket checks
+passed.
 
-Deep analysis was requested explicitly for project `tgerighty_greendot` from
-the assessment base. Sonar returned 403 for all 88 file-analysis requests
-because Vortex Analysis is not available for organization `nxioai`. The zero
-issue payload is therefore invalid as review evidence. It is not reported as a
-clean scan.
-
-The available local secrets analysis passed with no finding. Software
-composition analysis was not available for the connected plan, so dependency
-risk analysis was not executed.
-
-### CodeRabbit: BLOCKED before review request
-
-The required service procedure could not start safely. The canonical guide at
-`/var/lib/coding/coderabbit/AGENT_INSTRUCTIONS.md` is absent on this host, and
-the configured service endpoint returns HTTP 401 with `invalid bearer token`.
-No CodeRabbit slot was claimed and no CodeRabbit review was run. Restore the
-canonical guide and service credentials before requesting this gate again.
+Dependabot returned no open alerts. GitHub CodeQL is not enabled for this
+repository, so its API returned 403; this is recorded as not configured, not
+as a clean CodeQL scan. No GitHub Actions workflow is configured for this
+branch.
 
 ## Open human decisions
 
@@ -191,14 +197,10 @@ are review or validation work:
 - Decide `defensive-014` after manual regex-initialization review.
 - Add exact AppDelegate menu-wiring coverage for `legacy-001` before changing
   the retained-editor workaround.
-- Re-run `make uitest` after the macOS authentication session is clear.
-- Restore Sonar Vortex/SCA entitlement and CodeRabbit service access if those
-  external gates are required.
 
 ## Delivery
 
-All cleanup branches used for this apply run were merged into local `main`
-through Worktrunk. The final checked revision is `HEAD` after this report
-commit. The rebuilt `greendot.app` records that short commit in
-`GitCommitHash`. The branch remains unpushed, and no pull request has been
-created.
+All cleanup branches used for this apply run were merged through Worktrunk.
+The delivery branch is submitted as GitHub PR #15. The rebuilt `greendot.app`
+records the final short commit in `GitCommitHash`. The remote PR checks and
+review threads determine merge readiness; this report does not merge the PR.
