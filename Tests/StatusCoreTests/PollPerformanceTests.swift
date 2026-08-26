@@ -3,7 +3,6 @@ import XCTest
 import TestSupport
 
 final class PollPerformanceTests: XCTestCase {
-    private static let delayNs: UInt64 = 80_000_000
     private static let statuspageJSON = Data("""
     {
       "page": {"name": "GitHub", "url": "https://www.githubstatus.com"},
@@ -32,14 +31,14 @@ final class PollPerformanceTests: XCTestCase {
         let inner = MapHTTPClient(byPath: [
             "/api/v2/summary.json": (Self.statuspageJSON, 200)
         ])
-        let delayed = DelayHTTPClient(inner: inner, nanoseconds: Self.delayNs)
+        let delayed = DelayHTTPClient(inner: inner, nanoseconds: BenchmarkFixtures.delayNanoseconds)
         let probe = ConcurrencyProbeHTTPClient(delayed)
         let (monitor, dir) = try seededMonitor(
             client: probe,
             pages: [
-                Self.page(host: "a.example", name: "A", provider: .statuspage),
-                Self.page(host: "b.example", name: "B", provider: .statuspage),
-                Self.page(host: "c.example", name: "C", provider: .statuspage)
+                BenchmarkFixtures.greenPage(host: "a.example", name: "A", provider: .statuspage),
+                BenchmarkFixtures.greenPage(host: "b.example", name: "B", provider: .statuspage),
+                BenchmarkFixtures.greenPage(host: "c.example", name: "C", provider: .statuspage)
             ]
         )
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -62,9 +61,9 @@ final class PollPerformanceTests: XCTestCase {
         let (monitor, dir) = try seededMonitor(
             client: recording,
             pages: [
-                Self.page(host: "www.githubstatus.com", name: "GitHub", provider: .statuspage),
-                Self.page(host: "instat.us", name: "Instatus", provider: .instatus),
-                Self.page(host: "acme.statuspal.io", name: "Acme", provider: .statuspal)
+                BenchmarkFixtures.greenPage(host: "www.githubstatus.com", name: "GitHub", provider: .statuspage),
+                BenchmarkFixtures.greenPage(host: "instat.us", name: "Instatus", provider: .instatus),
+                BenchmarkFixtures.greenPage(host: "acme.statuspal.io", name: "Acme", provider: .statuspal)
             ]
         )
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -115,7 +114,7 @@ final class PollPerformanceTests: XCTestCase {
         ])
         let (monitor, dir) = try seededMonitor(
             client: client,
-            pages: [Self.page(host: "a.example", name: "A", provider: .statuspage)]
+            pages: [BenchmarkFixtures.greenPage(host: "a.example", name: "A", provider: .statuspage)]
         )
         defer { try? FileManager.default.removeItem(at: dir) }
         ProviderProbe.resetCounts()
@@ -160,7 +159,7 @@ final class PollPerformanceTests: XCTestCase {
         ])
         let (monitor, dir) = try seededMonitor(
             client: client,
-            pages: [Self.page(host: "a.example", name: "A", provider: .statuspage)]
+            pages: [BenchmarkFixtures.greenPage(host: "a.example", name: "A", provider: .statuspage)]
         )
         defer { try? FileManager.default.removeItem(at: dir) }
         let configURL = PageStore(directory: dir).configURL
@@ -180,7 +179,7 @@ final class PollPerformanceTests: XCTestCase {
         ])
         let (monitor, dir) = try seededMonitor(
             client: client,
-            pages: [Self.page(host: "a.example", name: "A", provider: .statuspage)]
+            pages: [BenchmarkFixtures.greenPage(host: "a.example", name: "A", provider: .statuspage)]
         )
         defer { try? FileManager.default.removeItem(at: dir) }
         let configURL = PageStore(directory: dir).configURL
@@ -194,7 +193,7 @@ final class PollPerformanceTests: XCTestCase {
     func testPollAllUnreachablePageStaysGreyAndToasts() async throws {
         let (monitor, dir) = try seededMonitor(
             client: MapHTTPClient(),
-            pages: [Self.page(host: "offline.example", name: "Down", provider: .statuspage)]
+            pages: [BenchmarkFixtures.greenPage(host: "offline.example", name: "Down", provider: .statuspage)]
         )
         defer { try? FileManager.default.removeItem(at: dir) }
         let toasts = try await monitor.pollAll()
@@ -226,22 +225,6 @@ final class PollPerformanceTests: XCTestCase {
         return (monitor, dir)
     }
 
-    private static func page(host: String, name: String, provider: StatusProvider) -> WatchedPage {
-        let url = URL(string: "https://\(host)")!
-        return WatchedPage(
-            url: url,
-            name: name,
-            snapshot: PageSnapshot(
-                name: name,
-                url: url,
-                provider: provider,
-                overall: .green,
-                components: [ComponentStatus(name: "API", severity: .green, statusText: "Operational")],
-                incidents: [],
-                isUnreachable: false
-            )
-        )
-    }
 }
 
 final class ConcurrencyProbeHTTPClient: HTTPClient, @unchecked Sendable {
@@ -277,12 +260,5 @@ final class ConcurrencyProbeHTTPClient: HTTPClient, @unchecked Sendable {
         lock.lock()
         inFlight -= 1
         lock.unlock()
-    }
-}
-
-private extension Duration {
-    var milliseconds: Double {
-        let parts = components
-        return Double(parts.seconds) * 1_000 + Double(parts.attoseconds) / 1e15
     }
 }

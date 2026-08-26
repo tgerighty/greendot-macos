@@ -8,7 +8,6 @@ import TestSupport
 /// Prints `BENCH name=ms` lines. Does not gate on absolute microseconds.
 @MainActor
 final class PerformanceHarnessTests: XCTestCase {
-    private static let delayNs: UInt64 = 80_000_000
     private static let delayMs = 80.0
 
     func testEmitBenchTimings() async throws {
@@ -97,14 +96,14 @@ final class PerformanceHarnessTests: XCTestCase {
     private func measurePoll() async throws -> (elapsedMs: Double, getCount: Int, mixedGetCount: Int) {
         let json = Self.statuspageJSON(name: "GitHub", components: 8)
         let sequential = MapHTTPClient(byPath: ["/api/v2/summary.json": (json, 200)])
-        let delayClient = DelayHTTPClient(inner: sequential, nanoseconds: Self.delayNs)
+        let delayClient = DelayHTTPClient(inner: sequential, nanoseconds: BenchmarkFixtures.delayNanoseconds)
         let counting = RecordingHTTPClient(delayClient)
         let threePage = try await pollPages(
             client: counting,
             pages: [
-                Self.page(host: "a.example", name: "A", provider: .statuspage),
-                Self.page(host: "b.example", name: "B", provider: .statuspage),
-                Self.page(host: "c.example", name: "C", provider: .statuspage)
+                BenchmarkFixtures.greenPage(host: "a.example", name: "A", provider: .statuspage),
+                BenchmarkFixtures.greenPage(host: "b.example", name: "B", provider: .statuspage),
+                BenchmarkFixtures.greenPage(host: "c.example", name: "C", provider: .statuspage)
             ]
         )
 
@@ -125,9 +124,9 @@ final class PerformanceHarnessTests: XCTestCase {
         _ = try await pollPages(
             client: mixedCounting,
             pages: [
-                Self.page(host: "www.githubstatus.com", name: "GitHub", provider: .statuspage),
-                Self.page(host: "instat.us", name: "Instatus", provider: .instatus),
-                Self.page(host: "acme.statuspal.io", name: "Acme", provider: .statuspal)
+                BenchmarkFixtures.greenPage(host: "www.githubstatus.com", name: "GitHub", provider: .statuspage),
+                BenchmarkFixtures.greenPage(host: "instat.us", name: "Instatus", provider: .instatus),
+                BenchmarkFixtures.greenPage(host: "acme.statuspal.io", name: "Acme", provider: .statuspal)
             ]
         )
         return (threePage.elapsedMs, counting.requested.count, mixedCounting.requested.count)
@@ -218,9 +217,9 @@ final class PerformanceHarnessTests: XCTestCase {
         let store = PageStore(directory: dir)
         var config = AppConfig()
         config.pages = [
-            Self.page(host: "a.example", name: "A", provider: .statuspage),
-            Self.page(host: "b.example", name: "B", provider: .statuspage),
-            Self.page(host: "c.example", name: "C", provider: .statuspage)
+            BenchmarkFixtures.greenPage(host: "a.example", name: "A", provider: .statuspage),
+            BenchmarkFixtures.greenPage(host: "b.example", name: "B", provider: .statuspage),
+            BenchmarkFixtures.greenPage(host: "c.example", name: "C", provider: .statuspage)
         ]
         try store.save(config)
         let monitor = Monitor(store: store, client: client)
@@ -265,7 +264,9 @@ final class PerformanceHarnessTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = PageStore(directory: dir)
         var config = AppConfig()
-        config.pages = (0..<6).map { Self.page(host: "p\($0).example", name: "P\($0)", provider: .statuspage) }
+        config.pages = (0..<6).map {
+            BenchmarkFixtures.greenPage(host: "p\($0).example", name: "P\($0)", provider: .statuspage)
+        }
         return elapsedMs(iterations: 40) {
             try store.save(config)
         }
@@ -280,7 +281,7 @@ final class PerformanceHarnessTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = PageStore(directory: dir)
         var config = AppConfig()
-        config.pages = [Self.page(host: "a.example", name: "A", provider: .statuspage)]
+        config.pages = [BenchmarkFixtures.greenPage(host: "a.example", name: "A", provider: .statuspage)]
         try store.save(config)
         let monitor = Monitor(store: store, client: client)
         try monitor.load()
@@ -331,23 +332,6 @@ final class PerformanceHarnessTests: XCTestCase {
         """.utf8)
     }
 
-    private static func page(host: String, name: String, provider: StatusProvider) -> WatchedPage {
-        let url = URL(string: "https://\(host)")!
-        return WatchedPage(
-            url: url,
-            name: name,
-            snapshot: PageSnapshot(
-                name: name,
-                url: url,
-                provider: provider,
-                overall: .green,
-                components: [ComponentStatus(name: "API", severity: .green, statusText: "Operational")],
-                incidents: [],
-                isUnreachable: false
-            )
-        )
-    }
-
     private static func nestedPage(name: String, host: String) -> WatchedPage {
         let url = URL(string: "https://\(host)")!
         let group = ComponentStatus(
@@ -388,11 +372,4 @@ final class PerformanceHarnessTests: XCTestCase {
         onAbout: {},
         onQuit: {}
     )
-}
-
-private extension Duration {
-    var milliseconds: Double {
-        let parts = components
-        return Double(parts.seconds) * 1_000 + Double(parts.attoseconds) / 1e15
-    }
 }
