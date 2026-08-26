@@ -185,8 +185,8 @@ final class MenuBuilderTests: XCTestCase {
     }
 
     private static func invoke(_ item: NSMenuItem?) {
-        guard let item, let target = item.representedObject as AnyObject? else { return }
-        _ = target.perform(NSSelectorFromString("invoke"))
+        guard let target = item?.representedObject as? TargetAction else { return }
+        target.invoke()
     }
 
     private static func findItem(_ title: String, in menu: NSMenu) -> NSMenuItem? {
