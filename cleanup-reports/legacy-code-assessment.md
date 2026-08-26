@@ -77,7 +77,7 @@ The verifier found `legacy-001` only partial. It has been narrowed to `UNCERTAIN
 Verification evidence: [verification-batch-1.md](verification-batch-1.md), [verification-batch-2.md](verification-batch-2.md).
 
 Final machine-readable severity counts: HIGH 0, MEDIUM 4, LOW 1. The original prose above records the specialist's pre-verification assessment; this disposition and the JSON block below are authoritative after verification.
- 
+
 ## Machine-Readable Findings
 
 ```json

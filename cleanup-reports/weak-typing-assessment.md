@@ -355,7 +355,7 @@ The verifier found `typing-002` only partial. It has been narrowed to `UNCERTAIN
 Verification evidence: [verification-batch-1.md](verification-batch-1.md), [verification-batch-3.md](verification-batch-3.md).
 
 Final machine-readable severity counts: HIGH 4, MEDIUM 2, LOW 16. The original prose above records the specialist's pre-verification assessment; this disposition and the JSON block below are authoritative after verification.
- 
+
 ## Machine-Readable Findings
 
 All findings below are unverified. The final object is intentionally the only

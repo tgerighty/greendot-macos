@@ -270,7 +270,7 @@ The verifier found `defensive-022` only partial. It has been narrowed to `UNCERT
 Verification evidence: [verification-batch-1.md](verification-batch-1.md), [verification-batch-2.md](verification-batch-2.md).
 
 Final machine-readable severity counts: HIGH 1, MEDIUM 10, LOW 16. The original prose above records the specialist's pre-verification assessment; this disposition and the JSON block below are authoritative after verification.
- 
+
 ## Machine-Readable Findings
 
 ```json

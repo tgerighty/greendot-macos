@@ -94,7 +94,7 @@ The mandatory gate selected 2 of 4 records. Independent verifiers confirmed 2; t
 Verification evidence: [verification-batch-2.md](verification-batch-2.md).
 
 Final machine-readable severity counts: HIGH 0, MEDIUM 1, LOW 3. The original prose above records the specialist's pre-verification assessment; this disposition and the JSON block below are authoritative after verification.
- 
+
 ## Machine-Readable Findings
 
 ```json

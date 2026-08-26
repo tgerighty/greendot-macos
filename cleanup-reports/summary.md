@@ -1,7 +1,7 @@
 # Codebase Cleanup Analysis — Verified Summary
 
-Audit date: 2026-08-25  
-Repository state: `main` at `310032b`  
+Audit date: 2026-08-25
+Repository state: `main` at `310032b`
 Scope: read-only architecture and cleanup analysis
 
 ## Outcome

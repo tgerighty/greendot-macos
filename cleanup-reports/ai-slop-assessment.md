@@ -63,7 +63,7 @@ None. No MEDIUM findings were identified.
 No finding in this assessment met the mandatory HIGH-or-CERTAIN verification gate. All 3 records remain provisional with `verified: false`.
 
 Final machine-readable severity counts: HIGH 0, MEDIUM 0, LOW 3. The original prose above records the specialist's pre-verification assessment; this disposition and the JSON block below are authoritative after verification.
- 
+
 ## Machine-Readable Findings
 
 ```json
