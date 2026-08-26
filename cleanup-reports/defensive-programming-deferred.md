@@ -1,20 +1,43 @@
 # Defensive programming deferred work
 
-Branch: `cleanup/apply-20260826-defensive`
+Branch: `cleanup/apply-20260826-defensive-catchup`
 
 ## defensive-015
 
-Status: DEFERRED.
+Status: APPLIED and closed in the serial catch-up.
 
-`Sources/StatusCore/ProviderProbe.swift` is fully owned by the LOC-limits agent in this phase. The defensive agent did not edit that file or its tests. This is a file-ownership deferral, not a finding rejection.
+The original phase deferred this verified item because
+`Sources/StatusCore/ProviderProbe.swift` was owned by the LOC-limits agent. The
+catch-up started from merged base `ed38cde` and used the allowlist:
 
-Catch-up action after the LOC-limits branch is merged:
+- `Sources/StatusCore/ProviderProbe.swift`
+- `Tests/StatusCoreTests/ProbeAndMonitorTests.swift`
+- `cleanup-reports/defensive-programming-apply-log.md`
+- `cleanup-reports/defensive-programming-deferred.md`
 
-1. Start a fresh serial worktree from the merged branch.
-2. Add RED tests in `Tests/StatusCoreTests/ProbeAndMonitorTests.swift` for HTTP 429 and a representative 5xx response. Assert that provider probing reports `ProbeError.unreachable`, not `ProbeError.unsupported`, while 404 remains a provider miss.
-3. Commit the failing tests as `[TEST]` and record the targeted failures.
-4. Update `Sources/StatusCore/ProviderProbe.swift` so 429 and 5xx are reachability failures, while 404 and other provider-mismatch responses remain misses.
-5. Run the focused tests, `swift build`, and full `swift test`; commit the implementation as `[FIX]` only when all pass.
-6. Add the RED/GREEN SHAs and the evidence to the next defensive-programming apply log.
+RED commit: `9bb3bd08f5d07f941c25716e0cc08cd05ae9ae0e`
+(`[TEST] RED classify HTTP reachability failures`).
 
-No part of defensive-015 was implemented on this branch.
+The RED tests cover HTTP 429, representative 5xx (503), status 0, a Statuspal
+discovery 503, and a 404 unsupported control. The focused RED run executed 5
+tests: the 404 control passed and the four reachability tests failed because
+the pre-fix implementation returned `ProbeError.unsupported`.
+
+GREEN commit: `4ffc3649b745c5d1fb91a874bdd236b1696ea61e`
+(`[GREEN] classify HTTP reachability failures`).
+
+`ProviderProbe` now classifies status 0, 429, and 500...599 as
+`.networkError` for standard requests and Statuspal discovery. A reachability
+failure wins over provider misses; 404 remains unsupported. Provider order,
+fallback parsing, cancellation propagation, known-provider optimization, and
+the LOC decomposition are unchanged.
+
+Verification:
+
+- Focused probe/performance tests: 33 passed.
+- `swift build`: passed.
+- Full `swift test`: 163 passed, 1 intentional skip, 0 failures.
+- `swiftlint lint --reporter json`: exit 0; 8 warnings and 0 serious findings.
+- `git diff --check`: passed.
+
+No further deferred defensive-programming catch-up remains.

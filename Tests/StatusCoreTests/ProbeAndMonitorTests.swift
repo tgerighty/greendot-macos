@@ -260,6 +260,55 @@ final class ProbeAndMonitorTests: XCTestCase {
     }
 }
 
+extension ProbeAndMonitorTests {
+    func testProbeTreatsHTTP429AsUnreachable() async {
+        await assertProbeError(.unreachable, status: 429)
+    }
+
+    func testProbeTreatsRepresentative5xxAsUnreachable() async {
+        await assertProbeError(.unreachable, status: 503)
+    }
+
+    func testProbeTreatsMissingHTTPStatusAsUnreachable() async {
+        await assertProbeError(.unreachable, status: 0)
+    }
+
+    func testProbeKeepsHTTP404AsUnsupported() async {
+        await assertProbeError(.unsupported, status: 404)
+    }
+
+    func testProbeTreatsStatuspalDiscoveryServerErrorAsUnreachable() async {
+        var client = MapHTTPClient()
+        client.byURL["https://example.com"] = (Data(), 503)
+
+        do {
+            _ = try await ProviderProbe.probe(
+                pageURL: URL(string: "https://example.com")!,
+                client: client
+            )
+            XCTFail("expected unreachable")
+        } catch {
+            XCTAssertEqual(error as? ProbeError, .unreachable)
+        }
+    }
+
+    private func assertProbeError(_ expected: ProbeError, status: Int) async {
+        let client = MapHTTPClient(byPath: [
+            "/api/v2/summary.json": (Data(), status)
+        ])
+
+        do {
+            _ = try await ProviderProbe.probe(
+                pageURL: URL(string: "https://example.com")!,
+                client: client
+            )
+            XCTFail("expected \(expected)")
+        } catch {
+            XCTAssertEqual(error as? ProbeError, expected)
+        }
+    }
+}
+
 private func writeConfig(_ data: Data) throws -> URL {
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
