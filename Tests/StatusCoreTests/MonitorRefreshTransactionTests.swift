@@ -291,7 +291,9 @@ final class MonitorRefreshTransactionTests: XCTestCase {
         XCTAssertTrue(monitor.pages.isEmpty)
         XCTAssertTrue(try store.load().pages.isEmpty)
     }
+}
 
+extension MonitorRefreshTransactionTests {
     func testMissingPageMutationsThrowWithoutWritingConfig() throws {
         let dir = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
