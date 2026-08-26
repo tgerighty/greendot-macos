@@ -3,7 +3,7 @@
 Date: 2026-08-26
 Branch: `cleanup/apply-20260826-weak-typing`
 Worktree: `/Users/terry.gerighty/coding/greendot.cleanup-apply-20260826-weak-typing`
-Rebased base: `fd2a667` (`main` before merge)
+Merged weak-typing phase base: `ed38cde` (weak-typing phase merged into `main`)
 
 Serial catch-up branch: `cleanup/apply-20260826-typing-catchup`
 Serial catch-up worktree: `/Users/terry.gerighty/coding/greendot.cleanup-apply-20260826-typing-catchup`
@@ -15,8 +15,10 @@ The verified weak-typing assessment and the cleanup summary were the change
 authority. Verified `STRENGTHEN` and `ISOLATE` records were applied. Review,
 unverified, and `KEEP` records were not changed. The circular apply log was
 read; its verified weak callback edges remain weak, generation-gated, and
-cleanup-backed. `AppDelegate.swift` and `PerformanceHarnessTests.swift` were
-not edited.
+cleanup-backed. The initial weak-typing phase left `AppDelegate.swift` for the
+serial catch-up; the serial catch-up changed only the allowlisted AppDelegate,
+BuildInfo, and AppDelegate test files. `PerformanceHarnessTests.swift` was not
+edited.
 
 The initial tree was clean. Baseline checks passed:
 
@@ -50,7 +52,7 @@ serial catch-up source edit:
 - `swift build`: PASS.
 - `swift test`: PASS, 163 tests passed, 1 intentional skip, 0 failures.
 - `swift build -Xswiftc -swift-version -Xswiftc 6`: RED, exit 1.
-- RED evidence marker: this documentation commit.
+- RED evidence commit: `14a513f` (`[TEST] Capture serial strict Swift 6 RED`).
 
 The strict command's source-owned diagnostics were unchanged in kind from the
 deferred plan: `AppDelegate.swift` had the `presentError` main-actor default
@@ -68,9 +70,9 @@ diagnostic was reported in the already-isolated helper or panel sources.
 | `typing-003` | STRENGTHEN | **APPLIED** | Menu test casts `representedObject as? TargetAction` and calls `invoke()`. GREEN `6fb3b0e`. |
 | `typing-004` | STRENGTHEN | **SKIPPED** | Likely, `verified: false`; no PageStore type redesign. |
 | `typing-005` | ISOLATE | **APPLIED** | `StatusDot` is `@MainActor`; cache reuse and rendering stay unchanged. Toast attachment/content paths use the actor boundary. GREEN `e0544f8`. |
-| `typing-006` | ISOLATE | **DEFERRED** | `AppDelegate.swift` is owned by the defensive pass. Exact serial plan is in `weak-typing-deferred.md`. |
+| `typing-006` | ISOLATE | **APPLIED** | `AppDelegate` is `@MainActor`; error and seed diagnostics are actor-aware generic `Error` callbacks; timer hops retain weak captures and polling behavior. GREEN `336dd91`. |
 | `typing-007` | ISOLATE | **APPLIED** | `PagePanelController` is `@MainActor`; weak task capture, cancellation, generation gating, delegate clearing, and panel lifecycle remain. GREEN `e59ddaa`. |
-| `typing-008` | ISOLATE | **PARTIALLY APPLIED** | ComponentPicker, UITestDriver, AppEditMenu, and MenuClickOpener are actor-isolated. `AboutPanel.show` and its required AppDelegate call-site propagation are deferred with `typing-006`; BuildInfo is restored to base. GREEN `75b569b`; correction `461c2e7`. |
+| `typing-008` | ISOLATE | **APPLIED** | ComponentPicker, UITestDriver, AppEditMenu, MenuClickOpener, and the deferred `AboutPanel.show` surface are actor-isolated. The AppDelegate call path is actor-correct. Helper GREEN `75b569b`; correction `461c2e7`; catch-up GREEN `336dd91`. |
 | `typing-009` | REVIEW | **SKIPPED** | Likely, `verified: false`; Monitor lock/sendability design was not changed. |
 | `typing-010` | STRENGTHEN | **SKIPPED** | Likely, `verified: false`; callback defaults were not changed. |
 | `typing-011` | STRENGTHEN | **SKIPPED** | Likely, `verified: false`; poll outcome was not redesigned. |
@@ -86,7 +88,9 @@ diagnostic was reported in the already-isolated helper or panel sources.
 | `typing-021` | KEEP | **RETAINED** | Non-fatal diagnostic and cleanup `try?` calls remain unchanged. |
 | `typing-022` | KEEP | **RETAINED** | Domain optionals and migration defaults remain unchanged. |
 
-RED commit for this pass: `c9d6465`.
+RED commit for the original weak-typing pass: `c9d6465`.
+
+Serial catch-up RED commit: `14a513f`.
 
 GREEN commits:
 
@@ -95,14 +99,36 @@ GREEN commits:
 - `e59ddaa` — PagePanelController actor group (`typing-007`).
 - `75b569b` — AppKit helper actor group (`typing-008`, partial).
 - `461c2e7` — restore BuildInfo and defer AboutPanel actor propagation.
+- `ab52557` — record weak-typing apply and deferred plan.
+- `1b3a0d7` — mark AboutPanel isolation deferred.
+- `4ce9453` — correct rebased weak-typing evidence.
+- `336dd91` — serial AppDelegate and AboutPanel actor catch-up (`typing-006`, remaining `typing-008`).
 
 ## Actor boundary notes
 
-`AboutPanel.options`, `BuildInfo.gitHash`, `BuildInfo.shortHash`, and
-`AboutPanel.show` remain in the base form. The `AboutPanel.show` actor boundary
-and its AppDelegate call site are deferred with `typing-006`; no
-`assumeIsolated` or async wrapper is used. BuildInfo has no effective diff from
-the base branch.
+`AboutPanel.options`, `BuildInfo.gitHash`, and `BuildInfo.shortHash` remain
+pure helpers. `AboutPanel.show` is now directly `@MainActor`, and both the
+AppEditMenu action and AppDelegate call path invoke it synchronously on the
+actor. No `MainActor.assumeIsolated` or async wrapper is used for AboutPanel.
+The UI-test notification bridge keeps its synchronous queue-main behavior by
+extracting the String before its existing `MainActor.assumeIsolated` bridge.
+
+`AppDelegate` is `@MainActor`. Its default `override nonisolated init()` keeps
+the existing executable entry point synchronous while the injected delivery
+initializer remains actor-isolated. The actor-aware `presentError` and
+`seedFailureDiagnostic` callbacks preserve the generic `Error` boundary,
+synchronous alert/log behavior, and test injection.
+
+The simpler single initializer with its default argument was not sufficient:
+the strict build reported
+`Sources/greendot/main.swift:4:16: error: call to main actor-isolated
+initializer 'init(toastDelivery:)' in a synchronous nonisolated context
+[#ActorIsolatedCall]`. A private mutable delivery property with a
+`SystemToastDelivery()` default lets the nonisolated NSObject initializer use
+the same production default, while the separate actor-isolated injected
+initializer assigns the test adapter. `PanelLifecycleTests` exercises
+`AppDelegate()` and `AppDelegateRefreshErrorTests` exercises
+`AppDelegate(toastDelivery:)`.
 
 `MenuClickOpener` needs `override nonisolated init()` because
 `StatusMenuController` has a default `MenuClickOpener()` argument whose
@@ -144,7 +170,7 @@ Focused helper tests passed:
 - Normal build and full tests passed 150/1 skipped before rebase, then 158/1
   skipped after rebase onto the defensive-programming and LOC results.
 
-The strict probe after the correction reports only the deferred BuildInfo
+The strict probe after the correction reported only the then-deferred BuildInfo
 warning and AppDelegate diagnostics:
 
 ```text
@@ -158,21 +184,34 @@ AppDelegate.swift:60:30: warning: capture of 'self' with non-Sendable type 'AppD
 AppDelegate.swift:65:27: warning: capture of 'self' with non-Sendable type 'AppDelegate?' in a '@Sendable' closure [#SendableClosureCaptures]
 ```
 
-The strict command returned exit code 1. The AppDelegate diagnostics and the
-four known BuildInfo warnings are deferred; there is no strict error in an
-owned file.
+That historical strict command returned exit code 1. The diagnostics were
+resolved by the serial catch-up below; there was no strict error in an owned
+file other than the then-deferred AppDelegate boundary.
 
-The post-correction strict command returned exit code 1, as expected for the
-deferred AppDelegate diagnostics.
+The post-correction strict command returned exit code 1 before the serial
+catch-up, as expected for the deferred AppDelegate diagnostics.
+
+### Serial AppDelegate/AboutPanel catch-up (`336dd91`)
+
+- `swift test --filter AppDelegateRefreshErrorTests`: PASS, 5 tests.
+- `swift test --filter PanelLifecycleTests`: PASS, 19 tests.
+- `swift test --filter StatusMenuControllerTests`: PASS, 7 tests.
+- `swift test --filter StatusPageEditorTests`: PASS, 7 tests.
+- `swift test --filter SystemToastDeliveryTests`: PASS, 4 tests.
+- `swift test --filter AboutTests`: PASS, 4 tests.
+- `swift test --filter CopyrightTests`: PASS, 4 tests.
+- `swift build`: PASS.
+- `swift test`: PASS, 163 tests passed, 1 intentional skip, 0 failures.
+- `swift build -Xswiftc -swift-version -Xswiftc 6`: PASS, exit 0, no source
+  actor warnings or errors.
 
 ## Final checks
 
 - `swiftlint lint --reporter json`: PASS, JSON produced; 8 existing findings,
   0 serious findings. No new finding was introduced by this branch.
 - `git diff --check`: PASS for the source/test changes and report edits.
-- Source/test change from base: 11 allowlisted source/test files,
-  25 insertions and 8 deletions. BuildInfo is unchanged from base. The two
-  report files are documentation-only.
-- `AppDelegate.swift` unchanged.
+- Serial source/test change from catch-up base: 3 allowlisted files,
+  22 insertions and 11 deletions. BuildInfo has the direct AboutPanel actor
+  boundary; AppDelegate and its test have the actor catch-up.
 - `PerformanceHarnessTests.swift` unchanged.
 - Worktree is clean after the documentation commit.

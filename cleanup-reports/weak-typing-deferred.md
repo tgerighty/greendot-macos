@@ -3,48 +3,50 @@
 Date: 2026-08-26
 Branch: `cleanup/apply-20260826-weak-typing`
 Worktree: `/Users/terry.gerighty/coding/greendot.cleanup-apply-20260826-weak-typing`
+Merged weak-typing phase base: `ed38cde` (weak-typing phase merged into `main`)
 
 Serial catch-up branch: `cleanup/apply-20260826-typing-catchup`
 Serial catch-up worktree: `/Users/terry.gerighty/coding/greendot.cleanup-apply-20260826-typing-catchup`
 Serial catch-up base: `7154506` (merged `main` before this catch-up)
 
-## Deferred item
+Status: **CLOSED** after serial catch-up GREEN `336dd91`.
 
-`typing-006` is deferred. It owns `Sources/greendot/AppDelegate.swift`, and
-the defensive-programming owner controls that file in this phase. This pass
-did not edit `AppDelegate.swift`.
+## Historical deferred item
 
-## Exact serial catch-up plan
+`typing-006` was deferred during the original weak-typing phase because the
+defensive-programming owner controlled `Sources/greendot/AppDelegate.swift`.
+The remaining `AboutPanel.show` portion of `typing-008` was deferred with it.
+The serial catch-up below now closes both items.
 
-1. Merge the defensive owner result and all approved earlier phase results.
-   Start a fresh serial catch-up worktree from that merged branch. Confirm a
-   clean tree and record the merge commit.
-2. Re-run `swift build`, `swift test`, and
-   `swift build -Xswiftc -swift-version -Xswiftc 6`. Confirm that the only
-   remaining diagnostics are the AppDelegate diagnostics listed below.
-3. Apply one AppDelegate change set. Add `@MainActor` to `AppDelegate`.
-   Make `presentError` an actor-aware callback, preserving its synchronous
-   `NSAlert` behaviour and generic `Error` boundary. Enter the main actor
-   explicitly in both timer `Task` closures while retaining `[weak self]`.
-   Keep Monitor network work outside the UI actor and return its typed result
-   to AppDelegate. Do not remove cancellation, weak ownership, or the poll
-   generation gate.
-4. In the same serial catch-up, add a direct `@MainActor` boundary to
-   `AboutPanel.show` and update its AppDelegate call site after AppDelegate is
-   isolated. Keep the synchronous AppKit behaviour. Do not use
-   `MainActor.assumeIsolated`, an async wrapper, or a changed dynamic boundary.
-5. Run `swift test --filter AppDelegateRefreshErrorTests`,
+## Serial catch-up plan and completion
+
+1. **Complete.** The defensive owner result and all approved earlier phase
+   results were merged at `7154506`; the serial catch-up worktree started
+   clean.
+2. **Complete.** Baseline `swift build` and `swift test` passed; strict Swift 6
+   was captured RED in `14a513f`.
+3. **Complete.** `AppDelegate` is `@MainActor`. `presentError` and
+   `seedFailureDiagnostic` are actor-aware callbacks over generic `Error`.
+   Both timer callbacks enter MainActor explicitly with weak captures.
+   Monitor network work, cancellation, weak ownership, and the poll generation
+   gate remain unchanged.
+4. **Complete.** `AboutPanel.show` is directly `@MainActor`; its AppDelegate
+   call path remains synchronous with no AboutPanel `assumeIsolated` bridge or
+   async wrapper.
+5. **Complete.** Focused tests, normal build, and full tests passed:
+   `swift test --filter AppDelegateRefreshErrorTests`,
    `swift test --filter PanelLifecycleTests`,
    `swift test --filter StatusMenuControllerTests`,
    `swift test --filter StatusPageEditorTests`,
    `swift test --filter SystemToastDeliveryTests`,
    `swift test --filter AboutTests`, and
-   `swift test --filter CopyrightTests`. Then run normal build and full tests.
-6. Run the strict Swift 6 probe again. It must have no error or warning in an
-   owned file. Record the exact output and commit the catch-up separately as
-   `[GREEN] Isolate AppDelegate on MainActor`.
+   `swift test --filter CopyrightTests`; full `swift test` passed 163 tests
+   with 1 intentional skip.
+6. **Complete.** Strict Swift 6 passed with exit 0 and no source actor
+   warnings/errors. GREEN commit: `336dd91` (`[GREEN] Isolate AppDelegate on
+   MainActor`).
 
-## Current evidence for the catch-up
+## Historical pre-catch-up evidence
 
 After the helper actor group and BuildInfo restoration, the strict probe
 reports the known BuildInfo warnings and AppDelegate diagnostics. The exact
@@ -66,8 +68,8 @@ reported in StatusDot, PagePanelController, ComponentPicker, UITestDriver,
 AppEditMenu, MenuClickOpener, or SystemToastDelivery. The four BuildInfo
 warnings are the known deferred `AboutPanel.show` boundary.
 
-The post-correction strict command returned exit code 1, as expected until the
-serial AppDelegate catch-up is complete.
+The post-correction strict command returned exit code 1 before the serial
+catch-up. This historical RED is superseded by the closed GREEN result below.
 
 ## Serial catch-up RED evidence
 
@@ -76,10 +78,19 @@ Fresh checks at merged base `7154506`, before any serial source edit:
 - `swift build`: PASS.
 - `swift test`: PASS, 163 tests passed, 1 intentional skip, 0 failures.
 - `swift build -Xswiftc -swift-version -Xswiftc 6`: RED, exit 1.
-- RED evidence marker: this documentation commit.
+- RED evidence commit: `14a513f` (`[TEST] Capture serial strict Swift 6 RED`).
 
 The fresh strict output reported the known `AppDelegate.swift` default-value
 error and weak `AppDelegate` captures in the poll and pulse timer closures,
 plus the four `BuildInfo.swift` warnings caused by the deferred
 `AboutPanel.show` boundary. The compiler emitted duplicate module diagnostics;
 no error was reported in the already-isolated helper or panel sources.
+
+## Closed disposition
+
+- `typing-006`: **APPLIED** in GREEN `336dd91`.
+- `typing-008` remaining AboutPanel portion: **APPLIED** in GREEN `336dd91`.
+- No weak-typing deferred items remain from this serial catch-up.
+- Stable merged weak-typing evidence commits are `c9d6465`, `6fb3b0e`,
+  `e0544f8`, `e59ddaa`, `75b569b`, `461c2e7`, `ab52557`, `1b3a0d7`, and
+  `4ce9453`; the serial RED/GREEN commits are `14a513f` and `336dd91`.
