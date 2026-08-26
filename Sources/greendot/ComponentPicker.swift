@@ -1,6 +1,7 @@
 import AppKit
 import StatusCore
 
+@MainActor
 final class ComponentPicker: NSObject {
     private let onToggleComponent: (String) -> Bool
     private let onSetAll: (Bool) -> Bool

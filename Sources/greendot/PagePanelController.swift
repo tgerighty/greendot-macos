@@ -6,6 +6,7 @@ private final class KeyablePanel: NSWindow {
     override var canBecomeMain: Bool { true }
 }
 
+@MainActor
 final class PagePanelController: NSObject, NSWindowDelegate {
     private let window: NSWindow
     private let urlField = NSTextField(string: "")

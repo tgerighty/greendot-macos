@@ -85,11 +85,13 @@ final class SystemToastDelivery: ToastDelivery {
         self.makeIdentifier = makeIdentifier
     }
 
+    @MainActor
     func start() {
         requestPermissionIfNeeded()
         clearStaleAutoDismissToasts()
     }
 
+    @MainActor
     func deliver(_ toast: Toast) {
         let identifier = makeIdentifier()
         let request = UNNotificationRequest(
@@ -105,6 +107,7 @@ final class SystemToastDelivery: ToastDelivery {
         }
     }
 
+    @MainActor
     static func content(for toast: Toast) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
         content.title = toast.pageName
@@ -138,6 +141,7 @@ final class SystemToastDelivery: ToastDelivery {
         }
     }
 
+    @MainActor
     private static func attachment(for severity: Severity) -> UNNotificationAttachment? {
         let image = StatusDot.image(severity, size: 64)
         guard let tiff = image.tiffRepresentation,
