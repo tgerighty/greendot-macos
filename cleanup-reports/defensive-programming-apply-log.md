@@ -151,7 +151,7 @@ The following table gives a disposition for every record in the assessment. Unve
 - Final `git diff --check`: passed with no output.
 - Final worktree: clean after the apply-log commit.
 
-## Post-merge lint correction
+## Pre-merge lint correction
 
 The first pre-merge lint comparison found two new `type_body_length` warnings caused only by the added tests. The tests were moved into focused same-file extensions in `ComponentToggleTests.swift` and `PanelLifecycleTests.swift`. This changed no production behavior and kept the test names and coverage unchanged.
 
