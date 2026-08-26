@@ -248,26 +248,27 @@ final class StatusPageEditorTests: XCTestCase {
         XCTAssertEqual(calls, 1)
     }
 
-    private static func field(_ identifier: String, in view: NSView?) -> NSTextField? {
+    private static func findView<T: NSView>(
+        _ type: T.Type,
+        identifier: String,
+        in view: NSView?
+    ) -> T? {
         guard let view else { return nil }
-        if let field = view as? NSTextField, field.accessibilityIdentifier() == identifier {
-            return field
+        if let match = view as? T, match.accessibilityIdentifier() == identifier {
+            return match
         }
         for child in view.subviews {
-            if let field = field(identifier, in: child) { return field }
+            if let match = findView(type, identifier: identifier, in: child) { return match }
         }
         return nil
     }
 
+    private static func field(_ identifier: String, in view: NSView?) -> NSTextField? {
+        findView(NSTextField.self, identifier: identifier, in: view)
+    }
+
     private static func button(_ identifier: String, in view: NSView?) -> NSButton? {
-        guard let view else { return nil }
-        if let button = view as? NSButton, button.accessibilityIdentifier() == identifier {
-            return button
-        }
-        for child in view.subviews {
-            if let button = button(identifier, in: child) { return button }
-        }
-        return nil
+        findView(NSButton.self, identifier: identifier, in: view)
     }
 
     private static func visiblePanelWindow() -> NSWindow? {
@@ -283,10 +284,6 @@ final class StatusPageEditorTests: XCTestCase {
         }
     }
 
-    private func breakPersistence(at configURL: URL) throws {
-        try? FileManager.default.removeItem(at: configURL)
-        try FileManager.default.createDirectory(at: configURL, withIntermediateDirectories: true)
-    }
 }
 
 extension StatusPageEditorTests {
