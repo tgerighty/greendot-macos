@@ -36,11 +36,6 @@ public enum ToastPolicy {
 
     private static func body(for snapshot: PageSnapshot) -> String {
         if snapshot.isUnreachable { return "Unreachable" }
-        switch snapshot.overall {
-        case .green: return "Operational"
-        case .yellow: return "Degraded"
-        case .red: return "Major outage"
-        case .grey: return "Unreachable"
-        }
+        return snapshot.overall.displayName
     }
 }

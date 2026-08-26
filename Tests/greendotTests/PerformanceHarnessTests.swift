@@ -2,6 +2,7 @@ import AppKit
 import XCTest
 @testable import greendot
 @testable import StatusCore
+import TestSupport
 
 /// Repeatable in-memory timings for the shipped parse, poll, menu, and icon paths.
 /// Prints `BENCH name=ms` lines. Does not gate on absolute microseconds.
