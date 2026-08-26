@@ -32,6 +32,32 @@ final class ComponentToggleTests: XCTestCase {
         XCTAssertEqual(page.displaySeverity, .grey)
     }
 
+    func testMissingSnapshotIsGrey() {
+        let page = WatchedPage(
+            url: URL(string: "https://status.openai.com")!,
+            name: "OpenAI"
+        )
+
+        XCTAssertEqual(page.displaySeverity, .grey)
+    }
+
+    func testEmptyComponentsUsePageOverall() {
+        for severity in [Severity.red, .yellow] {
+            let page = pageWith(overall: severity)
+            XCTAssertEqual(page.displaySeverity, severity)
+        }
+    }
+
+    func testAllDisabledComponentsRemainGreenWhenPageOverallIsRed() {
+        var page = pageWith(
+            overall: .red,
+            components: [ComponentStatus(name: "API", severity: .red, statusText: "Major outage")]
+        )
+        page.disabledComponentNames = ["API"]
+
+        XCTAssertEqual(page.displaySeverity, .green)
+    }
+
     func testToggleComponentPersists() async throws {
         let (directory, monitor) = try await monitorWithGitHubOutage()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -258,6 +284,18 @@ final class ComponentToggleTests: XCTestCase {
     }
 
     private func pageWith(components: [ComponentStatus], unreachable: Bool = false) -> WatchedPage {
+        pageWith(
+            overall: unreachable ? .grey : Aggregator.severity(from: components),
+            components: components,
+            unreachable: unreachable
+        )
+    }
+
+    private func pageWith(
+        overall: Severity,
+        components: [ComponentStatus] = [],
+        unreachable: Bool = false
+    ) -> WatchedPage {
         WatchedPage(
             url: URL(string: "https://status.openai.com")!,
             name: "OpenAI",
@@ -265,7 +303,7 @@ final class ComponentToggleTests: XCTestCase {
                 name: "OpenAI",
                 url: URL(string: "https://status.openai.com")!,
                 provider: .statuspage,
-                overall: unreachable ? .grey : Aggregator.severity(from: components),
+                overall: overall,
                 components: components,
                 incidents: [],
                 isUnreachable: unreachable
