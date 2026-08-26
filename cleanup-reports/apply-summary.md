@@ -1,12 +1,12 @@
 # Cleanup apply summary
 
-Date: 2026-08-26  
-Branch: `main`  
-Assessment base: `310032baadea24dd7ea32a97ddc5af8df9a52845`  
-Assessment report commit: `9141e8b`  
-Last product-code merge: `9c5b4f2`  
-Independent-review merge: `2dfa293`  
-Delivery state: local only; not pushed and no pull request created
+- Date: 2026-08-26
+- Branch: `main`
+- Assessment base: `310032baadea24dd7ea32a97ddc5af8df9a52845`
+- Assessment report commit: `9141e8b`
+- Last product-code merge: `9c5b4f2`
+- Independent-review merge: `2dfa293`
+- Delivery state: local only; not pushed and no pull request created
 
 ## Decision
 
