@@ -160,10 +160,6 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
         return store
     }
 
-    private func breakPersistence(at configURL: URL) throws {
-        try? FileManager.default.removeItem(at: configURL)
-        try FileManager.default.createDirectory(at: configURL, withIntermediateDirectories: true)
-    }
 }
 
 private final class SequenceHTTPClient: HTTPClient, @unchecked Sendable {
