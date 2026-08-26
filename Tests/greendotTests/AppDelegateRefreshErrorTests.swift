@@ -4,6 +4,7 @@ import StatusCore
 import TestSupport
 @testable import greendot
 
+@MainActor
 final class AppDelegateRefreshErrorTests: XCTestCase {
     private let greenJSON = """
     {
