@@ -273,3 +273,51 @@ final class ComponentToggleTests: XCTestCase {
         )
     }
 }
+
+extension ComponentToggleTests {
+    func testMissingSnapshotIsGrey() {
+        let page = WatchedPage(
+            url: URL(string: "https://status.openai.com")!,
+            name: "OpenAI"
+        )
+
+        XCTAssertEqual(page.displaySeverity, .grey)
+    }
+
+    func testEmptyComponentsUsePageOverall() {
+        for severity in [Severity.red, .yellow] {
+            let page = pageWith(overall: severity)
+            XCTAssertEqual(page.displaySeverity, severity)
+        }
+    }
+
+    func testAllDisabledComponentsRemainGreenWhenPageOverallIsRed() {
+        var page = pageWith(
+            overall: .red,
+            components: [ComponentStatus(name: "API", severity: .red, statusText: "Major outage")]
+        )
+        page.disabledComponentNames = ["API"]
+
+        XCTAssertEqual(page.displaySeverity, .green)
+    }
+
+    private func pageWith(
+        overall: Severity,
+        components: [ComponentStatus] = [],
+        unreachable: Bool = false
+    ) -> WatchedPage {
+        WatchedPage(
+            url: URL(string: "https://status.openai.com")!,
+            name: "OpenAI",
+            snapshot: PageSnapshot(
+                name: "OpenAI",
+                url: URL(string: "https://status.openai.com")!,
+                provider: .statuspage,
+                overall: overall,
+                components: components,
+                incidents: [],
+                isUnreachable: unreachable
+            )
+        )
+    }
+}

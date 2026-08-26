@@ -12,6 +12,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var presentError: (Error) -> Void = { error in
         _ = NSAlert(error: error).runModal()
     }
+    var seedFailureDiagnostic: (Error) -> Void = { error in
+        NSLog("greendot: OpenAI seed failed: \(error.localizedDescription)")
+    }
 
     init(toastDelivery: any ToastDelivery = SystemToastDelivery()) {
         self.toastDelivery = toastDelivery
@@ -53,9 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if Self.shouldPoll(loadSucceeded: loadSucceeded) {
-            let poll = TimeInterval(
-                ProcessInfo.processInfo.environment["GREENDOT_POLL_SECONDS"].flatMap(Double.init) ?? 60
-            )
+            let poll = Self.pollInterval(from: ProcessInfo.processInfo.environment["GREENDOT_POLL_SECONDS"])
             pollTimer = Timer.scheduledTimer(withTimeInterval: poll, repeats: true) { [weak self] _ in
                 Task { await self?.pollAndRefresh() }
             }
@@ -88,6 +89,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadSucceeded
     }
 
+    static func pollInterval(from rawValue: String?) -> TimeInterval {
+        guard let rawValue,
+              let interval = Double(rawValue),
+              interval.isFinite,
+              interval > 0 else {
+            return 60
+        }
+        return interval
+    }
+
     /// Pulse flashes grey while a page is unreachable.
     /// Skip icon refreshes when all pages are reachable.
     static func shouldRefreshIconOnPulse(hasUnreachable: Bool) -> Bool {
@@ -111,14 +122,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func maybeSeedOpenAI(monitor: Monitor, loadSucceeded: Bool) async {
-        let skipSeed = ProcessInfo.processInfo.environment["GREENDOT_SKIP_SEED"] != nil
+    func maybeSeedOpenAI(monitor: Monitor, loadSucceeded: Bool, skipSeed: Bool? = nil) async {
+        let skipSeed = skipSeed ?? (ProcessInfo.processInfo.environment["GREENDOT_SKIP_SEED"] != nil)
         guard Self.shouldSeedOpenAI(
             loadSucceeded: loadSucceeded,
             pagesEmpty: monitor.pages.isEmpty,
             skipSeed: skipSeed
         ), let url = URL(string: "https://status.openai.com") else { return }
-        try? await monitor.add(url: url, name: "OpenAI")
+        do {
+            try await monitor.add(url: url, name: "OpenAI")
+        } catch is CancellationError {
+            return
+        } catch {
+            seedFailureDiagnostic(error)
+        }
     }
 
     @MainActor
