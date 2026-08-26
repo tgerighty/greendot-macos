@@ -322,6 +322,7 @@ extension PanelLifecycleTests {
     }
 }
 
+@MainActor
 final class PanelReleaseTests: XCTestCase {
     func testClosingPanelDeallocatesControllerAndWindow() throws {
         _ = NSApplication.shared
