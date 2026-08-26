@@ -44,8 +44,8 @@ public enum ProviderProbe {
 
         func take(_ result: AttemptResult) -> ProbeHit? {
             switch result {
-            case .hit(let snapshot, let data):
-                return ProbeHit(snapshot: snapshot, body: data)
+            case .hit(let hit):
+                return hit
             case .miss:
                 sawHTTP = true
                 return nil
@@ -127,7 +127,7 @@ public enum ProviderProbe {
     }
 
     private enum AttemptResult {
-        case hit(PageSnapshot, Data)
+        case hit(ProbeHit)
         case miss
         case networkError
     }
@@ -146,11 +146,11 @@ public enum ProviderProbe {
             if let previousBody, let previousSnapshot,
                !previousSnapshot.isUnreachable,
                data == previousBody {
-                return .hit(previousSnapshot, data)
+                return .hit(ProbeHit(snapshot: previousSnapshot, body: data))
             }
             do {
                 parseBox.increment()
-                return .hit(try parse(data), data)
+                return .hit(ProbeHit(snapshot: try parse(data), body: data))
             } catch {
                 return .miss
             }
@@ -201,8 +201,8 @@ public enum ProviderProbe {
                     previousSnapshot: previousSnapshot,
                     parse: { try StatuspalParser.parse(data: $0, sourceURL: base) }
                 ) {
-                case .hit(let snapshot, let data):
-                    return ProbeHit(snapshot: snapshot, body: data)
+                case .hit(let hit):
+                    return hit
                 case .miss:
                     sawHTTP = true
                 case .networkError:
