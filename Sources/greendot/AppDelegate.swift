@@ -12,6 +12,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var presentError: (Error) -> Void = { error in
         _ = NSAlert(error: error).runModal()
     }
+    var seedFailureDiagnostic: (Error) -> Void = { error in
+        NSLog("greendot: OpenAI seed failed: \(error.localizedDescription)")
+    }
 
     init(toastDelivery: any ToastDelivery = SystemToastDelivery()) {
         self.toastDelivery = toastDelivery
@@ -111,14 +114,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func maybeSeedOpenAI(monitor: Monitor, loadSucceeded: Bool) async {
-        let skipSeed = ProcessInfo.processInfo.environment["GREENDOT_SKIP_SEED"] != nil
+    func maybeSeedOpenAI(monitor: Monitor, loadSucceeded: Bool, skipSeed: Bool? = nil) async {
+        let skipSeed = skipSeed ?? (ProcessInfo.processInfo.environment["GREENDOT_SKIP_SEED"] != nil)
         guard Self.shouldSeedOpenAI(
             loadSucceeded: loadSucceeded,
             pagesEmpty: monitor.pages.isEmpty,
             skipSeed: skipSeed
         ), let url = URL(string: "https://status.openai.com") else { return }
-        try? await monitor.add(url: url, name: "OpenAI")
+        do {
+            try await monitor.add(url: url, name: "OpenAI")
+        } catch is CancellationError {
+            return
+        } catch {
+            seedFailureDiagnostic(error)
+        }
     }
 
     @MainActor
