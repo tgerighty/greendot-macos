@@ -26,7 +26,7 @@ Authorized apply set was legacy-001, 003, 005, 007. Those four are in
 
 ## Partial remainder (allowlist)
 
-5. **legacy-007 UITests comment**
+1. **legacy-007 UITests comment**
    - `UITests/GreenDotUITests/GreenDotUITests.swift:5` still says “off-screen extra frames”.
    - The allowlisted `MenuBarController.popMenuOnScreen` comment was updated.
    - This file is not on the allowlist. Left untouched.

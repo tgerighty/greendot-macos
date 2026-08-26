@@ -84,12 +84,15 @@ AI-slop records also remain unchanged.
 
 ## Important invariants that held
 
-- `Monitor` still takes the transition lock before state access and persistence.
+- `Monitor` still takes the transition lock before each transactional state read
+  and persistence operation.
   Poll identity and per-page input revisions reject stale overlapping results;
-  cancellation is checked before the commit boundary; failed saves leave the
-  in-memory and persisted configuration unchanged. The transaction tests cover
-  overlapping polls, cancellation while waiting for the lock, toggles during a
-  request, edit/remove races, and late completions
+  cancellation is checked before the commit boundary. The covered poll-save
+  failure occurs before file replacement and leaves in-memory state unchanged.
+  No broader persistence invariant is claimed for post-replacement permission
+  failures; that unverified case remains deferred as `defensive-003`. The
+  transaction tests cover overlapping polls, cancellation while waiting for the
+  lock, toggles during a request, edit/remove races, and late completions
   (`Tests/StatusCoreTests/MonitorRefreshTransactionTests.swift:70-312`).
 - Polling still probes pages concurrently, retains preferred-provider fallback,
   reuses an unchanged body only for a reachable prior snapshot, and propagates

@@ -51,6 +51,8 @@ No ownership item remained, so `cleanup-reports/type-consolidation-deferred.md` 
 
 - Applied: 6/6 selected verified records.
 - Skipped: 3/9 assessed records.
-- Net diff from RED baseline: 18 files, 106 added, 103 removed LOC.
+- Net diff from RED baseline: 18 unique files, 106 added, 103 removed LOC.
+  `git diff --name-only b5ea6db..cd80e39` confirms the count. The five GREEN
+  commit sets contain 2, 10, 3, 1, and 2 files, with no overlap.
 - Final `swift build`: passed after `cd80e39`.
 - Final `swift test`: 150 tests, 1 skipped, 0 failures after `cd80e39`.
