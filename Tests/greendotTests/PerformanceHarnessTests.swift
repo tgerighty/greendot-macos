@@ -187,6 +187,15 @@ final class PerformanceHarnessTests: XCTestCase {
     }
 
     private func measureRemaining() async throws -> RemainingMetrics {
+        RemainingMetrics(
+            statuspalGets: try await measureStatuspalProbe(),
+            regexCompiles: measureRegexCompilation(),
+            secondParseCount: try await measureSecondPollParseCount(),
+            pulseWhenReachable: measureReachablePulseRefresh()
+        )
+    }
+
+    private func measureStatuspalProbe() async throws -> Int {
         var statuspalMap = MapHTTPClient()
         statuspalMap.byURL["https://statuspal.io/api/v2/status_pages/acme/summary"] = (Data("""
         {
@@ -201,14 +210,19 @@ final class PerformanceHarnessTests: XCTestCase {
             pageURL: URL(string: "https://acme.statuspal.io")!,
             client: statuspalRecording
         )
+        return statuspalRecording.requested.count
+    }
 
+    private func measureRegexCompilation() -> Int {
         ProviderProbe.resetCounts()
         let html = String(repeating: "statuspal.io/api/v2/status_pages/acme plus filler ", count: 40)
         for _ in 0..<500 {
             _ = ProviderProbe.extractStatuspalSubdomain(from: html)
         }
-        let regexCompiles = ProviderProbe.regexCompileCount
+        return ProviderProbe.regexCompileCount
+    }
 
+    private func measureSecondPollParseCount() async throws -> Int {
         let json = Self.statuspageJSON(name: "GitHub", components: 8)
         let client = MapHTTPClient(byPath: ["/api/v2/summary.json": (json, 200)])
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -227,21 +241,17 @@ final class PerformanceHarnessTests: XCTestCase {
         _ = try await monitor.pollAll()
         ProviderProbe.resetCounts()
         _ = try await monitor.pollAll()
-        let secondParse = ProviderProbe.parseCount
+        return ProviderProbe.parseCount
+    }
 
+    private func measureReachablePulseRefresh() -> Int {
         var pulse = 0
         for _ in 0..<240 {
             if AppDelegate.shouldRefreshIconOnPulse(hasUnreachable: false) {
                 pulse += 1
             }
         }
-
-        return RemainingMetrics(
-            statuspalGets: statuspalRecording.requested.count,
-            regexCompiles: regexCompiles,
-            secondParseCount: secondParse,
-            pulseWhenReachable: pulse
-        )
+        return pulse
     }
 
     private func measureStatusDot() -> (elapsedMs: Double, uniqueCount: Int) {
