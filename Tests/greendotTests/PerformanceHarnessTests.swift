@@ -4,11 +4,11 @@ import XCTest
 @testable import StatusCore
 import TestSupport
 
-/// Repeatable in-memory timings for the shipped parse, poll, menu, and icon paths.
+/// Repeatable in-memory timings for the shipped parse, poll, menu, component, and icon paths.
 /// Prints `BENCH name=ms` lines. Does not gate on absolute microseconds.
 @MainActor
 final class PerformanceHarnessTests: XCTestCase {
-    private static let delayMs = 80.0
+    static let delayMs = 80.0
     private static let noopHandlers = StatusMenuHandlers(
         onAdd: {},
         onEdit: { _ in },
@@ -30,42 +30,29 @@ final class PerformanceHarnessTests: XCTestCase {
         let parse = measureParse()
         let poll = try await measurePoll()
         let menu = measureMenu()
+        let componentPicker80 = measureComponentPickerClick(depth: 80)
+        let componentPicker160 = measureComponentPickerClick(depth: 160)
+        let displaySeverity = measureDisplaySeverity()
         let icon = measureStatusDot()
         let save = measureStoreSave()
         let unchangedWrites = try await measureUnchangedPollWrites()
         let remaining = try await measureRemaining()
 
-        let lines = [
-            "BENCH parse_statuspage_ms=\(fmt(parse.statuspage))",
-            "BENCH parse_instatus_ms=\(fmt(parse.instatus))",
-            "BENCH parse_statuspal_ms=\(fmt(parse.statuspal))",
-            "BENCH pollAll_3page_delay_ms=\(fmt(poll.elapsedMs))",
-            "BENCH pollAll_3page_delay_expected_sequential_ms=\(fmt(3 * Self.delayMs))",
-            "BENCH pollAll_3page_get_count=\(poll.getCount)",
-            "BENCH pollAll_mixed_get_count=\(poll.mixedGetCount)",
-            "BENCH menu_build_ms=\(fmt(menu.uncachedBuildMs))",
-            "BENCH menu_build_cached_ms=\(fmt(menu.cachedBuildMs))",
-            "BENCH status_dot_ms=\(fmt(icon.elapsedMs))",
-            "BENCH status_dot_unique_images=\(icon.uniqueCount)",
-            "BENCH store_save_ms=\(fmt(save))",
-            "BENCH pollAll_unchanged_config_rewrites=\(unchangedWrites)",
-            "BENCH statuspal_first_probe_gets=\(remaining.statuspalGets)",
-            "BENCH menu_unique_objects=\(menu.uniqueCount)",
-            "BENCH statuspal_regex_compiles=\(remaining.regexCompiles)",
-            "BENCH poll_second_parse_count=\(remaining.secondParseCount)",
-            "BENCH pulse_refresh_when_reachable=\(remaining.pulseWhenReachable)"
-        ]
-        for line in lines {
-            print(line)
-        }
-        XCTAssertGreaterThan(parse.statuspage, 0)
-        XCTAssertGreaterThan(poll.elapsedMs, 0)
-        XCTAssertGreaterThan(menu.uncachedBuildMs, 0)
-        XCTAssertGreaterThan(menu.cachedBuildMs, 0)
-        XCTAssertEqual(menu.uniqueCount, 1, "Repeated cached builds must reuse one menu")
-        XCTAssertGreaterThan(icon.elapsedMs, 0)
-        XCTAssertGreaterThan(poll.getCount, 0)
-        XCTAssertGreaterThan(remaining.statuspalGets, 0)
+        let metrics = BenchmarkRunMetrics(
+            parse: parse,
+            poll: poll,
+            menu: menu,
+            componentPicker80: componentPicker80,
+            componentPicker160: componentPicker160,
+            displaySeverity: displaySeverity,
+            iconElapsedMs: icon.elapsedMs,
+            iconUniqueCount: icon.uniqueCount,
+            storeSaveMs: save,
+            unchangedWrites: unchangedWrites,
+            remaining: remaining
+        )
+        benchmarkLines(metrics).forEach { print($0) }
+        assertBenchmarkMetrics(metrics)
     }
 }
 
@@ -172,12 +159,6 @@ private extension PerformanceHarnessTests {
         )
     }
 
-    struct MenuMetrics {
-        var uncachedBuildMs: Double
-        var cachedBuildMs: Double
-        var uniqueCount: Int
-    }
-
     func measureMenu() -> MenuMetrics {
         let pages = (0..<6).map { index in
             Self.nestedPage(name: "Page \(index)", host: "status\(index).example")
@@ -198,13 +179,6 @@ private extension PerformanceHarnessTests {
             cachedBuildMs: cachedBuildMs,
             uniqueCount: Set(cachedMenus.map(ObjectIdentifier.init)).count
         )
-    }
-
-    struct RemainingMetrics {
-        var statuspalGets: Int
-        var regexCompiles: Int
-        var secondParseCount: Int
-        var pulseWhenReachable: Int
     }
 
     func measureRemaining() async throws -> RemainingMetrics {
@@ -326,23 +300,6 @@ private extension PerformanceHarnessTests {
         return beforeInode == afterInode ? 0 : 1
     }
 
-    func elapsedMs(iterations: Int, _ body: () throws -> Void) -> Double {
-        do {
-            let start = ContinuousClock.now
-            for _ in 0..<iterations {
-                try body()
-            }
-            return start.duration(to: .now).milliseconds
-        } catch {
-            XCTFail("harness body failed: \(error)")
-            return -1
-        }
-    }
-
-    func fmt(_ value: Double) -> String {
-        String(format: "%.3f", value)
-    }
-
     static func statuspageJSON(name: String, components: Int) -> Data {
         var rows: [String] = [
             #"{"id":"g1","name":"Web","status":"operational","group":true}"#
@@ -392,4 +349,5 @@ private extension PerformanceHarnessTests {
             )
         )
     }
+
 }

@@ -4,6 +4,14 @@
 
 ### Changed
 
+- Nested component checkbox refreshes now calculate subtree states in one pass.
+  Release benchmark, 160-level tree and 20 clicks: 360.462 ms before, 6.781 ms
+  after (five-run median).
+- Display severity now scans enabled components directly without copied tree and
+  leaf arrays. Release benchmark, 840 components and 500 reads: 56.431 ms
+  before, 3.777 ms after (five-run median).
+- `make bench` now benchmarks the release configuration and includes nested
+  component selection and large-tree severity workloads.
 - Red, yellow, and grey status-change notifications stay on screen until you click them away. Green notifications clear themselves after 6 seconds.
 - A green notification that a quit cut short is cleared the next time greendot starts.
 - Status-change notifications include a status-dot image in the issue colour (red, yellow, green, or grey).
