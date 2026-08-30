@@ -22,4 +22,21 @@ final class ComponentTreeSeverityTests: XCTestCase {
         XCTAssertEqual(ComponentTree.enabledLeafSeverity(in: tree, disabledKeys: ["red", "green"]), .yellow)
         XCTAssertEqual(ComponentTree.enabledLeafSeverity(in: tree, disabledKeys: ["Group"]), .green)
     }
+
+    func testEnabledLeafSeverityUsesEnabledDescendantsForNonGroupNodes() {
+        let tree = [
+            ComponentStatus(
+                name: "Container",
+                severity: .yellow,
+                statusText: "Degraded",
+                id: "container",
+                children: [
+                    ComponentStatus(name: "Child", severity: .red, statusText: "Major outage", id: "child")
+                ]
+            )
+        ]
+
+        XCTAssertEqual(ComponentTree.enabledLeafSeverity(in: tree, disabledKeys: []), .red)
+        XCTAssertEqual(ComponentTree.enabledLeafSeverity(in: tree, disabledKeys: ["child"]), .yellow)
+    }
 }

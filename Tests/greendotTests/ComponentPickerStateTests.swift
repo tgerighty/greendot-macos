@@ -1,5 +1,6 @@
 import AppKit
 import StatusCore
+import TestSupport
 import XCTest
 @testable import greendot
 
@@ -110,7 +111,7 @@ final class ComponentPickerStateTests: XCTestCase {
             ],
             isGroup: true
         )
-        let url = URL(string: "https://picker.example")!
+        let url = testURL(host: "picker.example")
         return WatchedPage(
             url: url,
             name: "Picker",

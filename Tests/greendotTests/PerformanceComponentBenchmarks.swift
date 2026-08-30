@@ -2,6 +2,7 @@ import AppKit
 import XCTest
 @testable import greendot
 import StatusCore
+import TestSupport
 
 extension PerformanceHarnessTests {
     func measureComponentPickerClick(depth: Int) -> Double {
@@ -59,7 +60,7 @@ extension PerformanceHarnessTests {
                 isGroup: true
             )
         }
-        let url = URL(string: "https://nested.example")!
+        let url = testURL(host: "nested.example")
         return WatchedPage(
             url: url,
             name: "Nested",
@@ -94,7 +95,7 @@ extension PerformanceHarnessTests {
                 isGroup: true
             )
         }
-        let url = URL(string: "https://components.example")!
+        let url = testURL(host: "components.example")
         return WatchedPage(
             url: url,
             name: "Components",
