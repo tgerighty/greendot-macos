@@ -20,12 +20,17 @@ v1 parsers: Atlassian Statuspage, Statuspal, Instatus. HTML scrape is next.
 
 ```bash
 make test
+make bench      # release-mode benchmarks with local fixtures
 make app
 make install
 make uitest    # local GUI session; needs Accessibility for the test runner
 ```
 
 Requires macOS 13+ and Xcode.
+
+See the
+[2026-08-29 performance report](docs/performance-report-2026-08-29.md)
+for the benchmark method and measured results.
 
 ## Config
 

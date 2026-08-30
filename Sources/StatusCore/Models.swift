@@ -128,7 +128,10 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
         guard let snapshot else { return .grey }
         if snapshot.isUnreachable { return .grey }
         if snapshot.components.isEmpty { return snapshot.overall }
-        return Aggregator.severity(from: leaves(enabledComponents))
+        return ComponentTree.enabledLeafSeverity(
+            in: snapshot.components,
+            disabledKeys: disabledComponentNames
+        )
     }
 
     public func isComponentEnabled(_ component: ComponentStatus) -> Bool {
@@ -144,13 +147,6 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
         }
     }
 
-    private func leaves(_ items: [ComponentStatus]) -> [ComponentStatus] {
-        items.flatMap { item in
-            if item.children.isEmpty { return [item] }
-            let childLeaves = leaves(item.children)
-            return childLeaves.isEmpty && !item.isGroup ? [item] : childLeaves
-        }
-    }
 }
 
 extension WatchedPage: Codable {

@@ -142,19 +142,21 @@ final class ComponentPicker: NSObject {
     }
 
     private func refreshTreeStates() {
-        let nodes = rootComponents.flatMap(ComponentTree.collect)
-        for component in nodes {
-            guard let button = checkboxes[component.id] else { continue }
-            applyState(button, nodes: ComponentTree.collect(component))
+        let index = ComponentSelectionIndex(
+            components: rootComponents,
+            disabledKeys: disabledNames
+        )
+        for (id, button) in checkboxes {
+            guard let summary = index[id] else { continue }
+            applyState(button, summary: summary)
         }
         if let allCheckbox {
-            applyState(allCheckbox, nodes: nodes)
+            applyState(allCheckbox, summary: index.all)
         }
     }
 
-    private func applyState(_ button: NSButton, nodes: [ComponentStatus]) {
-        let onCount = nodes.filter { !isOff($0) }.count
-        let mixed = onCount > 0 && onCount < nodes.count
+    private func applyState(_ button: NSButton, summary: ComponentSelectionSummary) {
+        let mixed = summary.enabledCount > 0 && summary.enabledCount < summary.totalCount
         if mixed {
             button.allowsMixedState = true
             button.state = .mixed
@@ -164,6 +166,6 @@ final class ComponentPicker: NSObject {
             button.state = .off
         }
         button.allowsMixedState = false
-        button.state = onCount == 0 ? .off : .on
+        button.state = summary.enabledCount == 0 ? .off : .on
     }
 }

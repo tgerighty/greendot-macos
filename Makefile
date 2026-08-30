@@ -13,7 +13,7 @@ test:
 	swift test $(SWIFTFLAGS)
 
 bench:
-	GREENDOT_BENCH=1 swift test --filter PerformanceHarnessTests $(SWIFTFLAGS)
+	GREENDOT_BENCH=1 swift test -c $(CONFIG) --filter PerformanceHarnessTests $(SWIFTFLAGS)
 
 lint:
 	swiftlint lint --strict
