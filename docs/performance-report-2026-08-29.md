@@ -109,8 +109,8 @@ file-write improvement.
 
 ## Verification
 
-- Debug tests: 172 tests, one intentional benchmark skip, zero failures.
-- Release tests: 172 tests, one intentional benchmark skip, zero failures.
+- Debug tests: 174 tests, one intentional benchmark skip, zero failures.
+- Release tests: 174 tests, one intentional benchmark skip, zero failures.
 - SwiftLint strict mode: zero violations.
 - The release app builds, its property list is valid, and its local code
   signature passes strict verification.

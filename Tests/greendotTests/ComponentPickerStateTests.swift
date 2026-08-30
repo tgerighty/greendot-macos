@@ -82,6 +82,36 @@ final class ComponentPickerStateTests: XCTestCase {
         }
     }
 
+    func testDuplicateIDUsesTheLastCheckboxSubtreeState() throws {
+        let duplicateLeaf = ComponentStatus(
+            name: "Duplicate leaf",
+            severity: .green,
+            statusText: "Operational",
+            id: "duplicate"
+        )
+        let root = ComponentStatus(
+            name: "Duplicate root",
+            severity: .green,
+            statusText: "Operational",
+            id: "duplicate",
+            children: [
+                ComponentStatus(name: "Unique", severity: .green, statusText: "Operational", id: "unique"),
+                duplicateLeaf
+            ],
+            isGroup: true
+        )
+        let page = Self.page(components: [root], disabledKeys: ["duplicate"])
+        let (picker, view) = installPicker(page: page)
+        defer { _ = picker }
+
+        let duplicateButtons = Self.buttons("duplicate", in: view)
+        let leafButton = try XCTUnwrap(duplicateButtons.first { $0.title.contains("Duplicate leaf") })
+        XCTAssertEqual(duplicateButtons.count, 2)
+        XCTAssertEqual(leafButton.state, .off)
+        XCTAssertFalse(leafButton.allowsMixedState)
+        XCTAssertEqual(try Self.state("all", in: view), .mixed)
+    }
+
     private func installPicker(
         page: WatchedPage,
         onToggleComponent: @escaping (String) -> Bool = { _ in true },
@@ -111,6 +141,13 @@ final class ComponentPickerStateTests: XCTestCase {
             ],
             isGroup: true
         )
+        return page(components: [root], disabledKeys: disabledKeys)
+    }
+
+    private static func page(
+        components: [ComponentStatus],
+        disabledKeys: Set<String>
+    ) -> WatchedPage {
         let url = testURL(host: "picker.example")
         return WatchedPage(
             url: url,
@@ -121,7 +158,7 @@ final class ComponentPickerStateTests: XCTestCase {
                 url: url,
                 provider: .statuspage,
                 overall: .green,
-                components: [root],
+                components: components,
                 incidents: [],
                 isUnreachable: false
             )
@@ -147,5 +184,17 @@ final class ComponentPickerStateTests: XCTestCase {
             }
         }
         return nil
+    }
+
+    private static func buttons(_ identifier: String, in view: NSView) -> [NSButton] {
+        var matches: [NSButton] = []
+        if let button = view as? NSButton,
+           button.identifier?.rawValue == identifier {
+            matches.append(button)
+        }
+        for child in view.subviews {
+            matches.append(contentsOf: buttons(identifier, in: child))
+        }
+        return matches
     }
 }
