@@ -89,7 +89,7 @@ extension PerformanceHarnessTests {
         XCTAssertGreaterThan(metrics.iconElapsedMs, 0)
         XCTAssertEqual(metrics.iconUniqueCount, 4, "Status-dot cache must reuse one image per severity")
         XCTAssertEqual(metrics.unchangedWrites, 0, "Unchanged polls must not rewrite configuration")
-        XCTAssertEqual(metrics.remaining.statuspalGets, 3, "Known Statuspal host must skip HTML discovery")
+        XCTAssertEqual(metrics.remaining.statuspalGets, 4, "Known Statuspal host must skip HTML discovery")
         XCTAssertEqual(metrics.remaining.regexCompiles, 1, "Statuspal regex must be compiled once")
         XCTAssertEqual(metrics.remaining.secondParseCount, 0, "Unchanged response must not be parsed twice")
         XCTAssertEqual(metrics.remaining.pulseWhenReachable, 0, "Reachable pages must not refresh pulse icon")

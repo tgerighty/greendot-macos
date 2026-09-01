@@ -27,6 +27,7 @@
 
 ### Added
 
+- Flashduty status pages (for example https://status.deepseek.com). The app reads `{page}/api/widget/v1/summary.json`. The bar uses overall status. Active incidents and in-progress maintenance appear in the menu. Component lists stay empty because that feed has no component tree.
 - `make bench` times the shipped parse, poll, menu, and status-dot paths on in-memory fixtures (no live network).
 - About greendot in the status menu and the application menu opens the native About panel. The copyright line is Copyright © 2026 Terry Gerighty. All rights reserved. The build number is the short GitHub commit hash.
 - Click a page row, a component row, or Open Status Page to open that page in the default browser.

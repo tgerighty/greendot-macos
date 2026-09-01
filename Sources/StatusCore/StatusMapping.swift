@@ -37,6 +37,15 @@ enum StatusMapping {
         }
     }
 
+    static func flashduty(_ status: String) -> Severity {
+        switch status.lowercased() {
+        case "operational": return .green
+        case "degraded", "partial_outage", "maintenance": return .yellow
+        case "full_outage": return .red
+        default: return .yellow
+        }
+    }
+
     static func instatusPage(_ status: String, incidentImpacts: [String]) -> Severity {
         switch status.uppercased() {
         case "UP": return .green

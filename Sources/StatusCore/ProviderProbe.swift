@@ -7,7 +7,7 @@ public enum ProbeError: Error, Equatable, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .unsupported:
-            return "This URL is not a known status page format (Statuspage, Statuspal, or Instatus)."
+            return "This URL is not a known status page format (Statuspage, Statuspal, Instatus, or Flashduty)."
         case .unreachable:
             return "Could not reach that URL."
         }
@@ -47,7 +47,7 @@ public enum ProviderProbe {
         var flags = ProbeFlags()
         for provider in probeOrder(preferring: prefer) {
             switch provider {
-            case .statuspage, .instatus:
+            case .statuspage, .instatus, .flashduty:
                 if let hit = flags.record(try await standardAttempt(for: provider, context: context)) {
                     return hit
                 }
@@ -61,11 +61,13 @@ public enum ProviderProbe {
     static func probeOrder(preferring prefer: StatusProvider?) -> [StatusProvider] {
         switch prefer {
         case .none, .statuspage:
-            return [.statuspage, .instatus, .statuspal]
+            return [.statuspage, .instatus, .flashduty, .statuspal]
         case .instatus:
-            return [.instatus, .statuspage, .statuspal]
+            return [.instatus, .statuspage, .flashduty, .statuspal]
+        case .flashduty:
+            return [.flashduty, .statuspage, .instatus, .statuspal]
         case .statuspal:
-            return [.statuspal, .statuspage, .instatus]
+            return [.statuspal, .statuspage, .instatus, .flashduty]
         }
     }
 
@@ -138,6 +140,9 @@ public enum ProviderProbe {
         case .instatus:
             endpoint = context.base.appendingPathComponent("summary.json")
             parse = { try InstatusParser.parse(data: $0, sourceURL: context.base) }
+        case .flashduty:
+            endpoint = context.base.appendingPathComponent("api/widget/v1/summary.json")
+            parse = { try FlashdutyParser.parse(data: $0, sourceURL: context.base) }
         case .statuspal:
             return .miss
         }

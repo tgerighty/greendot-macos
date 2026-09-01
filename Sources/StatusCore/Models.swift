@@ -4,6 +4,7 @@ public enum StatusProvider: String, Codable, Equatable, Sendable {
     case statuspage
     case statuspal
     case instatus
+    case flashduty
 }
 
 public struct ComponentStatus: Equatable, Sendable {
