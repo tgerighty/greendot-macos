@@ -40,6 +40,7 @@
 
 ### Fixed
 
+- Click the overall status row (for example Operational) to open the page when a watched page has no components.
 - Menu and Edit store errors no longer leave memory changed when the file write fails.
 - Edit checkboxes stay in the last saved state when a store write fails.
 

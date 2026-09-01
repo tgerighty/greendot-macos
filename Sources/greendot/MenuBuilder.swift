@@ -118,8 +118,9 @@ final class MenuBuilder {
                 action: nil,
                 keyEquivalent: ""
             )
-            row.isEnabled = false
             row.image = StatusDot.image(page.displaySeverity)
+            let url = snapshot?.url ?? page.url
+            TargetAction.install(row) { handlers.onOpen(url) }
             menu.addItem(row)
         }
 
