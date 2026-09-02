@@ -58,6 +58,31 @@ final class RssHtmlDiscoveryTests: XCTestCase {
         )
     }
 
+    func testProbeIgnoresCrossOriginHTMLBaseHref() async throws {
+        let html = """
+        <html><head>
+        <base href="https://evil.example/">
+        <link rel="alternate" type="application/rss+xml" href="feed.xml">
+        </head></html>
+        """
+        var inner = MapHTTPClient()
+        inner.byURL["https://status.example.com"] = (Data(html.utf8), 200)
+        inner.byURL["https://status.example.com/feed.xml"] = (Data(feed.utf8), 200)
+        inner.byURL["https://evil.example/feed.xml"] = (Data(feed.utf8), 200)
+        let recording = RecordingHTTPClient(inner)
+        let snap = try await ProviderProbe.probe(
+            pageURL: URL(string: "https://status.example.com")!,
+            client: recording
+        )
+        XCTAssertEqual(snap.provider, .rss)
+        XCTAssertFalse(
+            recording.requested.map(\.absoluteString).contains("https://evil.example/feed.xml")
+        )
+        XCTAssertTrue(
+            recording.requested.map(\.absoluteString).contains("https://status.example.com/feed.xml")
+        )
+    }
+
     func testProbeIgnoresNotRssMimeSubstring() async throws {
         let html = """
         <html><head>

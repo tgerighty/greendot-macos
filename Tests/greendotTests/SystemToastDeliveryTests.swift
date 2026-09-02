@@ -17,6 +17,10 @@ final class SystemToastDeliveryTests: XCTestCase {
             Self.request(identifier: "stale-green", category: SystemToastDelivery.autoDismissCategory),
             Self.request(identifier: "persistent-red", category: "")
         ]
+        notifications.pendingRequests = [
+            Self.request(identifier: "pending-green", category: SystemToastDelivery.autoDismissCategory),
+            Self.request(identifier: "pending-other", category: "")
+        ]
         let delivery = SystemToastDelivery(
             notifications: notifications,
             schedule: { _, _ in
@@ -27,10 +31,14 @@ final class SystemToastDeliveryTests: XCTestCase {
 
         delivery.start()
 
-        XCTAssertEqual(notifications.calls.prefix(2), ["authorization", "delivered"])
+        XCTAssertEqual(
+            notifications.calls,
+            ["authorization", "delivered", "remove", "pending", "removePending"]
+        )
         XCTAssertTrue(notifications.authorizationOptions.contains(.alert))
         XCTAssertTrue(notifications.authorizationOptions.contains(.sound))
         XCTAssertEqual(notifications.removedIdentifiers, [["stale-green"]])
+        XCTAssertEqual(notifications.removedPendingIdentifiers, [["pending-green"]])
     }
 
     func testDeliverAddsImmediateRequestsAndOnlySchedulesGreenRemoval() throws {
@@ -254,6 +262,9 @@ final class SystemToastDeliveryTests: XCTestCase {
         return red * red + green * green + blue * blue
     }
 
+}
+
+extension SystemToastDeliveryTests {
     private func toast(
         pageID: UUID? = nil,
         pageName: String = "GitHub",
@@ -273,9 +284,7 @@ final class SystemToastDeliveryTests: XCTestCase {
         content.categoryIdentifier = category
         return UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
     }
-}
 
-extension SystemToastDeliveryTests {
     func testGreenExpiryRemovesPendingAndDeliveredRequests() throws {
         let notifications = RecordingUserNotificationCenter()
         var scheduledActions: [() -> Void] = []
@@ -313,6 +322,7 @@ private final class RecordingUserNotificationCenter: UserNotificationCenterClien
     var authorizationOptions: UNAuthorizationOptions = []
     var addedRequests: [UNNotificationRequest] = []
     var deliveredRequests: [UNNotificationRequest] = []
+    var pendingRequests: [UNNotificationRequest] = []
     var removedIdentifiers: [[String]] = []
     var removedPendingIdentifiers: [[String]] = []
 
@@ -335,6 +345,13 @@ private final class RecordingUserNotificationCenter: UserNotificationCenterClien
     ) {
         calls.append("delivered")
         completion(deliveredRequests)
+    }
+
+    func getPendingNotificationRequests(
+        completion: @escaping @Sendable ([UNNotificationRequest]) -> Void
+    ) {
+        calls.append("pending")
+        completion(pendingRequests)
     }
 
     func removeDeliveredNotifications(withIdentifiers identifiers: [String]) {

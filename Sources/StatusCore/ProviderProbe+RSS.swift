@@ -22,8 +22,9 @@ extension ProviderProbe {
             }
             guard let html = decodedText(located.data) else { return nil }
             let cleaned = htmlWithoutIgnoredMarkup(html)
-            let base = documentBase(from: cleaned, fallback: located.url)
-            guard let feedURL = extractAlternateFeedURL(from: cleaned, base: base) else {
+            let page = located.url
+            let base = documentBase(from: cleaned, fallback: page)
+            guard let feedURL = extractAlternateFeedURL(from: cleaned, base: base, page: page) else {
                 return nil
             }
             return try await fetchFeed(feedURL, context: context, flags: &flags)
@@ -95,7 +96,8 @@ extension ProviderProbe {
             if isBaseKeyword(html, from: index), let end = quotedTagEnd(html, from: index) {
                 let href = linkAttribute(html[index...end], "href") ?? ""
                 if !href.isEmpty,
-                   let url = URL(string: decodeHTMLEntities(href), relativeTo: fallback)?.absoluteURL {
+                   let url = URL(string: decodeHTMLEntities(href), relativeTo: fallback)?.absoluteURL,
+                   isAllowedFeedURL(url, relativeTo: fallback) {
                     return url
                 }
                 index = html.index(after: end)
@@ -106,7 +108,7 @@ extension ProviderProbe {
         return fallback
     }
 
-    static func extractAlternateFeedURL(from html: String, base: URL) -> URL? {
+    static func extractAlternateFeedURL(from html: String, base: URL, page: URL) -> URL? {
         for tag in linkTags(in: html) {
             let rel = linkAttribute(tag, "rel")?.lowercased() ?? ""
             guard relationTokens(rel).contains("alternate") else { continue }
@@ -115,7 +117,7 @@ extension ProviderProbe {
             guard let href = linkAttribute(tag, "href"), !href.isEmpty else { continue }
             let decoded = decodeHTMLEntities(href)
             if let url = URL(string: decoded, relativeTo: base)?.absoluteURL,
-               isAllowedFeedURL(url, relativeTo: base) {
+               isAllowedFeedURL(url, relativeTo: page) {
                 return url
             }
         }

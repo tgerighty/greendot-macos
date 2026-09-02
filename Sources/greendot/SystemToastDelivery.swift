@@ -11,6 +11,9 @@ protocol UserNotificationCenterClient: AnyObject, Sendable {
     func getDeliveredRequests(
         completion: @escaping @Sendable ([UNNotificationRequest]) -> Void
     )
+    func getPendingNotificationRequests(
+        completion: @escaping @Sendable ([UNNotificationRequest]) -> Void
+    )
     func removeDeliveredNotifications(withIdentifiers identifiers: [String])
     func removePendingNotificationRequests(withIdentifiers identifiers: [String])
 }
@@ -46,6 +49,12 @@ private final class LiveUserNotificationCenterClient: UserNotificationCenterClie
         center.getDeliveredNotifications { delivered in
             completion(delivered.map(\.request))
         }
+    }
+
+    func getPendingNotificationRequests(
+        completion: @escaping @Sendable ([UNNotificationRequest]) -> Void
+    ) {
+        center.getPendingNotificationRequests(completionHandler: completion)
     }
 
     func removeDeliveredNotifications(withIdentifiers identifiers: [String]) {
@@ -173,12 +182,20 @@ final class SystemToastDelivery: ToastDelivery {
 
     /// Clears toasts that a quit cut short before they could clear themselves.
     private func clearStaleAutoDismissToasts() {
-        notifications.getDeliveredRequests { [notifications] delivered in
+        let notifications = notifications
+        notifications.getDeliveredRequests { delivered in
             let stale = delivered
                 .filter { $0.content.categoryIdentifier == Self.autoDismissCategory }
                 .map(\.identifier)
             guard !stale.isEmpty else { return }
             notifications.removeDeliveredNotifications(withIdentifiers: stale)
+        }
+        notifications.getPendingNotificationRequests { pending in
+            let stale = pending
+                .filter { $0.content.categoryIdentifier == Self.autoDismissCategory }
+                .map(\.identifier)
+            guard !stale.isEmpty else { return }
+            notifications.removePendingNotificationRequests(withIdentifiers: stale)
         }
     }
 
