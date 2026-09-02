@@ -66,4 +66,20 @@ final class RssParserGuardTests: XCTestCase {
         let snap = try RssParser.parse(data: data, sourceURL: source)
         XCTAssertEqual(snap.url, source)
     }
+
+    func testAtomAlternateLinkBeatsEarlierSelfLink() throws {
+        let data = Data("""
+        <?xml version="1.0" encoding="utf-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+          <title>Example</title>
+          <link rel="self" href="https://status.example.com/atom.xml"/>
+          <link rel="alternate" href="https://status.example.com/status"/>
+        </feed>
+        """.utf8)
+        let snap = try RssParser.parse(
+            data: data,
+            sourceURL: URL(string: "https://status.example.com/atom.xml")!
+        )
+        XCTAssertEqual(snap.url, URL(string: "https://status.example.com/status")!)
+    }
 }

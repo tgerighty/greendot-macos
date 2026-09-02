@@ -111,14 +111,16 @@ public enum RssParser {
 
     private static func atomLink(_ element: XMLElement) -> String? {
         let links = children(element, "link")
-        let chosen = links.first { link in
-            let rel = (link.attribute(forName: "rel")?.stringValue ?? "alternate").lowercased()
-            return rel == "alternate" || rel == "self"
-        }
+        let chosen = links.first { atomLinkRelation($0) == "alternate" }
+            ?? links.first { atomLinkRelation($0) == "self" }
         if let href = chosen?.attribute(forName: "href")?.stringValue, !href.isEmpty {
             return href
         }
         return chosen.flatMap { textValue($0) }
+    }
+
+    private static func atomLinkRelation(_ link: XMLElement) -> String {
+        (link.attribute(forName: "rel")?.stringValue ?? "alternate").lowercased()
     }
 
     private static func resolvedPageURL(_ link: String?, sourceURL: URL) -> URL {
