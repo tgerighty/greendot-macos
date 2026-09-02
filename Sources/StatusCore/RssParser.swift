@@ -25,7 +25,10 @@ public enum RssParser {
         guard let channel = child(root, "channel") else {
             throw ParserError.notThisProvider
         }
-        let components = children(channel, "item").compactMap(component(fromRSSItem:))
+        let missing = missingSeverity(for: sourceURL)
+        let components = children(channel, "item").compactMap {
+            component(fromRSSItem: $0, missing: missing)
+        }
         return snapshot(
             name: text(channel, "title"),
             link: text(channel, "link"),
@@ -35,7 +38,10 @@ public enum RssParser {
     }
 
     private static func parseAtom(_ root: XMLElement, sourceURL: URL) throws -> PageSnapshot {
-        let components = children(root, "entry").compactMap(component(fromAtomEntry:))
+        let missing = missingSeverity(for: sourceURL)
+        let components = children(root, "entry").compactMap {
+            component(fromAtomEntry: $0, missing: missing)
+        }
         return snapshot(
             name: text(root, "title"),
             link: atomLink(root),
@@ -63,7 +69,12 @@ public enum RssParser {
         )
     }
 
-    private static func component(fromRSSItem item: XMLElement) -> ComponentStatus? {
+    private static func missingSeverity(for url: URL) -> Severity {
+        let host = url.host?.lowercased() ?? ""
+        return host.contains("azure.status.microsoft") ? .yellow : .green
+    }
+
+    private static func component(fromRSSItem item: XMLElement, missing: Severity) -> ComponentStatus? {
         let title = text(item, "title")
         let guid = text(item, "guid")
         let name = title ?? guid
@@ -71,13 +82,13 @@ public enum RssParser {
         let raw = text(item, "status")
         return ComponentStatus(
             name: name,
-            severity: StatusMapping.rss(raw),
-            statusText: StatusMapping.rssText(raw),
+            severity: StatusMapping.rss(raw, missing: missing),
+            statusText: StatusMapping.rssText(raw, missing: missing),
             id: guid ?? name
         )
     }
 
-    private static func component(fromAtomEntry entry: XMLElement) -> ComponentStatus? {
+    private static func component(fromAtomEntry entry: XMLElement, missing: Severity) -> ComponentStatus? {
         let title = text(entry, "title")
         let entryID = text(entry, "id")
         let name = title ?? entryID
@@ -85,8 +96,8 @@ public enum RssParser {
         let raw = text(entry, "status")
         return ComponentStatus(
             name: name,
-            severity: StatusMapping.rss(raw),
-            statusText: StatusMapping.rssText(raw),
+            severity: StatusMapping.rss(raw, missing: missing),
+            statusText: StatusMapping.rssText(raw, missing: missing),
             id: entryID ?? name
         )
     }

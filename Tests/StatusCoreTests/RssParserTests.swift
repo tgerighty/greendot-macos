@@ -37,6 +37,27 @@ final class RssParserTests: XCTestCase {
         XCTAssertTrue(snap.components[0].children.isEmpty)
     }
 
+    func testAzureRSSItemWithoutStatusIsYellow() throws {
+        let data = Data("""
+        <rss version="2.0">
+          <channel>
+            <title>Azure Status</title>
+            <item>
+              <title>West Europe Storage</title>
+              <description>Investigating connectivity</description>
+            </item>
+          </channel>
+        </rss>
+        """.utf8)
+        let snap = try RssParser.parse(
+            data: data,
+            sourceURL: URL(string: "https://rssfeed.azure.status.microsoft/en-us/status/feed/")!
+        )
+        XCTAssertEqual(snap.overall, .yellow)
+        XCTAssertEqual(snap.components[0].severity, .yellow)
+        XCTAssertEqual(snap.components[0].statusText, "Degraded")
+    }
+
     func testRSSItemWithoutStatusIsOperational() throws {
         let data = Data("""
         <rss version="2.0">

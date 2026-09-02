@@ -92,8 +92,22 @@ final class SystemToastDeliveryTests: XCTestCase {
         XCTAssertEqual(presenter.visibleCount, 1)
         let card = presenter.windows.first?.contentView as? NSView
         XCTAssertEqual(card?.accessibilityIdentifier(), "persistent-toast-card")
+        let hit = card?.hitTest(NSPoint(x: 80, y: 40))
+        XCTAssertTrue(hit === card, "text and icon clicks must hit the card")
         card?.mouseDown(with: NSEvent())
         XCTAssertEqual(presenter.visibleCount, 0)
+    }
+
+    func testPersistentPanelReplacesSamePageAndCapsStack() {
+        _ = NSApplication.shared
+        let presenter = PanelPersistentToastPresenter(playSound: {})
+        presenter.present(Toast(pageName: "GitHub", body: "Major outage", severity: .red))
+        presenter.present(Toast(pageName: "GitHub", body: "Degraded", severity: .yellow))
+        XCTAssertEqual(presenter.visibleCount, 1)
+        for index in 1...10 {
+            presenter.present(Toast(pageName: "Page \(index)", body: "Degraded", severity: .yellow))
+        }
+        XCTAssertEqual(presenter.visibleCount, 8)
     }
 
     func testOnlyAutoDismissToastsCarryTheClearOnLaunchCategory() {

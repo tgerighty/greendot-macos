@@ -18,7 +18,7 @@ These decisions are settled. Do not re-open them in this slice.
 | Add | One URL still creates one watched page. |
 | Shape | Items are components. No incident list for RSS (that would duplicate the tree). |
 | Colour | Worst enabled leaf. No RSS-only colour policy. |
-| Missing `<status>` | Green / Operational. Same as a component with no status string. |
+| Missing `<status>` | Green / Operational, except Azure status RSS (`*.azure.status.microsoft`), where items are incidents so missing `<status>` is yellow. Empty Azure feed stays green. |
 | Unknown `<status>` | Yellow. Raw text is the status text. |
 | Empty feed | No components. Overall green. |
 | Microsoft landing | `https://status.cloud.microsoft/` (empty path) is one page named Microsoft, with three groups: Microsoft 365, Power Platform, Azure. |

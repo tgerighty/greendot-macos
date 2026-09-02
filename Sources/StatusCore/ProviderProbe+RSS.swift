@@ -96,15 +96,20 @@ private extension ProviderProbe {
         context: ProbeContext,
         flags: inout ProbeFlags
     ) async throws -> ProbeHit? {
-        var groups: [ComponentStatus] = []
+        let feeds = microsoftHubFeeds(base: context.base)
         var parts: [Data] = []
-        var parsedAny = false
-        for feed in microsoftHubFeeds(base: context.base) {
-            groups.append(
-                try await hubGroup(feed, context: context, flags: &flags, parts: &parts, parsedAny: &parsedAny)
-            )
+        for feed in feeds {
+            do {
+                let (data, status) = try await context.client.get(feed.url)
+                try Task.checkCancellation()
+                flags.recordHTTP(status: status)
+                parts.append(data)
+            } catch {
+                try throwIfCancelled(error)
+                flags.sawNetworkError = true
+                parts.append(Data())
+            }
         }
-        guard parsedAny else { return nil }
         let body = joinedFeeds(parts)
         if let previousBody = context.previousBody,
            let previousSnapshot = context.previousSnapshot,
@@ -112,6 +117,12 @@ private extension ProviderProbe {
            body == previousBody {
             return ProbeHit(snapshot: previousSnapshot, body: body)
         }
+        var groups: [ComponentStatus] = []
+        var parsedAny = false
+        for (feed, data) in zip(feeds, parts) {
+            groups.append(parseHubGroup(feed, data: data, parsedAny: &parsedAny))
+        }
+        guard parsedAny else { return nil }
         return ProbeHit(
             snapshot: PageSnapshot(
                 name: "Microsoft",
@@ -126,42 +137,27 @@ private extension ProviderProbe {
         )
     }
 
-    static func hubGroup(
+    static func parseHubGroup(
         _ feed: RSSHubFeed,
-        context: ProbeContext,
-        flags: inout ProbeFlags,
-        parts: inout [Data],
+        data: Data,
         parsedAny: inout Bool
-    ) async throws -> ComponentStatus {
+    ) -> ComponentStatus {
+        guard looksLikeFeed(data) else { return greyGroup(feed) }
         do {
-            let (data, status) = try await context.client.get(feed.url)
-            try Task.checkCancellation()
-            flags.recordHTTP(status: status)
-            parts.append(data)
-            if status == 200, looksLikeFeed(data) {
-                do {
-                    recordParse()
-                    let parsed = try RssParser.parse(data: data, sourceURL: feed.url)
-                    parsedAny = true
-                    let children = parsed.components
-                    let severity = ComponentTree.enabledLeafSeverity(in: children, disabledKeys: [])
-                    return ComponentStatus(
-                        name: feed.name,
-                        severity: severity,
-                        statusText: severity.displayName,
-                        id: feed.id,
-                        children: children,
-                        isGroup: true
-                    )
-                } catch {
-                    return greyGroup(feed)
-                }
-            }
-            return greyGroup(feed)
+            recordParse()
+            let parsed = try RssParser.parse(data: data, sourceURL: feed.url)
+            parsedAny = true
+            let children = parsed.components
+            let severity = ComponentTree.enabledLeafSeverity(in: children, disabledKeys: [])
+            return ComponentStatus(
+                name: feed.name,
+                severity: severity,
+                statusText: severity.displayName,
+                id: feed.id,
+                children: children,
+                isGroup: true
+            )
         } catch {
-            try throwIfCancelled(error)
-            flags.sawNetworkError = true
-            parts.append(Data())
             return greyGroup(feed)
         }
     }
@@ -216,11 +212,22 @@ private extension ProviderProbe {
         }
     }
 
-    static func linkAttribute(_ tag: Substring, _ name: String) -> String? {
-        let pattern = name + "\\s*=\\s*[\"']([^\"']+)[\"']"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
-            return nil
+    static let attributeRegexByName: [String: NSRegularExpression] = {
+        recordRegex()
+        var compiled: [String: NSRegularExpression] = [:]
+        for name in ["rel", "type", "href"] {
+            if let regex = try? NSRegularExpression(
+                pattern: name + "\\s*=\\s*[\"']([^\"']+)[\"']",
+                options: [.caseInsensitive]
+            ) {
+                compiled[name] = regex
+            }
         }
+        return compiled
+    }()
+
+    static func linkAttribute(_ tag: Substring, _ name: String) -> String? {
+        guard let regex = attributeRegexByName[name] else { return nil }
         let text = String(tag)
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
         guard let match = regex.firstMatch(in: text, range: range),

@@ -46,8 +46,8 @@ enum StatusMapping {
         }
     }
 
-    static func rss(_ raw: String?) -> Severity {
-        guard let raw, !raw.isEmpty else { return .green }
+    static func rss(_ raw: String?, missing: Severity = .green) -> Severity {
+        guard let raw, !raw.isEmpty else { return missing }
         switch raw.lowercased() {
         case "available", "operational", "up", "none", "resolved":
             return .green
@@ -62,8 +62,10 @@ enum StatusMapping {
         }
     }
 
-    static func rssText(_ raw: String?) -> String {
-        guard let raw, !raw.isEmpty else { return "Operational" }
+    static func rssText(_ raw: String?, missing: Severity = .green) -> String {
+        guard let raw, !raw.isEmpty else {
+            return missing == .green ? "Operational" : missing.displayName
+        }
         switch raw.lowercased() {
         case "available", "operational", "up", "none", "resolved":
             return "Operational"

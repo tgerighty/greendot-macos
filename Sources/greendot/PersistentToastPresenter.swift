@@ -11,29 +11,43 @@ protocol PersistentToastPresenter: AnyObject {
 @MainActor
 final class PanelPersistentToastPresenter: PersistentToastPresenter {
     private let playSound: () -> Void
-    private(set) var windows: [NSWindow] = []
+    private var items: [Item] = []
 
     init(playSound: @escaping () -> Void = { NSSound.beep() }) {
         self.playSound = playSound
     }
 
     func present(_ toast: Toast) {
+        items.filter { $0.pageName == toast.pageName }.forEach { dismiss($0.window) }
+        while items.count >= PersistentToastLayout.maxPanels {
+            dismiss(items[0].window)
+        }
         let window = makeWindow(for: toast)
-        windows.append(window)
+        items.append(Item(window: window, pageName: toast.pageName))
         layoutWindows()
         window.orderFrontRegardless()
         playSound()
     }
 
-    var visibleCount: Int {
-        windows.filter(\.isVisible).count
+    var windows: [NSWindow] {
+        items.map(\.window)
     }
+
+    var visibleCount: Int {
+        items.map(\.window).filter(\.isVisible).count
+    }
+}
+
+private struct Item {
+    let window: NSWindow
+    let pageName: String
 }
 
 private enum PersistentToastLayout {
     static let size = NSSize(width: 320, height: 56)
     static let margin: CGFloat = 12
     static let gap: CGFloat = 8
+    static let maxPanels = 8
 }
 
 private extension PanelPersistentToastPresenter {
@@ -63,7 +77,7 @@ private extension PanelPersistentToastPresenter {
     }
 
     func dismiss(_ window: NSWindow) {
-        windows.removeAll { $0 === window }
+        items.removeAll { $0.window === window }
         window.orderOut(nil)
         layoutWindows()
     }
@@ -71,11 +85,11 @@ private extension PanelPersistentToastPresenter {
     func layoutWindows() {
         guard let screen = NSScreen.main?.visibleFrame else { return }
         let size = PersistentToastLayout.size
-        for (index, window) in windows.enumerated() {
+        for (index, item) in items.enumerated() {
             let originX = screen.maxX - size.width - PersistentToastLayout.margin
             let originY = screen.maxY - size.height - PersistentToastLayout.margin
                 - CGFloat(index) * (size.height + PersistentToastLayout.gap)
-            window.setFrame(
+            item.window.setFrame(
                 NSRect(x: originX, y: originY, width: size.width, height: size.height),
                 display: true
             )
@@ -120,6 +134,10 @@ private final class PersistentToastCard: NSView {
 
     required init?(coder: NSCoder) {
         nil
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        bounds.contains(point) ? self : nil
     }
 
     override func mouseDown(with _: NSEvent) {
