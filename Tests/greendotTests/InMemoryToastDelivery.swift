@@ -6,6 +6,7 @@ final class InMemoryToastDelivery: ToastDelivery {
     private let lock = NSLock()
     private var storedStartCount = 0
     private var storedToasts: [Toast] = []
+    private var storedClearedPageIDs: [UUID] = []
 
     var startCount: Int {
         lock.lock()
@@ -17,6 +18,12 @@ final class InMemoryToastDelivery: ToastDelivery {
         lock.lock()
         defer { lock.unlock() }
         return storedToasts
+    }
+
+    var clearedPageIDs: [UUID] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedClearedPageIDs
     }
 
     func start() {
@@ -31,5 +38,9 @@ final class InMemoryToastDelivery: ToastDelivery {
         lock.unlock()
     }
 
-    func clear(pageID _: UUID) {}
+    func clear(pageID: UUID) {
+        lock.lock()
+        storedClearedPageIDs.append(pageID)
+        lock.unlock()
+    }
 }

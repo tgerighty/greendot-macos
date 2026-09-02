@@ -78,7 +78,7 @@ private extension StatusPageEditor {
         guard let pageID else { return nil }
         return { [weak self] name in
             guard let self else { return false }
-            return self.performChange {
+            return self.performChange(clearingToastFor: pageID) {
                 try self.monitor.toggleComponent(id: pageID, name: name)
             }
         }
@@ -88,7 +88,7 @@ private extension StatusPageEditor {
         guard let pageID else { return nil }
         return { [weak self] enabled in
             guard let self else { return false }
-            return self.performChange {
+            return self.performChange(clearingToastFor: pageID) {
                 try self.monitor.setAllComponents(id: pageID, enabled: enabled)
             }
         }
@@ -111,9 +111,10 @@ private extension StatusPageEditor {
         }
     }
 
-    func performChange(_ work: () throws -> Void) -> Bool {
+    func performChange(clearingToastFor pageID: UUID? = nil, _ work: () throws -> Void) -> Bool {
         do {
             try work()
+            if let pageID { clearToast(pageID) }
             onChange()
             return true
         } catch {
@@ -123,10 +124,8 @@ private extension StatusPageEditor {
     }
 
     func remove(pageID: UUID) -> Bool {
-        let didRemove = performChange {
+        performChange(clearingToastFor: pageID) {
             try monitor.remove(id: pageID)
         }
-        if didRemove { clearToast(pageID) }
-        return didRemove
     }
 }

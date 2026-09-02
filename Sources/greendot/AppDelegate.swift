@@ -117,6 +117,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AboutPanel.show()
     }
 
+    @MainActor
+    func toggleNotifications(id: UUID, monitor: Monitor) {
+        let wasEnabled = monitor.pages.first { $0.id == id }?.notificationsEnabled == true
+        if performStoreChange({ try monitor.toggleNotifications(id: id) }), wasEnabled {
+            toastDelivery.clear(pageID: id)
+        }
+    }
+
     @discardableResult
     @MainActor
     func performStoreChange(_ work: () throws -> Void) -> Bool {
@@ -173,7 +181,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             },
             onToggleNotifications: { [weak self] id in
-                self?.performStoreChange { try self?.monitor?.toggleNotifications(id: id) }
+                guard let self, let monitor = self.monitor else { return }
+                self.toggleNotifications(id: id, monitor: monitor)
             },
             onOpen: { url in
                 URLOpener.open(url)
