@@ -103,7 +103,7 @@ private extension PanelPersistentToastPresenter {
 
     func removeWindow(_ window: NSWindow) {
         items.removeAll { $0.window === window }
-        window.orderOut(nil)
+        window.close()
     }
 
     func dismiss(_ window: NSWindow) {

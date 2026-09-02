@@ -9,15 +9,15 @@ extension ProviderProbe {
             return try await probeMicrosoftHub(context: context, flags: &flags)
         }
         do {
-            let (data, status) = try await context.client.get(context.pageURL)
+            let located = try await context.client.getLocated(context.pageURL)
             try Task.checkCancellation()
-            flags.recordHTTP(status: status)
-            guard status == 200 else { return nil }
-            if looksLikeFeed(data) {
-                return feedHit(data, sourceURL: context.pageURL, context: context)
+            flags.recordHTTP(status: located.status)
+            guard located.status == 200 else { return nil }
+            if looksLikeFeed(located.data) {
+                return feedHit(located.data, sourceURL: located.url, context: context)
             }
-            guard let html = String(data: data, encoding: .utf8),
-                  let feedURL = extractAlternateFeedURL(from: html, base: context.pageURL) else {
+            guard let html = String(data: located.data, encoding: .utf8),
+                  let feedURL = extractAlternateFeedURL(from: html, base: located.url) else {
                 return nil
             }
             return try await fetchFeed(feedURL, context: context, flags: &flags)
@@ -61,13 +61,7 @@ extension ProviderProbe {
     }
 
     static func decodeHTMLEntities(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: "&amp;", with: "&")
-            .replacingOccurrences(of: "&quot;", with: "\"")
-            .replacingOccurrences(of: "&#39;", with: "'")
-            .replacingOccurrences(of: "&apos;", with: "'")
-            .replacingOccurrences(of: "&lt;", with: "<")
-            .replacingOccurrences(of: "&gt;", with: ">")
+        CFXMLCreateStringByUnescapingEntities(nil, value as CFString, nil) as String? ?? value
     }
 
     static func isAllowedFeedURL(_ url: URL, relativeTo base: URL) -> Bool {
@@ -243,31 +237,62 @@ private extension ProviderProbe {
         }
     }
 
-    static let attributeRegexByName: [String: NSRegularExpression] = {
-        recordRegex()
-        var compiled: [String: NSRegularExpression] = [:]
-        for name in ["rel", "type", "href"] {
-            if let regex = try? NSRegularExpression(
-                pattern: "(?:^|\\s)" + name + "\\s*=\\s*(?:\"([^\"]+)\"|'([^']+)'|([^\\s>]+))",
-                options: [.caseInsensitive]
-            ) {
-                compiled[name] = regex
-            }
-        }
-        return compiled
-    }()
-
     static func linkAttribute(_ tag: Substring, _ name: String) -> String? {
-        guard let regex = attributeRegexByName[name] else { return nil }
-        let text = String(tag)
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        guard let match = regex.firstMatch(in: text, range: range) else { return nil }
-        for index in 1...3 {
-            let captured = match.range(at: index)
-            if captured.location != NSNotFound, let inner = Range(captured, in: text) {
-                return String(text[inner])
-            }
+        attributes(in: String(tag))[name.lowercased()]
+    }
+
+    static func attributes(in tag: String) -> [String: String] {
+        var result: [String: String] = [:]
+        let chars = Array(tag)
+        var index = skipToken(chars, from: 0)
+        while index < chars.count {
+            index = skipSpaces(chars, from: index)
+            guard index < chars.count, chars[index] != ">" else { break }
+            let (key, afterName) = readToken(chars, from: index)
+            index = skipSpaces(chars, from: afterName)
+            guard index < chars.count, chars[index] == "=" else { continue }
+            let (value, afterValue) = readAttributeValue(chars, from: skipSpaces(chars, from: index + 1))
+            index = afterValue
+            if !key.isEmpty { result[key.lowercased()] = value }
         }
-        return nil
+        return result
+    }
+
+    static func skipSpaces(_ chars: [Character], from start: Int) -> Int {
+        var index = start
+        while index < chars.count, chars[index].isWhitespace { index += 1 }
+        return index
+    }
+
+    static func skipToken(_ chars: [Character], from start: Int) -> Int {
+        var index = start
+        while index < chars.count, !chars[index].isWhitespace, chars[index] != ">" { index += 1 }
+        return index
+    }
+
+    static func readToken(_ chars: [Character], from start: Int) -> (String, Int) {
+        var index = start
+        while index < chars.count,
+              chars[index] != "=",
+              !chars[index].isWhitespace,
+              chars[index] != ">" {
+            index += 1
+        }
+        return (String(chars[start..<index]), index)
+    }
+
+    static func readAttributeValue(_ chars: [Character], from start: Int) -> (String, Int) {
+        guard start < chars.count else { return ("", start) }
+        if chars[start] == "\"" || chars[start] == "'" {
+            let quote = chars[start]
+            var index = start + 1
+            while index < chars.count, chars[index] != quote { index += 1 }
+            let value = String(chars[(start + 1)..<index])
+            if index < chars.count { index += 1 }
+            return (value, index)
+        }
+        var index = start
+        while index < chars.count, !chars[index].isWhitespace, chars[index] != ">" { index += 1 }
+        return (String(chars[start..<index]), index)
     }
 }
