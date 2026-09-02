@@ -71,6 +71,20 @@ final class SystemToastDeliveryTests: XCTestCase {
         XCTAssertEqual(persistent.cleared, [githubID])
     }
 
+    func testClearRemovesPersistentPanelForPage() {
+        let persistent = RecordingPersistentToastPresenter()
+        let delivery = SystemToastDelivery(
+            notifications: RecordingUserNotificationCenter(),
+            schedule: { _, _ in },
+            makeIdentifier: { "unused" },
+            persistent: persistent
+        )
+        let pageID = UUID()
+        delivery.deliver(toast(pageID: pageID, body: "Major outage", severity: .red))
+        delivery.clear(pageID: pageID)
+        XCTAssertEqual(persistent.cleared, [pageID])
+    }
+
     func testToastAttachmentColourMatchesIssueColour() {
         _ = NSApplication.shared
         for severity in [Severity.red, .yellow, .green, .grey] {

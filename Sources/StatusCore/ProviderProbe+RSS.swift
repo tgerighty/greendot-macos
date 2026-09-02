@@ -16,8 +16,9 @@ extension ProviderProbe {
             guard RedirectPolicy.allows(URLRequest(url: located.url), from: context.pageURL) else {
                 return nil
             }
-            if looksLikeFeed(located.data) {
-                return feedHit(located.data, sourceURL: located.url, context: context)
+            if looksLikeFeed(located.data),
+               let hit = feedHit(located.data, sourceURL: located.url, context: context) {
+                return hit
             }
             guard let html = String(data: located.data, encoding: .utf8),
                   let feedURL = extractAlternateFeedURL(

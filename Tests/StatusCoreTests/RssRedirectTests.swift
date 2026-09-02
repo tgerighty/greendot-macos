@@ -135,6 +135,24 @@ final class RssRedirectTests: XCTestCase {
         XCTAssertEqual(second.snapshot.url, relocated)
     }
 
+    func testProbeContinuesToAlternateWhenPrefixLooksLikeFeedButDoesNotParse() async throws {
+        let html = """
+        <html><head>
+        <!-- <rss version="2.0"><channel></channel></rss> -->
+        <link rel="alternate" type="application/rss+xml" href="/feed.xml">
+        </head></html>
+        """
+        var inner = MapHTTPClient()
+        inner.byURL["https://status.example.com"] = (Data(html.utf8), 200)
+        inner.byURL["https://status.example.com/feed.xml"] = (Data(feed.utf8), 200)
+        let snap = try await ProviderProbe.probe(
+            pageURL: URL(string: "https://status.example.com")!,
+            client: inner
+        )
+        XCTAssertEqual(snap.provider, .rss)
+        XCTAssertEqual(snap.name, "Secret Feed")
+    }
+
     func testProbeResolvesAlternateFeedsAgainstRedirectedURL() async throws {
         let html = """
         <html><head>

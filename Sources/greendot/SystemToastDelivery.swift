@@ -101,7 +101,7 @@ final class SystemToastDelivery: ToastDelivery {
             persistentPresenter().present(toast)
             return
         }
-        persistent?.clear(pageID: toast.pageID)
+        clear(pageID: toast.pageID)
         let identifier = makeIdentifier()
         let request = UNNotificationRequest(
             identifier: identifier,
@@ -113,6 +113,11 @@ final class SystemToastDelivery: ToastDelivery {
         schedule(seconds) {
             notifications.removeDeliveredNotifications(withIdentifiers: [identifier])
         }
+    }
+
+    @MainActor
+    func clear(pageID: UUID) {
+        persistent?.clear(pageID: pageID)
     }
 
     @MainActor

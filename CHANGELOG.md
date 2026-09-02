@@ -54,6 +54,8 @@
 - If a feed stays the same bytes but moves to another same-origin URL, the stored page URL follows the new location.
 - A `<feed>` root is treated as Atom only when it uses the Atom namespace.
 - The Azure missing-status exception applies only to `azure.status.microsoft` and its subdomains.
+- If an HTML page contains feed-shaped text that is not a real feed, discovery still uses the advertised alternate link.
+- Editing or removing a watched page clears that page's persistent alert.
 - Click the overall status row (for example Operational) to open the page when a watched page has no components.
 - Menu and Edit store errors no longer leave memory changed when the file write fails.
 - Edit checkboxes stay in the last saved state when a store write fails.

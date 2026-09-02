@@ -201,6 +201,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 },
                 presentError: { [weak self] error in
                     self?.presentError(error)
+                },
+                clearToast: { [weak self] pageID in
+                    self?.toastDelivery.clear(pageID: pageID)
                 }
             )
             self.editor = editor

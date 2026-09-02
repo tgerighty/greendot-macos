@@ -7,18 +7,21 @@ final class StatusPageEditor {
     private let editingPageID: UUID?
     private let onChange: () -> Void
     private let presentError: (Error) -> Void
+    private let clearToast: (UUID) -> Void
     private var panel: PagePanelController?
 
     init(
         monitor: Monitor,
         editingPageID: UUID?,
         onChange: @escaping () -> Void,
-        presentError: @escaping (Error) -> Void
+        presentError: @escaping (Error) -> Void,
+        clearToast: @escaping (UUID) -> Void = { _ in }
     ) {
         self.monitor = monitor
         self.editingPageID = editingPageID
         self.onChange = onChange
         self.presentError = presentError
+        self.clearToast = clearToast
     }
 
     func show() {
@@ -95,6 +98,7 @@ private extension StatusPageEditor {
         do {
             if let pageID {
                 try await monitor.edit(id: pageID, url: url, name: name)
+                clearToast(pageID)
             } else {
                 try await monitor.add(url: url, name: name)
             }
@@ -119,8 +123,10 @@ private extension StatusPageEditor {
     }
 
     func remove(pageID: UUID) -> Bool {
-        performChange {
+        let didRemove = performChange {
             try monitor.remove(id: pageID)
         }
+        if didRemove { clearToast(pageID) }
+        return didRemove
     }
 }
