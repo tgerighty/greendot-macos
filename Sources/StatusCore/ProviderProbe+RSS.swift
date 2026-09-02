@@ -168,7 +168,8 @@ private extension ProviderProbe {
             pattern: "<!--.*?-->"
                 + "|<script\\b[^>]*>.*?</script\\s*>"
                 + "|<style\\b[^>]*>.*?</style\\s*>"
-                + "|<template\\b[^>]*>.*?</template\\s*>",
+                + "|<template\\b[^>]*>.*?</template\\s*>"
+                + "|<textarea\\b[^>]*>.*?</textarea\\s*>",
             options: [.caseInsensitive, .dotMatchesLineSeparators]
         )
     }()

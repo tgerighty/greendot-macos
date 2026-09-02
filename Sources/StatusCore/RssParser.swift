@@ -54,7 +54,7 @@ public enum RssParser {
         }
         return snapshot(
             name: text(root, "title", uri: atomNamespace),
-            link: atomLink(root),
+            link: atomLink(root, fallback: sourceURL),
             sourceURL: sourceURL,
             base: xmlBase(root, fallback: sourceURL),
             components: components
@@ -118,14 +118,16 @@ public enum RssParser {
         )
     }
 
-    private static func atomLink(_ element: XMLElement) -> String? {
+    private static func atomLink(_ element: XMLElement, fallback: URL) -> String? {
+        let feedBase = xmlBase(element, fallback: fallback)
         let links = children(element, "link", uri: atomNamespace)
         let chosen = links.first { atomLinkRelation($0) == "alternate" }
             ?? links.first { atomLinkRelation($0) == "self" }
-        if let href = chosen?.attribute(forName: "href")?.stringValue, !href.isEmpty {
-            return href
-        }
-        return chosen.flatMap { textValue($0) }
+        let href = chosen?.attribute(forName: "href")?.stringValue
+        let raw = (href?.isEmpty == false ? href : nil) ?? chosen.flatMap { textValue($0) }
+        guard let raw else { return nil }
+        let base = chosen.map { xmlBase($0, fallback: feedBase) } ?? feedBase
+        return resolvedPageURL(raw, sourceURL: fallback, base: base).absoluteString
     }
 
     private static func atomLinkRelation(_ link: XMLElement) -> String {
