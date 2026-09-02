@@ -48,7 +48,7 @@
 - When more persistent toasts are raised than fit on screen, the extras wait and return when you click one away. A later change for a waiting page updates that waiting toast. Recovery to green clears the persistent toast for that page.
 - HTML feed links that encode `&` as `&amp;` still fetch the correct URL.
 - HTML feed links with an unquoted `href` work. A `data-href` attribute is not treated as the feed URL.
-- If an HTML status page redirects, relative feed links use the final URL.
+- If an HTML status page redirects on the same host, relative feed links use the final URL. A redirect to another host is not followed.
 - Click the overall status row (for example Operational) to open the page when a watched page has no components.
 - Menu and Edit store errors no longer leave memory changed when the file write fails.
 - Edit checkboxes stay in the last saved state when a store write fails.

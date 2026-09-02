@@ -55,6 +55,48 @@ final class RssPersistTests: XCTestCase {
         )
     }
 
+    func testProbeRejectsCrossOriginRedirectForFeedDiscovery() async {
+        let html = """
+        <html><head>
+        <link rel="alternate" type="application/rss+xml" href="https://evil.example/feed.xml">
+        </head></html>
+        """
+        var inner = MapHTTPClient()
+        inner.byURL["https://status.example.com"] = (Data(html.utf8), 200)
+        inner.byURL["https://evil.example/feed.xml"] = (Data(feed.utf8), 200)
+        let client = LocatedHTTPClient(
+            inner: inner,
+            located: [
+                "https://status.example.com": URL(string: "https://evil.example/")!
+            ]
+        )
+        do {
+            _ = try await ProviderProbe.probe(
+                pageURL: URL(string: "https://status.example.com")!,
+                client: client
+            )
+            XCTFail("expected unsupported")
+        } catch {
+            XCTAssertEqual(error as? ProbeError, .unsupported)
+        }
+    }
+
+    func testSameHostRedirectPolicy() {
+        let from = URL(string: "https://status.example.com/old")!
+        XCTAssertTrue(
+            RedirectPolicy.allows(
+                URLRequest(url: URL(string: "https://status.example.com/status/")!),
+                from: from
+            )
+        )
+        XCTAssertFalse(
+            RedirectPolicy.allows(
+                URLRequest(url: URL(string: "https://evil.example/status/")!),
+                from: from
+            )
+        )
+    }
+
     func testProbeResolvesAlternateFeedsAgainstRedirectedURL() async throws {
         let html = """
         <html><head>

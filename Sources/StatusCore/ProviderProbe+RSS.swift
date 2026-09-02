@@ -13,6 +13,9 @@ extension ProviderProbe {
             try Task.checkCancellation()
             flags.recordHTTP(status: located.status)
             guard located.status == 200 else { return nil }
+            guard RedirectPolicy.allows(URLRequest(url: located.url), from: context.pageURL) else {
+                return nil
+            }
             if looksLikeFeed(located.data) {
                 return feedHit(located.data, sourceURL: located.url, context: context)
             }
