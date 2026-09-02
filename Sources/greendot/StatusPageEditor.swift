@@ -101,7 +101,11 @@ private extension StatusPageEditor {
         do {
             if let pageID {
                 try await monitor.edit(id: pageID, url: url, name: name)
-                clearToast(pageID)
+                if monitor.pages.first(where: { $0.id == pageID })?.displaySeverity == .green {
+                    clearToast(pageID)
+                } else {
+                    refreshToast(pageID)
+                }
             } else {
                 try await monitor.add(url: url, name: name)
             }

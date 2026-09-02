@@ -65,6 +65,7 @@ final class SystemToastDelivery: ToastDelivery {
     private let schedule: ToastScheduler
     private let makeIdentifier: () -> String
     private var persistent: PersistentToastPresenter?
+    private var pendingAutoDismiss: [UUID: String] = [:]
 
     init() {
         notifications = LiveUserNotificationCenterClient()
@@ -97,12 +98,14 @@ final class SystemToastDelivery: ToastDelivery {
 
     @MainActor
     func deliver(_ toast: Toast) {
+        cancelAutoDismiss(for: toast.pageID)
         guard let seconds = toast.autoDismissSeconds else {
             persistentPresenter().present(toast)
             return
         }
         clear(pageID: toast.pageID)
         let identifier = makeIdentifier()
+        pendingAutoDismiss[toast.pageID] = identifier
         let request = UNNotificationRequest(
             identifier: identifier,
             content: Self.content(for: toast),
@@ -110,14 +113,24 @@ final class SystemToastDelivery: ToastDelivery {
         )
         notifications.add(request)
         let notifications = notifications
-        schedule(seconds) {
+        let pageID = toast.pageID
+        schedule(seconds) { [weak self] in
+            guard let self, self.pendingAutoDismiss[pageID] == identifier else { return }
+            self.pendingAutoDismiss.removeValue(forKey: pageID)
             notifications.removeDeliveredNotifications(withIdentifiers: [identifier])
         }
     }
 
     @MainActor
     func clear(pageID: UUID) {
+        cancelAutoDismiss(for: pageID)
         persistent?.clear(pageID: pageID)
+    }
+
+    @MainActor
+    private func cancelAutoDismiss(for pageID: UUID) {
+        guard let identifier = pendingAutoDismiss.removeValue(forKey: pageID) else { return }
+        notifications.removeDeliveredNotifications(withIdentifiers: [identifier])
     }
 
     @MainActor

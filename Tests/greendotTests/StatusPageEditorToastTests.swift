@@ -129,6 +129,33 @@ final class StatusPageEditorToastTests: XCTestCase {
         XCTAssertEqual(seed.monitor.pages[0].displaySeverity, .yellow)
     }
 
+    func testSavingRedPageRefreshesToastInsteadOfClearing() async throws {
+        let seed = try await seededEditorMonitor()
+        defer { try? FileManager.default.removeItem(at: seed.directory) }
+        var cleared: [UUID] = []
+        var refreshed: [UUID] = []
+        let editor = StatusPageEditor(
+            monitor: seed.monitor,
+            editingPageID: seed.pageID,
+            onChange: {},
+            presentError: { error in XCTFail("unexpected error: \(error)") },
+            clearToast: { cleared.append($0) },
+            refreshToast: { refreshed.append($0) }
+        )
+        editor.show()
+        defer { editor.close() }
+
+        try XCTUnwrap(Self.field("name-field", in: Self.panelView())).stringValue = "Renamed"
+        try XCTUnwrap(Self.button("save-button", in: Self.panelView())).performClick(nil)
+        for _ in 0..<100 where refreshed.isEmpty && cleared.isEmpty {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+
+        XCTAssertTrue(cleared.isEmpty)
+        XCTAssertEqual(refreshed, [seed.pageID])
+        XCTAssertEqual(seed.monitor.pages[0].displaySeverity, .red)
+    }
+
     func testFailedComponentToggleDoesNotClearToast() async throws {
         let seed = try await seededEditorMonitor()
         defer { try? FileManager.default.removeItem(at: seed.directory) }
@@ -187,12 +214,24 @@ final class StatusPageEditorToastTests: XCTestCase {
     }
 
     private static func button(_ identifier: String, in view: NSView?) -> NSButton? {
+        findView(NSButton.self, identifier: identifier, in: view)
+    }
+
+    private static func field(_ identifier: String, in view: NSView?) -> NSTextField? {
+        findView(NSTextField.self, identifier: identifier, in: view)
+    }
+
+    private static func findView<T: NSView>(
+        _ type: T.Type,
+        identifier: String,
+        in view: NSView?
+    ) -> T? {
         guard let view else { return nil }
-        if let button = view as? NSButton, button.accessibilityIdentifier() == identifier {
-            return button
+        if let match = view as? T, match.accessibilityIdentifier() == identifier {
+            return match
         }
         for child in view.subviews {
-            if let match = button(identifier, in: child) { return match }
+            if let match = findView(type, identifier: identifier, in: child) { return match }
         }
         return nil
     }

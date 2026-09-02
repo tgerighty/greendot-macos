@@ -61,7 +61,7 @@ final class SystemToastDeliveryTests: XCTestCase {
         XCTAssertNotNil(green.content.sound)
         XCTAssertEqual(green.content.categoryIdentifier, SystemToastDelivery.autoDismissCategory)
         XCTAssertEqual(scheduledDelays, [6])
-        XCTAssertTrue(notifications.removedIdentifiers.isEmpty)
+        XCTAssertEqual(notifications.removedIdentifiers, [["green-id"]])
         XCTAssertEqual(persistent.presented.map(\.severity), [.red, .yellow])
         XCTAssertEqual(persistent.presented.map(\.body), ["Major outage", "Degraded"])
 

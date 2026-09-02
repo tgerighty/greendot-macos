@@ -14,6 +14,21 @@ final class RssParserGuardTests: XCTestCase {
         }
     }
 
+    func testNamespacedChannelTitleDoesNotReplaceRSSTitle() throws {
+        let data = Data("""
+        <rss version="2.0"><channel>
+          <media:title xmlns:media="http://search.yahoo.com/mrss/">Media title</media:title>
+          <title>Real Channel</title>
+          <item><guid>g1</guid><title>API</title><status>Available</status></item>
+        </channel></rss>
+        """.utf8)
+        let snap = try RssParser.parse(
+            data: data,
+            sourceURL: URL(string: "https://status.example.com/feed")!
+        )
+        XCTAssertEqual(snap.name, "Real Channel")
+    }
+
     func testNamespacedRssRootIsRejected() {
         let data = Data("""
         <custom:rss xmlns:custom="urn:example">

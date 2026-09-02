@@ -27,17 +27,20 @@ public enum RssParser {
         }
     }
 
+    private static let rssNamespace = ""
+    private static let atomNamespace = "http://www.w3.org/2005/Atom"
+
     private static func parseRSS(_ root: XMLElement, sourceURL: URL) throws -> PageSnapshot {
-        guard let channel = child(root, "channel") else {
+        guard let channel = child(root, "channel", uri: rssNamespace) else {
             throw ParserError.notThisProvider
         }
         let missing = missingSeverity(for: sourceURL)
-        let components = children(channel, "item").compactMap {
+        let components = children(channel, "item", uri: rssNamespace).compactMap {
             component(fromRSSItem: $0, missing: missing)
         }
         return snapshot(
-            name: text(channel, "title"),
-            link: text(channel, "link"),
+            name: text(channel, "title", uri: rssNamespace),
+            link: text(channel, "link", uri: rssNamespace),
             sourceURL: sourceURL,
             components: components
         )
@@ -45,11 +48,11 @@ public enum RssParser {
 
     private static func parseAtom(_ root: XMLElement, sourceURL: URL) throws -> PageSnapshot {
         let missing = missingSeverity(for: sourceURL)
-        let components = children(root, "entry").compactMap {
+        let components = children(root, "entry", uri: atomNamespace).compactMap {
             component(fromAtomEntry: $0, missing: missing)
         }
         return snapshot(
-            name: text(root, "title"),
+            name: text(root, "title", uri: atomNamespace),
             link: atomLink(root),
             sourceURL: sourceURL,
             components: components
@@ -85,11 +88,11 @@ public enum RssParser {
     }
 
     private static func component(fromRSSItem item: XMLElement, missing: Severity) -> ComponentStatus? {
-        let title = text(item, "title")
-        let guid = text(item, "guid")
+        let title = text(item, "title", uri: rssNamespace)
+        let guid = text(item, "guid", uri: rssNamespace)
         let name = title ?? guid
         guard let name else { return nil }
-        let raw = text(item, "status")
+        let raw = text(item, "status", uri: rssNamespace)
         return ComponentStatus(
             name: name,
             severity: StatusMapping.rss(raw, missing: missing),
@@ -99,11 +102,11 @@ public enum RssParser {
     }
 
     private static func component(fromAtomEntry entry: XMLElement, missing: Severity) -> ComponentStatus? {
-        let title = text(entry, "title")
-        let entryID = text(entry, "id")
+        let title = text(entry, "title", uri: atomNamespace)
+        let entryID = text(entry, "id", uri: atomNamespace)
         let name = title ?? entryID
         guard let name else { return nil }
-        let raw = text(entry, "status")
+        let raw = text(entry, "status", uri: atomNamespace)
         return ComponentStatus(
             name: name,
             severity: StatusMapping.rss(raw, missing: missing),
@@ -113,7 +116,7 @@ public enum RssParser {
     }
 
     private static func atomLink(_ element: XMLElement) -> String? {
-        let links = children(element, "link")
+        let links = children(element, "link", uri: atomNamespace)
         let chosen = links.first { atomLinkRelation($0) == "alternate" }
             ?? links.first { atomLinkRelation($0) == "self" }
         if let href = chosen?.attribute(forName: "href")?.stringValue, !href.isEmpty {
@@ -142,8 +145,8 @@ public enum RssParser {
         return url
     }
 
-    private static func text(_ element: XMLElement, _ name: String) -> String? {
-        child(element, name).flatMap(textValue)
+    private static func text(_ element: XMLElement, _ name: String, uri: String) -> String? {
+        child(element, name, uri: uri).flatMap(textValue)
     }
 
     private static func textValue(_ element: XMLElement) -> String? {
@@ -151,13 +154,14 @@ public enum RssParser {
         return value.isEmpty ? nil : value
     }
 
-    private static func child(_ element: XMLElement, _ name: String) -> XMLElement? {
-        children(element, name).first
+    private static func child(_ element: XMLElement, _ name: String, uri: String) -> XMLElement? {
+        children(element, name, uri: uri).first
     }
 
-    private static func children(_ element: XMLElement, _ name: String) -> [XMLElement] {
+    private static func children(_ element: XMLElement, _ name: String, uri: String) -> [XMLElement] {
         element.children?.compactMap { node -> XMLElement? in
             guard let child = node as? XMLElement, localName(child) == name else { return nil }
+            guard (child.uri ?? "") == uri else { return nil }
             return child
         } ?? []
     }
