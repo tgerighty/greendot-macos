@@ -12,18 +12,22 @@ protocol PersistentToastPresenter: AnyObject {
 final class PanelPersistentToastPresenter: PersistentToastPresenter {
     private let playSound: () -> Void
     private var items: [Item] = []
+    private var pending: [Toast] = []
 
     init(playSound: @escaping () -> Void = { NSSound.beep() }) {
         self.playSound = playSound
     }
 
     func present(_ toast: Toast) {
-        items.filter { $0.pageID == toast.pageID }.forEach { dismiss($0.window) }
+        items.filter { $0.pageID == toast.pageID }.forEach { removeWindow($0.window) }
+        pending.removeAll { $0.pageID == toast.pageID }
         while items.count >= maxVisiblePanels() {
-            dismiss(items[0].window)
+            let oldest = items[0]
+            pending.append(oldest.toast)
+            removeWindow(oldest.window)
         }
         let window = makeWindow(for: toast)
-        items.append(Item(window: window, pageID: toast.pageID))
+        items.append(Item(window: window, toast: toast))
         layoutWindows()
         window.orderFrontRegardless()
         playSound()
@@ -40,7 +44,9 @@ final class PanelPersistentToastPresenter: PersistentToastPresenter {
 
 private struct Item {
     let window: NSWindow
-    let pageID: UUID
+    let toast: Toast
+
+    var pageID: UUID { toast.pageID }
 }
 
 private enum PersistentToastLayout {
@@ -76,10 +82,19 @@ private extension PanelPersistentToastPresenter {
         return window
     }
 
-    func dismiss(_ window: NSWindow) {
+    func removeWindow(_ window: NSWindow) {
         items.removeAll { $0.window === window }
         window.orderOut(nil)
-        layoutWindows()
+    }
+
+    func dismiss(_ window: NSWindow) {
+        removeWindow(window)
+        if pending.isEmpty {
+            layoutWindows()
+            return
+        }
+        let next = pending.removeFirst()
+        present(next)
     }
 
     func maxVisiblePanels() -> Int {

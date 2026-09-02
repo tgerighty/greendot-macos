@@ -118,6 +118,23 @@ final class SystemToastDeliveryTests: XCTestCase {
         XCTAssertEqual(presenter.visibleCount, 8)
     }
 
+    func testPersistentPanelQueuesOverflowUntilASlotFrees() {
+        _ = NSApplication.shared
+        let presenter = PanelPersistentToastPresenter(playSound: {})
+        for index in 1...8 {
+            presenter.present(
+                toast(pageID: UUID(), pageName: "Page \(index)", body: "Degraded", severity: .yellow)
+            )
+        }
+        XCTAssertEqual(presenter.visibleCount, 8)
+        presenter.present(
+            toast(pageID: UUID(), pageName: "Page 9", body: "Major outage", severity: .red)
+        )
+        XCTAssertEqual(presenter.visibleCount, 8)
+        presenter.windows.first?.contentView?.mouseDown(with: NSEvent())
+        XCTAssertEqual(presenter.visibleCount, 8)
+    }
+
     func testPersistentPanelKeepsDistinctPagesThatShareAName() {
         _ = NSApplication.shared
         let presenter = PanelPersistentToastPresenter(playSound: {})

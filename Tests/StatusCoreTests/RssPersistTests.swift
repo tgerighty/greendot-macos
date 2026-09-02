@@ -47,6 +47,34 @@ final class RssPersistTests: XCTestCase {
         XCTAssertEqual(monitor.pages[0].url, edited)
     }
 
+    func testProbeDecodesHTMLEntitiesInAlternateHref() async throws {
+        let html = """
+        <html><head>
+        <link rel="alternate" type="application/rss+xml" href="/feed.xml?format=rss&amp;token=secret">
+        </head></html>
+        """
+        var inner = MapHTTPClient()
+        inner.byURL["https://status.example.com"] = (Data(html.utf8), 200)
+        inner.byURL["https://status.example.com/feed.xml?format=rss&token=secret"] = (Data(feed.utf8), 200)
+        inner.byURL["https://status.example.com/feed.xml?format=rss&amp;token=secret"] = (
+            Data("<html>encoded</html>".utf8), 200
+        )
+        let recording = RecordingHTTPClient(inner)
+        let snap = try await ProviderProbe.probe(
+            pageURL: URL(string: "https://status.example.com")!,
+            client: recording
+        )
+        XCTAssertEqual(snap.provider, .rss)
+        XCTAssertTrue(
+            recording.requested.map(\.absoluteString)
+                .contains("https://status.example.com/feed.xml?format=rss&token=secret")
+        )
+        XCTAssertFalse(
+            recording.requested.map(\.absoluteString)
+                .contains("https://status.example.com/feed.xml?format=rss&amp;token=secret")
+        )
+    }
+
     func testProbeResolvesDirectoryRelativeAlternateAgainstPageURL() async throws {
         let html = """
         <html><head>

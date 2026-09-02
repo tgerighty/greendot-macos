@@ -46,7 +46,8 @@ extension ProviderProbe {
             let type = linkAttribute(tag, "type")?.lowercased() ?? ""
             guard type.contains("rss+xml") || type.contains("atom+xml") else { continue }
             guard let href = linkAttribute(tag, "href"), !href.isEmpty else { continue }
-            if let url = URL(string: href, relativeTo: base)?.absoluteURL,
+            let decoded = decodeHTMLEntities(href)
+            if let url = URL(string: decoded, relativeTo: base)?.absoluteURL,
                isAllowedFeedURL(url, relativeTo: base) {
                 return url
             }
@@ -57,6 +58,16 @@ extension ProviderProbe {
     static func isMicrosoftLanding(_ url: URL) -> Bool {
         guard url.host?.lowercased() == "status.cloud.microsoft" else { return false }
         return url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).isEmpty
+    }
+
+    static func decodeHTMLEntities(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&apos;", with: "'")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
     }
 
     static func isAllowedFeedURL(_ url: URL, relativeTo base: URL) -> Bool {
