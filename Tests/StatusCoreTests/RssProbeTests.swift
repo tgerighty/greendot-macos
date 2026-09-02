@@ -51,6 +51,36 @@ final class RssProbeTests: XCTestCase {
         XCTAssertEqual(snap.components.map(\.name), ["Microsoft Admin Center"])
     }
 
+    func testProbePreservesQueryOnDirectFeedURL() async throws {
+        var inner = MapHTTPClient()
+        let page = URL(string: "https://status.example.com/feed.xml?token=secret")!
+        inner.byURL[page.absoluteString] = (Data(macFeed.utf8), 200)
+        let recording = RecordingHTTPClient(inner)
+        let snap = try await ProviderProbe.probe(pageURL: page, client: recording)
+        XCTAssertEqual(snap.provider, .rss)
+        XCTAssertTrue(recording.requested.map(\.absoluteString).contains(page.absoluteString))
+    }
+
+    func testProbeRejectsCrossOriginAlternateFeed() async {
+        let html = """
+        <html><head>
+        <link rel="alternate" type="application/rss+xml" href="https://evil.example/feed.xml">
+        </head></html>
+        """
+        var client = MapHTTPClient()
+        client.byURL["https://status.example.com"] = (Data(html.utf8), 200)
+        client.byURL["https://evil.example/feed.xml"] = (Data(macFeed.utf8), 200)
+        do {
+            _ = try await ProviderProbe.probe(
+                pageURL: URL(string: "https://status.example.com")!,
+                client: client
+            )
+            XCTFail("expected unsupported")
+        } catch {
+            XCTAssertEqual(error as? ProbeError, .unsupported)
+        }
+    }
+
     func testProbeFollowsHTMLAlternateLink() async throws {
         let html = """
         <html><head>

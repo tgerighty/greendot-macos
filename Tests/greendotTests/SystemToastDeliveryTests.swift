@@ -96,6 +96,10 @@ final class SystemToastDeliveryTests: XCTestCase {
         XCTAssertTrue(hit === card, "text and icon clicks must hit the card")
         card?.mouseDown(with: NSEvent())
         XCTAssertEqual(presenter.visibleCount, 0)
+        presenter.present(Toast(pageName: "GitHub", body: "Major outage", severity: .red))
+        XCTAssertEqual(presenter.visibleCount, 1)
+        XCTAssertTrue(presenter.windows.first?.contentView?.accessibilityPerformPress() == true)
+        XCTAssertEqual(presenter.visibleCount, 0)
     }
 
     func testPersistentPanelReplacesSamePageAndCapsStack() {

@@ -9,15 +9,16 @@ extension ProviderProbe {
             return try await probeMicrosoftHub(context: context, flags: &flags)
         }
         do {
-            let (data, status) = try await context.client.get(context.base)
+            let (data, status) = try await context.client.get(context.pageURL)
             try Task.checkCancellation()
             flags.recordHTTP(status: status)
             guard status == 200 else { return nil }
             if looksLikeFeed(data) {
-                return feedHit(data, sourceURL: context.base, context: context)
+                return feedHit(data, sourceURL: context.pageURL, context: context)
             }
             guard let html = String(data: data, encoding: .utf8),
-                  let feedURL = extractAlternateFeedURL(from: html, base: context.base) else {
+                  let feedURL = extractAlternateFeedURL(from: html, base: context.base),
+                  isAllowedFeedURL(feedURL, relativeTo: context.base) else {
                 return nil
             }
             return try await fetchFeed(feedURL, context: context, flags: &flags)
@@ -46,7 +47,8 @@ extension ProviderProbe {
             let type = linkAttribute(tag, "type")?.lowercased() ?? ""
             guard type.contains("rss+xml") || type.contains("atom+xml") else { continue }
             guard let href = linkAttribute(tag, "href"), !href.isEmpty else { continue }
-            if let url = URL(string: href, relativeTo: base)?.absoluteURL, url.host != nil {
+            if let url = URL(string: href, relativeTo: base)?.absoluteURL,
+               isAllowedFeedURL(url, relativeTo: base) {
                 return url
             }
         }
@@ -56,6 +58,16 @@ extension ProviderProbe {
     static func isMicrosoftLanding(_ url: URL) -> Bool {
         guard url.host?.lowercased() == "status.cloud.microsoft" else { return false }
         return url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).isEmpty
+    }
+
+    static func isAllowedFeedURL(_ url: URL, relativeTo base: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            return false
+        }
+        guard let feedHost = url.host?.lowercased(), let baseHost = base.host?.lowercased() else {
+            return false
+        }
+        return feedHost == baseHost
     }
 }
 
@@ -98,19 +110,22 @@ private extension ProviderProbe {
     ) async throws -> ProbeHit? {
         let feeds = microsoftHubFeeds(base: context.base)
         var parts: [Data] = []
+        var statuses: [Int] = []
         for feed in feeds {
             do {
                 let (data, status) = try await context.client.get(feed.url)
                 try Task.checkCancellation()
                 flags.recordHTTP(status: status)
                 parts.append(data)
+                statuses.append(status)
             } catch {
                 try throwIfCancelled(error)
                 flags.sawNetworkError = true
                 parts.append(Data())
+                statuses.append(0)
             }
         }
-        let body = joinedFeeds(parts)
+        let body = hubCacheBody(parts: parts, statuses: statuses)
         if let previousBody = context.previousBody,
            let previousSnapshot = context.previousSnapshot,
            !previousSnapshot.isUnreachable,
@@ -119,8 +134,11 @@ private extension ProviderProbe {
         }
         var groups: [ComponentStatus] = []
         var parsedAny = false
-        for (feed, data) in zip(feeds, parts) {
-            groups.append(parseHubGroup(feed, data: data, parsedAny: &parsedAny))
+        for (index, feed) in feeds.enumerated() {
+            let status = index < statuses.count ? statuses[index] : 0
+            groups.append(
+                parseHubGroup(feed, data: parts[index], status: status, parsedAny: &parsedAny)
+            )
         }
         guard parsedAny else { return nil }
         return ProbeHit(
@@ -140,9 +158,10 @@ private extension ProviderProbe {
     static func parseHubGroup(
         _ feed: RSSHubFeed,
         data: Data,
+        status: Int,
         parsedAny: inout Bool
     ) -> ComponentStatus {
-        guard looksLikeFeed(data) else { return greyGroup(feed) }
+        guard status == 200, looksLikeFeed(data) else { return greyGroup(feed) }
         do {
             recordParse()
             let parsed = try RssParser.parse(data: data, sourceURL: feed.url)
@@ -187,10 +206,12 @@ private extension ProviderProbe {
         return parts.url ?? base
     }
 
-    static func joinedFeeds(_ parts: [Data]) -> Data {
+    static func hubCacheBody(parts: [Data], statuses: [Int]) -> Data {
         var body = Data()
         for (index, part) in parts.enumerated() {
             if index > 0 { body.append(feedSeparator) }
+            let status = index < statuses.count ? statuses[index] : 0
+            body.append(Data("HTTP \(status)\n".utf8))
             body.append(part)
         }
         return body

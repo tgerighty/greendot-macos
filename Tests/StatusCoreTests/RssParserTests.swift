@@ -37,6 +37,34 @@ final class RssParserTests: XCTestCase {
         XCTAssertTrue(snap.components[0].children.isEmpty)
     }
 
+    func testMinorStatusDisplaysAsDegraded() throws {
+        let data = Data("""
+        <rss version="2.0"><channel><title>Example</title>
+        <item><title>Blip</title><status>minor</status></item></channel></rss>
+        """.utf8)
+        let snap = try RssParser.parse(
+            data: data,
+            sourceURL: URL(string: "https://status.example.com/feed")!
+        )
+        XCTAssertEqual(snap.components[0].severity, .yellow)
+        XCTAssertEqual(snap.components[0].statusText, "Degraded")
+    }
+
+    func testAtomRelativeLinkResolvesAgainstSource() throws {
+        let data = Data("""
+        <?xml version="1.0" encoding="utf-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+          <title>Example</title>
+          <link href="/status"/>
+        </feed>
+        """.utf8)
+        let snap = try RssParser.parse(
+            data: data,
+            sourceURL: URL(string: "https://status.example.com/atom.xml")!
+        )
+        XCTAssertEqual(snap.url, URL(string: "https://status.example.com/status")!)
+    }
+
     func testAzureRSSItemWithoutStatusIsYellow() throws {
         let data = Data("""
         <rss version="2.0">

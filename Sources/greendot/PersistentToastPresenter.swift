@@ -19,7 +19,7 @@ final class PanelPersistentToastPresenter: PersistentToastPresenter {
 
     func present(_ toast: Toast) {
         items.filter { $0.pageName == toast.pageName }.forEach { dismiss($0.window) }
-        while items.count >= PersistentToastLayout.maxPanels {
+        while items.count >= maxVisiblePanels() {
             dismiss(items[0].window)
         }
         let window = makeWindow(for: toast)
@@ -82,6 +82,13 @@ private extension PanelPersistentToastPresenter {
         layoutWindows()
     }
 
+    func maxVisiblePanels() -> Int {
+        guard let screen = NSScreen.main?.visibleFrame else { return PersistentToastLayout.maxPanels }
+        let pitch = PersistentToastLayout.size.height + PersistentToastLayout.gap
+        let capacity = max(1, Int((screen.height - PersistentToastLayout.margin) / pitch))
+        return min(PersistentToastLayout.maxPanels, capacity)
+    }
+
     func layoutWindows() {
         guard let screen = NSScreen.main?.visibleFrame else { return }
         let size = PersistentToastLayout.size
@@ -142,6 +149,11 @@ private final class PersistentToastCard: NSView {
 
     override func mouseDown(with _: NSEvent) {
         onAcknowledge()
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        onAcknowledge()
+        return true
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {

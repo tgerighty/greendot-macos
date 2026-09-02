@@ -41,6 +41,7 @@ public enum ProviderProbe {
     ) async throws -> ProbeHit {
         let context = ProbeContext(
             base: normalizedBase(pageURL),
+            pageURL: pageURL,
             client: client,
             previousBody: previousBody,
             previousSnapshot: previousSnapshot
@@ -97,6 +98,7 @@ public enum ProviderProbe {
 
     struct ProbeContext: Sendable {
         let base: URL
+        let pageURL: URL
         let client: HTTPClient
         let previousBody: Data?
         let previousSnapshot: PageSnapshot?

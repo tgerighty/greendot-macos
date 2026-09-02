@@ -36,6 +36,25 @@ final class RssHubProbeTests: XCTestCase {
         XCTAssertEqual(snap.overall, .yellow)
     }
 
+    func testHubStatusChangeWithSameBytesDoesNotReuseSnapshot() async throws {
+        var client = MapHTTPClient()
+        client.byURL["https://status.cloud.microsoft/api/feed/mac"] = (Data(macFeed.utf8), 200)
+        client.byURL["https://status.cloud.microsoft/api/feed/ppac"] = (Data(ppacFeed.utf8), 200)
+        client.byURL["https://rssfeed.azure.status.microsoft/en-us/status/feed/"] = (Data(azureFeed.utf8), 200)
+        let page = URL(string: "https://status.cloud.microsoft/")!
+        let first = try await ProviderProbe.probeHit(pageURL: page, client: client, prefer: .rss)
+        XCTAssertEqual(first.snapshot.components[2].severity, .green)
+        client.byURL["https://rssfeed.azure.status.microsoft/en-us/status/feed/"] = (Data(azureFeed.utf8), 503)
+        let second = try await ProviderProbe.probeHit(
+            pageURL: page,
+            client: client,
+            prefer: .rss,
+            previousBody: first.body,
+            previousSnapshot: first.snapshot
+        )
+        XCTAssertEqual(second.snapshot.components[2].severity, .grey)
+    }
+
     func testUnchangedMicrosoftHubSkipsParse() async throws {
         var client = MapHTTPClient()
         client.byURL["https://status.cloud.microsoft/api/feed/mac"] = (Data(macFeed.utf8), 200)

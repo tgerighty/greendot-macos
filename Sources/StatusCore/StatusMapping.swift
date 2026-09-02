@@ -69,7 +69,7 @@ enum StatusMapping {
         switch raw.lowercased() {
         case "available", "operational", "up", "none", "resolved":
             return "Operational"
-        case "servicedegradation", "degraded", "degraded_performance", "partial_outage":
+        case "servicedegradation", "degraded", "degraded_performance", "partial_outage", "minor":
             return "Degraded"
         case "maintenance", "undermaintenance":
             return "Maintenance"

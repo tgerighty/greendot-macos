@@ -56,7 +56,7 @@ public enum RssParser {
         sourceURL: URL,
         components: [ComponentStatus]
     ) -> PageSnapshot {
-        let pageURL = link.flatMap(httpURL) ?? sourceURL
+        let pageURL = resolvedPageURL(link, sourceURL: sourceURL)
         let pageName = name.flatMap { $0.isEmpty ? nil : $0 } ?? sourceURL.host ?? "Status page"
         return PageSnapshot(
             name: pageName,
@@ -112,6 +112,16 @@ public enum RssParser {
             return href
         }
         return chosen.flatMap { textValue($0) }
+    }
+
+    private static func resolvedPageURL(_ link: String?, sourceURL: URL) -> URL {
+        guard let link, !link.isEmpty else { return sourceURL }
+        if let absolute = httpURL(link) { return absolute }
+        if let resolved = URL(string: link, relativeTo: sourceURL)?.absoluteURL,
+           httpURL(resolved.absoluteString) != nil {
+            return resolved
+        }
+        return sourceURL
     }
 
     private static func httpURL(_ raw: String) -> URL? {
