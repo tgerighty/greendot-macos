@@ -42,25 +42,40 @@ extension ProviderProbe {
     }
 
     static func decodedText(_ data: Data) -> String? {
-        if let utf16 = decodeUTF16XML(data) { return utf16 }
-        return String(data: data, encoding: .utf8) ?? String(data: data, encoding: .utf16)
+        decodeXMLBytes(data)
     }
 
     static func decodedPrefix(_ data: Data, maxBytes: Int) -> String? {
         let slice = Data(data.prefix(maxBytes))
-        if let utf16 = decodeUTF16XML(slice) { return utf16 }
+        if let text = decodeUTF16Bytes(slice) { return text }
         if let utf8 = String(data: slice, encoding: .utf8) { return utf8 }
         var trimmed = slice
         for _ in 0..<3 where !trimmed.isEmpty {
             trimmed.removeLast()
             if let utf8 = String(data: trimmed, encoding: .utf8) { return utf8 }
         }
-        return String(data: slice, encoding: .utf16)
+        return String(data: slice, encoding: .isoLatin1)
     }
 
-    static func decodeUTF16XML(_ data: Data) -> String? {
-        guard let encoding = utf16XMLEncoding(data) else { return nil }
-        return String(data: data, encoding: encoding)
+    static func decodeXMLBytes(_ data: Data) -> String? {
+        if let text = decodeUTF16Bytes(data) { return text }
+        return String(data: data, encoding: .utf8)
+            ?? String(data: data, encoding: .isoLatin1)
+    }
+
+    static func decodeUTF16Bytes(_ data: Data) -> String? {
+        if let encoding = utf16XMLEncoding(data) {
+            return String(data: data, encoding: encoding)
+        }
+        guard looksLikeUTF16BOM(data) else { return nil }
+        return String(data: data, encoding: .utf16)
+    }
+
+    static func looksLikeUTF16BOM(_ data: Data) -> Bool {
+        guard data.count >= 2 else { return false }
+        let bytes = [UInt8](data.prefix(2))
+        return (bytes[0] == 0xFF && bytes[1] == 0xFE)
+            || (bytes[0] == 0xFE && bytes[1] == 0xFF)
     }
 
     static func utf16XMLEncoding(_ data: Data) -> String.Encoding? {

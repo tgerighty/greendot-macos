@@ -115,6 +115,24 @@ final class RssHtmlDiscoveryTests: XCTestCase {
         )
     }
 
+    func testProbeFindsAlternateAfterUnclosedQuoteOnEarlierTag() async throws {
+        let html = """
+        <html><head>
+        <iframe src="unterminated
+        <link rel="alternate" type="application/rss+xml" href="/feed.xml">
+        </head></html>
+        """
+        var inner = MapHTTPClient()
+        inner.byURL["https://status.example.com"] = (Data(html.utf8), 200)
+        inner.byURL["https://status.example.com/feed.xml"] = (Data(feed.utf8), 200)
+        let snap = try await ProviderProbe.probe(
+            pageURL: URL(string: "https://status.example.com")!,
+            client: inner
+        )
+        XCTAssertEqual(snap.provider, .rss)
+        XCTAssertEqual(snap.name, "Secret Feed")
+    }
+
     func testProbeSkipsUnclosedQuotedLinkAndFindsLaterAlternate() async throws {
         let html = """
         <html><head>
