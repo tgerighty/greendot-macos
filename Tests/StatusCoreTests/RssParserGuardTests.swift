@@ -41,4 +41,29 @@ final class RssParserGuardTests: XCTestCase {
         XCTAssertEqual(snap.provider, .rss)
         XCTAssertEqual(snap.name, "Secret Feed")
     }
+
+    func testLooksLikeFeedSurvivesTruncatedUTF8Prefix() {
+        var data = Data("<rss version=\"2.0\"><channel></channel></rss>".utf8)
+        data.append(contentsOf: [UInt8](repeating: 0x20, count: 1000))
+        data.append(0xE2)
+        XCTAssertTrue(ProviderProbe.looksLikeFeed(Data(data.prefix(1024))))
+    }
+
+    func testLooksLikeFeedRecognizesPrefixedAtomRoot() {
+        let data = Data("<atom:feed xmlns:atom=\"http://www.w3.org/2005/Atom\"></atom:feed>".utf8)
+        XCTAssertTrue(ProviderProbe.looksLikeFeed(data))
+    }
+
+    func testAtomHubLinkIsNotUsedAsPageURL() throws {
+        let data = Data("""
+        <?xml version="1.0" encoding="utf-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+          <title>Example</title>
+          <link rel="hub" href="https://pubsubhubbub.example/hub"/>
+        </feed>
+        """.utf8)
+        let source = URL(string: "https://status.example.com/atom.xml")!
+        let snap = try RssParser.parse(data: data, sourceURL: source)
+        XCTAssertEqual(snap.url, source)
+    }
 }

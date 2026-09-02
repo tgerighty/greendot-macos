@@ -31,5 +31,5 @@ final class InMemoryToastDelivery: ToastDelivery {
         lock.unlock()
     }
 
-    func clear(pageID: UUID) {}
+    func clear(pageID _: UUID) {}
 }

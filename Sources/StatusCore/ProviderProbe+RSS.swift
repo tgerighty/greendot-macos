@@ -36,14 +36,24 @@ extension ProviderProbe {
     }
 
     static func looksLikeFeed(_ data: Data) -> Bool {
-        let prefix = decodedText(data.prefix(1024) as Data)?.lowercased() ?? ""
+        let prefix = decodedPrefix(data, maxBytes: 1024)?.lowercased() ?? ""
         let options: String.CompareOptions = .regularExpression
-        return prefix.range(of: "<rss(\\s|>|/)", options: options) != nil
-            || prefix.range(of: "<feed(\\s|>|/)", options: options) != nil
+        return prefix.range(of: "<([a-zA-Z_][\\w.-]*:)?(rss|feed)(\\s|>|/)", options: options) != nil
     }
 
     static func decodedText(_ data: Data) -> String? {
         String(data: data, encoding: .utf8) ?? String(data: data, encoding: .utf16)
+    }
+
+    static func decodedPrefix(_ data: Data, maxBytes: Int) -> String? {
+        let slice = Data(data.prefix(maxBytes))
+        if let utf8 = String(data: slice, encoding: .utf8) { return utf8 }
+        var trimmed = slice
+        for _ in 0..<3 where !trimmed.isEmpty {
+            trimmed.removeLast()
+            if let utf8 = String(data: trimmed, encoding: .utf8) { return utf8 }
+        }
+        return String(data: slice, encoding: .utf16)
     }
 
     static func extractAlternateFeedURL(from html: String, base: URL) -> URL? {
