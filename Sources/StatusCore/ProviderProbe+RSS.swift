@@ -20,7 +20,10 @@ extension ProviderProbe {
                 return feedHit(located.data, sourceURL: located.url, context: context)
             }
             guard let html = String(data: located.data, encoding: .utf8),
-                  let feedURL = extractAlternateFeedURL(from: html, base: located.url) else {
+                  let feedURL = extractAlternateFeedURL(
+                    from: htmlWithoutComments(html),
+                    base: located.url
+                  ) else {
                 return nil
             }
             return try await fetchFeed(feedURL, context: context, flags: &flags)
@@ -93,17 +96,31 @@ private extension ProviderProbe {
         return try? NSRegularExpression(pattern: "<link\\s[^>]*>", options: [.caseInsensitive])
     }()
 
+    static let htmlCommentRegex: NSRegularExpression? = {
+        recordRegex()
+        return try? NSRegularExpression(pattern: "<!--.*?-->", options: [.dotMatchesLineSeparators])
+    }()
+
+    static func htmlWithoutComments(_ html: String) -> String {
+        guard let regex = htmlCommentRegex else { return html }
+        let range = NSRange(html.startIndex..<html.endIndex, in: html)
+        return regex.stringByReplacingMatches(in: html, options: [], range: range, withTemplate: "")
+    }
+
     static func fetchFeed(
         _ feedURL: URL,
         context: ProbeContext,
         flags: inout ProbeFlags
     ) async throws -> ProbeHit? {
         do {
-            let (data, status) = try await context.client.get(feedURL)
+            let located = try await context.client.getLocated(feedURL)
             try Task.checkCancellation()
-            flags.recordHTTP(status: status)
-            guard status == 200, looksLikeFeed(data) else { return nil }
-            return feedHit(data, sourceURL: feedURL, context: context)
+            flags.recordHTTP(status: located.status)
+            guard RedirectPolicy.allows(URLRequest(url: located.url), from: feedURL) else {
+                return nil
+            }
+            guard located.status == 200, looksLikeFeed(located.data) else { return nil }
+            return feedHit(located.data, sourceURL: located.url, context: context)
         } catch {
             try throwIfCancelled(error)
             flags.sawNetworkError = true

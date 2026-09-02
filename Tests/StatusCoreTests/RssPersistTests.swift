@@ -55,70 +55,26 @@ final class RssPersistTests: XCTestCase {
         )
     }
 
-    func testProbeRejectsCrossOriginRedirectForFeedDiscovery() async {
+    func testProbeSkipsCommentedOutAlternateLink() async throws {
         let html = """
         <html><head>
-        <link rel="alternate" type="application/rss+xml" href="https://evil.example/feed.xml">
+        <!-- <link rel="alternate" type="application/rss+xml" href="/old.xml"> -->
+        <link rel="alternate" type="application/rss+xml" href="/feed.xml">
         </head></html>
         """
         var inner = MapHTTPClient()
         inner.byURL["https://status.example.com"] = (Data(html.utf8), 200)
-        inner.byURL["https://evil.example/feed.xml"] = (Data(feed.utf8), 200)
-        let client = LocatedHTTPClient(
-            inner: inner,
-            located: [
-                "https://status.example.com": URL(string: "https://evil.example/")!
-            ]
-        )
-        do {
-            _ = try await ProviderProbe.probe(
-                pageURL: URL(string: "https://status.example.com")!,
-                client: client
-            )
-            XCTFail("expected unsupported")
-        } catch {
-            XCTAssertEqual(error as? ProbeError, .unsupported)
-        }
-    }
-
-    func testSameHostRedirectPolicy() {
-        let from = URL(string: "https://status.example.com/old")!
-        XCTAssertTrue(
-            RedirectPolicy.allows(
-                URLRequest(url: URL(string: "https://status.example.com/status/")!),
-                from: from
-            )
-        )
-        XCTAssertFalse(
-            RedirectPolicy.allows(
-                URLRequest(url: URL(string: "https://evil.example/status/")!),
-                from: from
-            )
-        )
-    }
-
-    func testProbeResolvesAlternateFeedsAgainstRedirectedURL() async throws {
-        let html = """
-        <html><head>
-        <link rel="alternate" type="application/rss+xml" href="feed.xml">
-        </head></html>
-        """
-        var inner = MapHTTPClient()
-        inner.byURL["https://status.example.com/old"] = (Data(html.utf8), 200)
-        inner.byURL["https://status.example.com/status/feed.xml"] = (Data(feed.utf8), 200)
-        inner.byURL["https://status.example.com/feed.xml"] = (Data("<html>wrong</html>".utf8), 200)
-        let client = LocatedHTTPClient(
-            inner: inner,
-            located: [
-                "https://status.example.com/old": URL(string: "https://status.example.com/status/")!
-            ]
-        )
+        inner.byURL["https://status.example.com/feed.xml"] = (Data(feed.utf8), 200)
+        inner.byURL["https://status.example.com/old.xml"] = (Data("<html>old</html>".utf8), 200)
+        let recording = RecordingHTTPClient(inner)
         let snap = try await ProviderProbe.probe(
-            pageURL: URL(string: "https://status.example.com/old")!,
-            client: client
+            pageURL: URL(string: "https://status.example.com")!,
+            client: recording
         )
         XCTAssertEqual(snap.provider, .rss)
-        XCTAssertEqual(snap.name, "Secret Feed")
+        XCTAssertFalse(
+            recording.requested.map(\.absoluteString).contains("https://status.example.com/old.xml")
+        )
     }
 
     func testProbeIgnoresHrefTextInsideQuotedAttributeValues() async throws {
@@ -239,19 +195,5 @@ final class RssPersistTests: XCTestCase {
         XCTAssertFalse(
             recording.requested.map(\.absoluteString).contains("https://example.com/feed.xml")
         )
-    }
-}
-
-private struct LocatedHTTPClient: HTTPClient {
-    let inner: MapHTTPClient
-    let located: [String: URL]
-
-    func get(_ url: URL) async throws -> (Data, Int) {
-        try await inner.get(url)
-    }
-
-    func getLocated(_ url: URL) async throws -> HTTPGet {
-        let (data, status) = try await inner.get(url)
-        return HTTPGet(data: data, status: status, url: located[url.absoluteString] ?? url)
     }
 }

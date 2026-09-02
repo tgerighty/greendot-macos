@@ -14,9 +14,16 @@ public struct HTTPGet: Sendable {
 
 enum RedirectPolicy {
     static func allows(_ request: URLRequest, from original: URL?) -> Bool {
-        guard let originalHost = original?.host?.lowercased() else { return false }
-        guard let nextHost = request.url?.host?.lowercased() else { return false }
-        return originalHost == nextHost
+        guard let original, let next = request.url else { return false }
+        return originKey(original) == originKey(next)
+    }
+
+    static func originKey(_ url: URL) -> String? {
+        guard let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased() else {
+            return nil
+        }
+        let port = url.port ?? (scheme == "https" ? 443 : 80)
+        return scheme + "://" + host + ":" + String(port)
     }
 }
 
