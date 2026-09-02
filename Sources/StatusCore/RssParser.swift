@@ -125,7 +125,7 @@ public enum RssParser {
     private static func component(fromRSSItem item: XMLElement, missing: Severity) -> ComponentStatus? {
         let title = text(item, "title", uri: rssNamespace)
         let guid = text(item, "guid", uri: rssNamespace)
-        let name = title ?? guid
+        let name = title ?? guid ?? text(item, "description", uri: rssNamespace)
         guard let name else { return nil }
         let raw = text(item, "status", uri: rssNamespace)
         return ComponentStatus(

@@ -43,7 +43,8 @@ extension ProviderProbe {
             pattern: "<!--.*?-->"
                 + "|<script\\b[^>]*>.*?</script\\s*>"
                 + "|<style\\b[^>]*>.*?</style\\s*>"
-                + "|<textarea\\b[^>]*>.*?</textarea\\s*>",
+                + "|<textarea\\b[^>]*>.*?</textarea\\s*>"
+                + "|<iframe\\b.*?</iframe\\s*>",
             options: [.caseInsensitive, .dotMatchesLineSeparators]
         )
     }()
@@ -74,14 +75,28 @@ extension ProviderProbe {
     }
 
     static func isLinkKeyword(_ html: String, from: String.Index) -> Bool {
+        isTagKeyword(html, from: from, tag: "link", requireWhitespace: true)
+    }
+
+    static func isBaseKeyword(_ html: String, from: String.Index) -> Bool {
+        isTagKeyword(html, from: from, tag: "base", requireWhitespace: true)
+    }
+
+    static func isTagKeyword(
+        _ html: String,
+        from: String.Index,
+        tag: String,
+        requireWhitespace: Bool
+    ) -> Bool {
         var index = from
-        for expected in "<link" {
+        for expected in "<" + tag {
             guard index < html.endIndex else { return false }
             guard html[index].lowercased() == String(expected) else { return false }
             index = html.index(after: index)
         }
         guard index < html.endIndex else { return false }
-        return html[index].isWhitespace
+        if requireWhitespace { return html[index].isWhitespace }
+        return html[index].isWhitespace || html[index] == ">" || html[index] == "/"
     }
 
     static func quotedTagEnd(_ html: String, from: String.Index) -> String.Index? {

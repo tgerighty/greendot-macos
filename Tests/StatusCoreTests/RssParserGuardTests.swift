@@ -14,6 +14,21 @@ final class RssParserGuardTests: XCTestCase {
         }
     }
 
+    func testRSSItemWithOnlyDescriptionIsKept() throws {
+        let data = Data("""
+        <rss version="2.0"><channel><title>Status</title>
+        <item><description>Database outage</description><status>major_outage</status></item>
+        </channel></rss>
+        """.utf8)
+        let snap = try RssParser.parse(
+            data: data,
+            sourceURL: URL(string: "https://status.example.com/feed")!
+        )
+        XCTAssertEqual(snap.components.map(\.name), ["Database outage"])
+        XCTAssertEqual(snap.components.map(\.severity), [.red])
+        XCTAssertEqual(snap.overall, .red)
+    }
+
     func testNamespacedChannelTitleDoesNotReplaceRSSTitle() throws {
         let data = Data("""
         <rss version="2.0"><channel>

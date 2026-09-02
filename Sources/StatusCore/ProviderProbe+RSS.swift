@@ -20,11 +20,10 @@ extension ProviderProbe {
                let hit = feedHit(located.data, sourceURL: located.url, context: context) {
                 return hit
             }
-            guard let html = decodedText(located.data),
-                  let feedURL = extractAlternateFeedURL(
-                    from: htmlWithoutIgnoredMarkup(html),
-                    base: located.url
-                  ) else {
+            guard let html = decodedText(located.data) else { return nil }
+            let cleaned = htmlWithoutIgnoredMarkup(html)
+            let base = documentBase(from: cleaned, fallback: located.url)
+            guard let feedURL = extractAlternateFeedURL(from: cleaned, base: base) else {
                 return nil
             }
             return try await fetchFeed(feedURL, context: context, flags: &flags)
@@ -84,6 +83,27 @@ extension ProviderProbe {
         if bytes[0] == 0, bytes[1] == 0x3C { return .utf16BigEndian }
         if bytes[0] == 0x3C, bytes[1] == 0 { return .utf16LittleEndian }
         return nil
+    }
+
+    static func documentBase(from html: String, fallback: URL) -> URL {
+        var index = html.startIndex
+        while index < html.endIndex {
+            guard html[index] == "<" else {
+                index = html.index(after: index)
+                continue
+            }
+            if isBaseKeyword(html, from: index), let end = quotedTagEnd(html, from: index) {
+                let href = linkAttribute(html[index...end], "href") ?? ""
+                if !href.isEmpty,
+                   let url = URL(string: decodeHTMLEntities(href), relativeTo: fallback)?.absoluteURL {
+                    return url
+                }
+                index = html.index(after: end)
+                continue
+            }
+            index = html.index(after: index)
+        }
+        return fallback
     }
 
     static func extractAlternateFeedURL(from html: String, base: URL) -> URL? {
