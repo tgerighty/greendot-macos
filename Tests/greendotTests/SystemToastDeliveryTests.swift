@@ -275,6 +275,25 @@ final class SystemToastDeliveryTests: XCTestCase {
     }
 }
 
+extension SystemToastDeliveryTests {
+    func testGreenExpiryRemovesPendingAndDeliveredRequests() throws {
+        let notifications = RecordingUserNotificationCenter()
+        var scheduledActions: [() -> Void] = []
+        let delivery = SystemToastDelivery(
+            notifications: notifications,
+            schedule: { _, action in scheduledActions.append(action) },
+            makeIdentifier: { "green-id" },
+            persistent: RecordingPersistentToastPresenter()
+        )
+
+        delivery.deliver(toast(body: "Operational", severity: .green))
+        try XCTUnwrap(scheduledActions.first)()
+
+        XCTAssertEqual(notifications.removedIdentifiers, [["green-id"]])
+        XCTAssertEqual(notifications.removedPendingIdentifiers, [["green-id"]])
+    }
+}
+
 private final class RecordingPersistentToastPresenter: PersistentToastPresenter {
     var presented: [Toast] = []
     var cleared: [UUID] = []

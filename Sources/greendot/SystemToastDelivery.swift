@@ -123,6 +123,7 @@ final class SystemToastDelivery: ToastDelivery {
             guard let self, self.pendingAutoDismiss[pageID] == identifier else { return }
             self.pendingAutoDismiss.removeValue(forKey: pageID)
             notifications.removeDeliveredNotifications(withIdentifiers: [identifier])
+            notifications.removePendingNotificationRequests(withIdentifiers: [identifier])
         }
     }
 

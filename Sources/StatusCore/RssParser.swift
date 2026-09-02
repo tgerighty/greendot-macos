@@ -42,6 +42,7 @@ public enum RssParser {
             name: text(channel, "title", uri: rssNamespace),
             link: text(channel, "link", uri: rssNamespace),
             sourceURL: sourceURL,
+            base: sourceURL,
             components: components
         )
     }
@@ -55,6 +56,7 @@ public enum RssParser {
             name: text(root, "title", uri: atomNamespace),
             link: atomLink(root),
             sourceURL: sourceURL,
+            base: xmlBase(root, fallback: sourceURL),
             components: components
         )
     }
@@ -63,9 +65,10 @@ public enum RssParser {
         name: String?,
         link: String?,
         sourceURL: URL,
+        base: URL,
         components: [ComponentStatus]
     ) -> PageSnapshot {
-        let pageURL = resolvedPageURL(link, sourceURL: sourceURL)
+        let pageURL = resolvedPageURL(link, sourceURL: sourceURL, base: base)
         let pageName = name.flatMap { $0.isEmpty ? nil : $0 } ?? sourceURL.host ?? "Status page"
         return PageSnapshot(
             name: pageName,
@@ -129,10 +132,23 @@ public enum RssParser {
         (link.attribute(forName: "rel")?.stringValue ?? "alternate").lowercased()
     }
 
-    private static func resolvedPageURL(_ link: String?, sourceURL: URL) -> URL {
+    private static func xmlBase(_ element: XMLElement, fallback: URL) -> URL {
+        let raw = element.attribute(
+            forLocalName: "base",
+            uri: "http://www.w3.org/XML/1998/namespace"
+        )?.stringValue ?? element.attribute(forName: "xml:base")?.stringValue
+        guard let raw, !raw.isEmpty else { return fallback }
+        if let url = URL(string: raw, relativeTo: fallback)?.absoluteURL,
+           httpURL(url.absoluteString) != nil {
+            return url
+        }
+        return fallback
+    }
+
+    private static func resolvedPageURL(_ link: String?, sourceURL: URL, base: URL) -> URL {
         guard let link, !link.isEmpty else { return sourceURL }
         if let absolute = httpURL(link) { return absolute }
-        if let resolved = URL(string: link, relativeTo: sourceURL)?.absoluteURL,
+        if let resolved = URL(string: link, relativeTo: base)?.absoluteURL,
            httpURL(resolved.absoluteString) != nil {
             return resolved
         }
