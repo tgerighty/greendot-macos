@@ -94,9 +94,12 @@ extension ProviderProbe {
         var index = html.startIndex
         while index < html.endIndex {
             guard let start = linkTagStart(html, from: index) else { break }
-            guard let end = quotedTagEnd(html, from: start) else { break }
-            tags.append(html[start...end])
-            index = html.index(after: end)
+            if let end = quotedTagEnd(html, from: start) {
+                tags.append(html[start...end])
+                index = html.index(after: end)
+            } else {
+                index = html.index(after: start)
+            }
         }
         return tags
     }
@@ -104,18 +107,23 @@ extension ProviderProbe {
     static func linkTagStart(_ html: String, from: String.Index) -> String.Index? {
         var index = from
         while index < html.endIndex {
-            if html[index] == "<" {
-                let remaining = html[index...]
-                if remaining.lowercased().hasPrefix("<link") {
-                    let after = html.index(index, offsetBy: 5, limitedBy: html.endIndex) ?? html.endIndex
-                    if after < html.endIndex, html[after].isWhitespace {
-                        return index
-                    }
-                }
+            if html[index] == "<", isLinkKeyword(html, from: index) {
+                return index
             }
             index = html.index(after: index)
         }
         return nil
+    }
+
+    static func isLinkKeyword(_ html: String, from: String.Index) -> Bool {
+        var index = from
+        for expected in "<link" {
+            guard index < html.endIndex else { return false }
+            guard html[index].lowercased() == String(expected) else { return false }
+            index = html.index(after: index)
+        }
+        guard index < html.endIndex else { return false }
+        return html[index].isWhitespace
     }
 
     static func quotedTagEnd(_ html: String, from: String.Index) -> String.Index? {
