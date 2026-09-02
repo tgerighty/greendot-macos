@@ -44,6 +44,20 @@ final class AppDelegateToastClearTests: XCTestCase {
         XCTAssertTrue(delivery.clearedPageIDs.isEmpty)
     }
 
+    func testRefreshToastDoesNotDeliverWhenNotificationsOff() async throws {
+        let seed = try await seededMonitor()
+        defer { try? FileManager.default.removeItem(at: seed.directory) }
+        try seed.monitor.toggleNotifications(id: seed.pageID)
+        XCTAssertFalse(seed.monitor.pages[0].notificationsEnabled)
+        let delivery = InMemoryToastDelivery()
+        let delegate = AppDelegate(toastDelivery: delivery)
+
+        delegate.refreshToast(pageID: seed.pageID, monitor: seed.monitor)
+
+        XCTAssertTrue(delivery.toasts.isEmpty)
+        XCTAssertEqual(delivery.clearedPageIDs, [seed.pageID])
+    }
+
     func testFailedNotificationToggleDoesNotClearToast() async throws {
         let seed = try await seededMonitor()
         defer { try? FileManager.default.removeItem(at: seed.directory) }

@@ -274,6 +274,10 @@ extension AppDelegate {
             toastDelivery.clear(pageID: pageID)
             return
         }
+        guard page.notificationsEnabled else {
+            toastDelivery.clear(pageID: pageID)
+            return
+        }
         toastDelivery.deliver(
             Toast(
                 pageID: page.id,
