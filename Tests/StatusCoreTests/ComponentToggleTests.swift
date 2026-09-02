@@ -171,6 +171,9 @@ final class ComponentToggleTests: XCTestCase {
 
         try monitor.toggleComponent(id: id, name: "Box Web Application")
         XCTAssertEqual(monitor.pages[0].disabledComponentNames, ["g1", "c1", "c2"])
+        let loaded = Monitor(store: PageStore(directory: directory), client: MapHTTPClient())
+        try loaded.load()
+        XCTAssertEqual(loaded.pages[0].disabledComponentNames, ["g1", "c1", "c2"])
     }
 
     func testSetAllComponentsRecordsEveryIdAndName() async throws {

@@ -42,11 +42,13 @@ extension ProviderProbe {
     }
 
     static func decodedText(_ data: Data) -> String? {
-        String(data: data, encoding: .utf8) ?? String(data: data, encoding: .utf16)
+        if let utf16 = decodeUTF16XML(data) { return utf16 }
+        return String(data: data, encoding: .utf8) ?? String(data: data, encoding: .utf16)
     }
 
     static func decodedPrefix(_ data: Data, maxBytes: Int) -> String? {
         let slice = Data(data.prefix(maxBytes))
+        if let utf16 = decodeUTF16XML(slice) { return utf16 }
         if let utf8 = String(data: slice, encoding: .utf8) { return utf8 }
         var trimmed = slice
         for _ in 0..<3 where !trimmed.isEmpty {
@@ -54,6 +56,19 @@ extension ProviderProbe {
             if let utf8 = String(data: trimmed, encoding: .utf8) { return utf8 }
         }
         return String(data: slice, encoding: .utf16)
+    }
+
+    static func decodeUTF16XML(_ data: Data) -> String? {
+        guard let encoding = utf16XMLEncoding(data) else { return nil }
+        return String(data: data, encoding: encoding)
+    }
+
+    static func utf16XMLEncoding(_ data: Data) -> String.Encoding? {
+        guard data.count >= 2 else { return nil }
+        let bytes = [UInt8](data.prefix(2))
+        if bytes[0] == 0, bytes[1] == 0x3C { return .utf16BigEndian }
+        if bytes[0] == 0x3C, bytes[1] == 0 { return .utf16LittleEndian }
+        return nil
     }
 
     static func extractAlternateFeedURL(from html: String, base: URL) -> URL? {

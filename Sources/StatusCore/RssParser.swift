@@ -4,7 +4,7 @@ public enum RssParser {
     public static func parse(data: Data, sourceURL: URL) throws -> PageSnapshot {
         let document: XMLDocument
         do {
-            document = try XMLDocument(data: data, options: [.nodeLoadExternalEntitiesNever])
+            document = try XMLDocument(data: xmlData(data), options: [.nodeLoadExternalEntitiesNever])
         } catch {
             throw ParserError.notThisProvider
         }
@@ -29,6 +29,24 @@ public enum RssParser {
 
     private static let rssNamespace = ""
     private static let atomNamespace = "http://www.w3.org/2005/Atom"
+
+    private static func xmlData(_ data: Data) -> Data {
+        guard data.count >= 2 else { return data }
+        let bytes = [UInt8](data.prefix(2))
+        let encoding: String.Encoding
+        if bytes[0] == 0, bytes[1] == 0x3C {
+            encoding = .utf16BigEndian
+        } else if bytes[0] == 0x3C, bytes[1] == 0 {
+            encoding = .utf16LittleEndian
+        } else {
+            return data
+        }
+        guard let text = String(data: data, encoding: encoding),
+              let utf8 = text.data(using: .utf8) else {
+            return data
+        }
+        return utf8
+    }
 
     private static func parseRSS(_ root: XMLElement, sourceURL: URL) throws -> PageSnapshot {
         guard let channel = child(root, "channel", uri: rssNamespace) else {
