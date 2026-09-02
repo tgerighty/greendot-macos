@@ -167,7 +167,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onAdd: { [weak self] in self?.openEditor(editingPageID: nil) },
             onEdit: { [weak self] id in self?.openEditor(editingPageID: id) },
             onRemove: { [weak self] id in
-                self?.performStoreChange { try self?.monitor?.remove(id: id) }
+                guard let self else { return }
+                if self.performStoreChange({ try self.monitor?.remove(id: id) }) {
+                    self.toastDelivery.clear(pageID: id)
+                }
             },
             onToggleNotifications: { [weak self] id in
                 self?.performStoreChange { try self?.monitor?.toggleNotifications(id: id) }
