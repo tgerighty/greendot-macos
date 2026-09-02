@@ -53,7 +53,7 @@ extension ProviderProbe {
     static func stripRepeating(_ regex: NSRegularExpression?, in html: String) -> String {
         guard let regex else { return html }
         var current = html
-        for _ in 0..<8 {
+        for _ in 0..<64 {
             let range = NSRange(current.startIndex..<current.endIndex, in: current)
             let next = regex.stringByReplacingMatches(in: current, options: [], range: range, withTemplate: "")
             if next == current { return current }

@@ -36,10 +36,16 @@ public enum ComponentTree {
         for item in items {
             guard !disabledKeys.contains(item.id),
                   !disabledKeys.contains(item.name) else { continue }
-            let severity = enabledLeafSeverityIfPresent(
+            let childSeverity = enabledLeafSeverityIfPresent(
                 in: item.children,
                 disabledKeys: disabledKeys
-            ) ?? item.severity
+            )
+            let severity: Severity
+            if item.isGroup, !item.children.isEmpty {
+                severity = childSeverity ?? .green
+            } else {
+                severity = childSeverity ?? item.severity
+            }
             result = moreSevere(result, severity)
             if result == .red { return .red }
         }

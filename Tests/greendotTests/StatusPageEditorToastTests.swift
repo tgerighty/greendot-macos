@@ -129,15 +129,16 @@ final class StatusPageEditorToastTests: XCTestCase {
         XCTAssertEqual(seed.monitor.pages[0].displaySeverity, .yellow)
     }
 
-    func testSavingRedPageRefreshesToastInsteadOfClearing() async throws {
+    func testSavingRedPageWithSameURLDoesNotRecreateToast() async throws {
         let seed = try await seededEditorMonitor()
         defer { try? FileManager.default.removeItem(at: seed.directory) }
         var cleared: [UUID] = []
         var refreshed: [UUID] = []
+        var changed = 0
         let editor = StatusPageEditor(
             monitor: seed.monitor,
             editingPageID: seed.pageID,
-            onChange: {},
+            onChange: { changed += 1 },
             presentError: { error in XCTFail("unexpected error: \(error)") },
             clearToast: { cleared.append($0) },
             refreshToast: { refreshed.append($0) }
@@ -147,12 +148,13 @@ final class StatusPageEditorToastTests: XCTestCase {
 
         try XCTUnwrap(Self.field("name-field", in: Self.panelView())).stringValue = "Renamed"
         try XCTUnwrap(Self.button("save-button", in: Self.panelView())).performClick(nil)
-        for _ in 0..<100 where refreshed.isEmpty && cleared.isEmpty {
+        for _ in 0..<100 where changed == 0 {
             try await Task.sleep(nanoseconds: 20_000_000)
         }
 
+        XCTAssertEqual(changed, 1)
         XCTAssertTrue(cleared.isEmpty)
-        XCTAssertEqual(refreshed, [seed.pageID])
+        XCTAssertTrue(refreshed.isEmpty)
         XCTAssertEqual(seed.monitor.pages[0].displaySeverity, .red)
     }
 

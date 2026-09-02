@@ -294,6 +294,25 @@ extension ComponentToggleTests {
         XCTAssertEqual(page.enabledComponents[0].children.map(\.id), ["teams"])
     }
 
+    func testMutingEveryChildTurnsGroupGreen() {
+        var page = pageWith(components: [
+            ComponentStatus(
+                name: "Microsoft 365",
+                severity: .red,
+                statusText: "Major outage",
+                id: "m365",
+                children: [
+                    ComponentStatus(name: "Exchange", severity: .red, statusText: "Major outage", id: "ex")
+                ],
+                isGroup: true
+            )
+        ])
+        page.disabledComponentNames = ["ex"]
+        XCTAssertEqual(page.displaySeverity, .green)
+        XCTAssertEqual(page.enabledComponents[0].severity, .green)
+        XCTAssertTrue(page.enabledComponents[0].children.isEmpty)
+    }
+
     func testToggleDoesNotMuteSameTitleDifferentID() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

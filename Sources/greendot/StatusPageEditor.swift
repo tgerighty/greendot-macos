@@ -100,10 +100,13 @@ private extension StatusPageEditor {
     func save(pageID: UUID?, url: URL, name: String?) async -> Bool {
         do {
             if let pageID {
+                let previous = monitor.pages.first { $0.id == pageID }
                 try await monitor.edit(id: pageID, url: url, name: name)
-                if monitor.pages.first(where: { $0.id == pageID })?.displaySeverity == .green {
+                let current = monitor.pages.first { $0.id == pageID }
+                if current?.displaySeverity == .green {
                     clearToast(pageID)
-                } else {
+                } else if current?.displaySeverity != previous?.displaySeverity
+                    || current?.url != previous?.url {
                     refreshToast(pageID)
                 }
             } else {
