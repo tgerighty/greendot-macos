@@ -145,6 +145,13 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
             guard isComponentEnabled(item) else { return nil }
             var copy = item
             copy.children = filterEnabled(item.children)
+            if !copy.children.isEmpty {
+                copy.severity = ComponentTree.enabledLeafSeverity(
+                    in: copy.children,
+                    disabledKeys: []
+                )
+                copy.statusText = copy.severity.displayName
+            }
             return copy
         }
     }

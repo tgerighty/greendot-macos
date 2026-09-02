@@ -273,6 +273,27 @@ final class ComponentToggleTests: XCTestCase {
 }
 
 extension ComponentToggleTests {
+    func testEnabledGroupSeverityFollowsRemainingChildren() {
+        var page = pageWith(components: [
+            ComponentStatus(
+                name: "Microsoft 365",
+                severity: .red,
+                statusText: "Major outage",
+                id: "m365",
+                children: [
+                    ComponentStatus(name: "Exchange", severity: .red, statusText: "Major outage", id: "ex"),
+                    ComponentStatus(name: "Teams", severity: .green, statusText: "Operational", id: "teams")
+                ],
+                isGroup: true
+            )
+        ])
+        page.disabledComponentNames = ["ex"]
+        XCTAssertEqual(page.displaySeverity, .green)
+        XCTAssertEqual(page.enabledComponents[0].severity, .green)
+        XCTAssertEqual(page.enabledComponents[0].statusText, "Operational")
+        XCTAssertEqual(page.enabledComponents[0].children.map(\.id), ["teams"])
+    }
+
     func testToggleDoesNotMuteSameTitleDifferentID() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

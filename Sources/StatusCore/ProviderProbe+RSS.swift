@@ -88,68 +88,6 @@ extension ProviderProbe {
     static func relationTokens(_ rel: String) -> [String] {
         rel.split { $0.isWhitespace || $0 == "," }.map(String.init)
     }
-
-    static func linkTags(in html: String) -> [Substring] {
-        var tags: [Substring] = []
-        var index = html.startIndex
-        while index < html.endIndex {
-            guard let start = linkTagStart(html, from: index) else { break }
-            if let end = quotedTagEnd(html, from: start) {
-                tags.append(html[start...end])
-                index = html.index(after: end)
-            } else {
-                index = html.index(after: start)
-            }
-        }
-        return tags
-    }
-
-    static func linkTagStart(_ html: String, from: String.Index) -> String.Index? {
-        var index = from
-        while index < html.endIndex {
-            if html[index] == "<", isLinkKeyword(html, from: index) {
-                return index
-            }
-            index = html.index(after: index)
-        }
-        return nil
-    }
-
-    static func isLinkKeyword(_ html: String, from: String.Index) -> Bool {
-        var index = from
-        for expected in "<link" {
-            guard index < html.endIndex else { return false }
-            guard html[index].lowercased() == String(expected) else { return false }
-            index = html.index(after: index)
-        }
-        guard index < html.endIndex else { return false }
-        return html[index].isWhitespace
-    }
-
-    static func quotedTagEnd(_ html: String, from: String.Index) -> String.Index? {
-        var quote: Character?
-        var index = from
-        while index < html.endIndex {
-            let character = html[index]
-            if let current = quote {
-                if character == current { quote = nil }
-            } else if character == "\"" || character == "'" {
-                quote = character
-            } else if character == ">" {
-                return index
-            }
-            index = html.index(after: index)
-        }
-        return nil
-    }
-
-    static func isFeedLinkType(_ type: String) -> Bool {
-        let essence = type.split(separator: ";", maxSplits: 1)
-            .first?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased() ?? ""
-        return essence == "application/rss+xml" || essence == "application/atom+xml"
-    }
 }
 
 private struct RSSHubFeed {
@@ -161,24 +99,6 @@ private struct RSSHubFeed {
 private extension ProviderProbe {
     static let azureHubFeed = URL(string: "https://rssfeed.azure.status.microsoft/en-us/status/feed/")!
     static let feedSeparator = Data("\n<!--greendot-rss-feed-->\n".utf8)
-
-    static let htmlIgnoredMarkupRegex: NSRegularExpression? = {
-        recordRegex()
-        return try? NSRegularExpression(
-            pattern: "<!--.*?-->"
-                + "|<script\\b[^>]*>.*?</script\\s*>"
-                + "|<style\\b[^>]*>.*?</style\\s*>"
-                + "|<template\\b[^>]*>.*?</template\\s*>"
-                + "|<textarea\\b[^>]*>.*?</textarea\\s*>",
-            options: [.caseInsensitive, .dotMatchesLineSeparators]
-        )
-    }()
-
-    static func htmlWithoutIgnoredMarkup(_ html: String) -> String {
-        guard let regex = htmlIgnoredMarkupRegex else { return html }
-        let range = NSRange(html.startIndex..<html.endIndex, in: html)
-        return regex.stringByReplacingMatches(in: html, options: [], range: range, withTemplate: "")
-    }
 
     static func fetchFeed(
         _ feedURL: URL,
