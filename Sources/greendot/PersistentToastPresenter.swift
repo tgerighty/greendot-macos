@@ -4,6 +4,7 @@ import StatusCore
 @MainActor
 protocol PersistentToastPresenter: AnyObject {
     func present(_ toast: Toast)
+    func clear(pageID: UUID)
 }
 
 /// App-owned toast. macOS UserNotifications banners always time out, and
@@ -19,18 +20,28 @@ final class PanelPersistentToastPresenter: PersistentToastPresenter {
     }
 
     func present(_ toast: Toast) {
-        items.filter { $0.pageID == toast.pageID }.forEach { removeWindow($0.window) }
-        pending.removeAll { $0.pageID == toast.pageID }
+        if items.contains(where: { $0.pageID == toast.pageID }) {
+            items.filter { $0.pageID == toast.pageID }.forEach { removeWindow($0.window) }
+            show(toast, play: true)
+            return
+        }
+        if let index = pending.firstIndex(where: { $0.pageID == toast.pageID }) {
+            pending[index] = toast
+            playSound()
+            return
+        }
         while items.count >= maxVisiblePanels() {
             let oldest = items[0]
             pending.append(oldest.toast)
             removeWindow(oldest.window)
         }
-        let window = makeWindow(for: toast)
-        items.append(Item(window: window, toast: toast))
-        layoutWindows()
-        window.orderFrontRegardless()
-        playSound()
+        show(toast, play: true)
+    }
+
+    func clear(pageID: UUID) {
+        items.filter { $0.pageID == pageID }.forEach { removeWindow($0.window) }
+        pending.removeAll { $0.pageID == pageID }
+        showNextPendingIfNeeded()
     }
 
     var windows: [NSWindow] {
@@ -82,6 +93,14 @@ private extension PanelPersistentToastPresenter {
         return window
     }
 
+    func show(_ toast: Toast, play: Bool) {
+        let window = makeWindow(for: toast)
+        items.append(Item(window: window, toast: toast))
+        layoutWindows()
+        window.orderFrontRegardless()
+        if play { playSound() }
+    }
+
     func removeWindow(_ window: NSWindow) {
         items.removeAll { $0.window === window }
         window.orderOut(nil)
@@ -89,12 +108,16 @@ private extension PanelPersistentToastPresenter {
 
     func dismiss(_ window: NSWindow) {
         removeWindow(window)
-        if pending.isEmpty {
+        showNextPendingIfNeeded()
+    }
+
+    func showNextPendingIfNeeded() {
+        guard !pending.isEmpty, items.count < maxVisiblePanels() else {
             layoutWindows()
             return
         }
         let next = pending.removeFirst()
-        present(next)
+        show(next, play: false)
     }
 
     func maxVisiblePanels() -> Int {

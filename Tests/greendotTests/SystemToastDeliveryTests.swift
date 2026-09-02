@@ -68,6 +68,7 @@ final class SystemToastDeliveryTests: XCTestCase {
         try XCTUnwrap(scheduledActions.first)()
 
         XCTAssertEqual(notifications.removedIdentifiers, [["green-id"]])
+        XCTAssertEqual(persistent.cleared, [githubID])
     }
 
     func testToastAttachmentColourMatchesIssueColour() {
@@ -135,6 +136,44 @@ final class SystemToastDeliveryTests: XCTestCase {
         )
         XCTAssertEqual(presenter.visibleCount, 8)
         presenter.windows.first?.contentView?.mouseDown(with: NSEvent())
+        XCTAssertEqual(presenter.visibleCount, 8)
+    }
+
+    func testPersistentPanelUpdatesQueuedPageWithoutEvictingVisible() {
+        _ = NSApplication.shared
+        let presenter = PanelPersistentToastPresenter(playSound: Self.silentSound)
+        var ids: [UUID] = []
+        for index in 1...8 {
+            let id = UUID()
+            ids.append(id)
+            presenter.present(
+                toast(pageID: id, pageName: "Page \(index)", body: "Degraded", severity: .yellow)
+            )
+        }
+        presenter.present(
+            toast(pageID: UUID(), pageName: "Page 9", body: "Major outage", severity: .red)
+        )
+        presenter.present(
+            toast(pageID: ids[0], pageName: "Page 1", body: "Major outage", severity: .red)
+        )
+        let labels = presenter.windows.compactMap { $0.contentView?.accessibilityLabel() }
+        XCTAssertFalse(labels.contains { $0.hasPrefix("Page 1") })
+        XCTAssertTrue(labels.contains { $0.hasPrefix("Page 2") })
+        XCTAssertEqual(presenter.visibleCount, 8)
+    }
+
+    func testPersistentPanelDoesNotReplaySoundWhenQueuedToastReturns() {
+        _ = NSApplication.shared
+        var sounds = 0
+        let presenter = PanelPersistentToastPresenter(playSound: { sounds += 1 })
+        for index in 1...9 {
+            presenter.present(
+                toast(pageID: UUID(), pageName: "Page \(index)", body: "Degraded", severity: .yellow)
+            )
+        }
+        XCTAssertEqual(sounds, 9)
+        presenter.windows.first?.contentView?.mouseDown(with: NSEvent())
+        XCTAssertEqual(sounds, 9)
         XCTAssertEqual(presenter.visibleCount, 8)
     }
 
@@ -223,9 +262,14 @@ final class SystemToastDeliveryTests: XCTestCase {
 
 private final class RecordingPersistentToastPresenter: PersistentToastPresenter {
     var presented: [Toast] = []
+    var cleared: [UUID] = []
 
     func present(_ toast: Toast) {
         presented.append(toast)
+    }
+
+    func clear(pageID: UUID) {
+        cleared.append(pageID)
     }
 }
 
