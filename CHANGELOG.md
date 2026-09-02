@@ -50,6 +50,8 @@
 - HTML feed links with an unquoted `href` work. A `data-href` attribute is not treated as the feed URL.
 - If an HTML status page redirects on the same host, relative feed links use the final URL. A same-host HTTP to HTTPS upgrade is followed. A redirect to another host, to HTTP from HTTPS, or to a different port is not followed. An HTTPS page does not fetch an HTTP or different-port alternate feed.
 - Alternate feed links inside HTML comments, `<script>`, or `<style>` are ignored.
+- Each HTTP redirect is checked against the previous hop, so an HTTP to HTTPS upgrade cannot then drop back to HTTP.
+- If a feed stays the same bytes but moves to another same-origin URL, the stored page URL follows the new location.
 - Click the overall status row (for example Operational) to open the page when a watched page has no components.
 - Menu and Edit store errors no longer leave memory changed when the file write fails.
 - Edit checkboxes stay in the last saved state when a store write fails.

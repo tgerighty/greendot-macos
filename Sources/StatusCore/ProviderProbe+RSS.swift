@@ -239,19 +239,27 @@ private extension ProviderProbe {
     }
 
     static func feedHit(_ data: Data, sourceURL: URL, context: ProbeContext) -> ProbeHit? {
+        let body = feedCacheBody(data, sourceURL: sourceURL)
         if let previousBody = context.previousBody,
            let previousSnapshot = context.previousSnapshot,
            !previousSnapshot.isUnreachable,
-           data == previousBody {
-            return ProbeHit(snapshot: previousSnapshot, body: data)
+           body == previousBody {
+            return ProbeHit(snapshot: previousSnapshot, body: body)
         }
         do {
             recordParse()
             let snapshot = try RssParser.parse(data: data, sourceURL: sourceURL)
-            return ProbeHit(snapshot: snapshot, body: data)
+            return ProbeHit(snapshot: snapshot, body: body)
         } catch {
             return nil
         }
+    }
+
+    static func feedCacheBody(_ data: Data, sourceURL: URL) -> Data {
+        var body = Data(sourceURL.absoluteString.utf8)
+        body.append(0)
+        body.append(data)
+        return body
     }
 
     static func linkAttribute(_ tag: Substring, _ name: String) -> String? {

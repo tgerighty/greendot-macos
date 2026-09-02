@@ -94,7 +94,10 @@ final class SameOriginRedirectDelegate: NSObject, URLSessionTaskDelegate, @unche
         newRequest: URLRequest,
         completionHandler: @escaping (URLRequest?) -> Void
     ) {
-        let allowed = RedirectPolicy.allows(newRequest, from: task.originalRequest?.url)
+        let allowed = RedirectPolicy.allows(
+            newRequest,
+            from: response.url ?? task.originalRequest?.url
+        )
         completionHandler(allowed ? newRequest : nil)
     }
 }

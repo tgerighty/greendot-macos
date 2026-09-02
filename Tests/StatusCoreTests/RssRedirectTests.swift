@@ -87,6 +87,54 @@ final class RssRedirectTests: XCTestCase {
         )
     }
 
+    func testRedirectDelegateRejectsHTTPDowngradeAfterHTTPSUpgrade() {
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.finishTasksAndInvalidate() }
+        let original = URL(string: "http://status.example.com/old")!
+        let task = session.dataTask(with: original)
+        let https = URL(string: "https://status.example.com/old")!
+        let response = HTTPURLResponse(
+            url: https,
+            statusCode: 301,
+            httpVersion: nil,
+            headerFields: ["Location": original.absoluteString]
+        )!
+        let decided = expectation(description: "redirect decision")
+        var allowed: URLRequest?
+        SameOriginRedirectDelegate().urlSession(
+            session,
+            task: task,
+            willPerformHTTPRedirection: response,
+            newRequest: URLRequest(url: original)
+        ) { request in
+            allowed = request
+            decided.fulfill()
+        }
+        wait(for: [decided], timeout: 1)
+        XCTAssertNil(allowed)
+    }
+
+    func testFeedCacheDoesNotReuseSnapshotWhenLocatedURLChanges() async throws {
+        var inner = MapHTTPClient()
+        inner.byURL["https://status.example.com/feed.xml"] = (Data(feed.utf8), 200)
+        let page = URL(string: "https://status.example.com/feed.xml")!
+        let first = try await ProviderProbe.probeHit(
+            pageURL: page,
+            client: LocatedHTTPClient(inner: inner, located: [:]),
+            prefer: .rss
+        )
+        XCTAssertEqual(first.snapshot.url, page)
+        let relocated = URL(string: "https://status.example.com/v2/feed.xml")!
+        let second = try await ProviderProbe.probeHit(
+            pageURL: page,
+            client: LocatedHTTPClient(inner: inner, located: [page.absoluteString: relocated]),
+            prefer: .rss,
+            previousBody: first.body,
+            previousSnapshot: first.snapshot
+        )
+        XCTAssertEqual(second.snapshot.url, relocated)
+    }
+
     func testProbeResolvesAlternateFeedsAgainstRedirectedURL() async throws {
         let html = """
         <html><head>
