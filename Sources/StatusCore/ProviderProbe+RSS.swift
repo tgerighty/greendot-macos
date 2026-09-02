@@ -20,7 +20,7 @@ extension ProviderProbe {
                let hit = feedHit(located.data, sourceURL: located.url, context: context) {
                 return hit
             }
-            guard let html = String(data: located.data, encoding: .utf8),
+            guard let html = decodedText(located.data),
                   let feedURL = extractAlternateFeedURL(
                     from: htmlWithoutIgnoredMarkup(html),
                     base: located.url
@@ -36,10 +36,14 @@ extension ProviderProbe {
     }
 
     static func looksLikeFeed(_ data: Data) -> Bool {
-        let prefix = String(data: data.prefix(512), encoding: .utf8)?.lowercased() ?? ""
+        let prefix = decodedText(data.prefix(1024) as Data)?.lowercased() ?? ""
         let options: String.CompareOptions = .regularExpression
         return prefix.range(of: "<rss(\\s|>|/)", options: options) != nil
             || prefix.range(of: "<feed(\\s|>|/)", options: options) != nil
+    }
+
+    static func decodedText(_ data: Data) -> String? {
+        String(data: data, encoding: .utf8) ?? String(data: data, encoding: .utf16)
     }
 
     static func extractAlternateFeedURL(from html: String, base: URL) -> URL? {

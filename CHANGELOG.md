@@ -55,7 +55,8 @@
 - A `<feed>` root is treated as Atom only when it uses the Atom namespace.
 - The Azure missing-status exception applies only to `azure.status.microsoft` and its subdomains.
 - If an HTML page contains feed-shaped text that is not a real feed, discovery still uses the advertised alternate link.
-- Editing or removing a watched page clears that page's persistent alert.
+- Editing or removing a watched page clears that page's persistent alert. The submenu Remove path does this too.
+- RSS and Atom feeds encoded as UTF-16 are still recognised.
 - Click the overall status row (for example Operational) to open the page when a watched page has no components.
 - Menu and Edit store errors no longer leave memory changed when the file write fails.
 - Edit checkboxes stay in the last saved state when a store write fails.

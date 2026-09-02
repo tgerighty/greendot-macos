@@ -1,5 +1,6 @@
 import XCTest
 @testable import StatusCore
+import TestSupport
 
 final class RssParserGuardTests: XCTestCase {
     func testNonAtomFeedRootIsRejected() {
@@ -23,5 +24,21 @@ final class RssParserGuardTests: XCTestCase {
             sourceURL: URL(string: "https://azure.status.microsoft.example.com/feed")!
         )
         XCTAssertEqual(snap.components[0].severity, .green)
+    }
+
+    func testProbeReadsUTF16RSSFeed() async throws {
+        let xml = """
+        <?xml version="1.0" encoding="utf-16"?>
+        <rss version="2.0"><channel><title>Secret Feed</title>
+        <item><guid>item-1</guid><title>API</title><status>Available</status></item>
+        </channel></rss>
+        """
+        let data = try XCTUnwrap(xml.data(using: .utf16))
+        var client = MapHTTPClient()
+        let page = URL(string: "https://status.example.com/feed.xml")!
+        client.byURL[page.absoluteString] = (data, 200)
+        let snap = try await ProviderProbe.probe(pageURL: page, client: client)
+        XCTAssertEqual(snap.provider, .rss)
+        XCTAssertEqual(snap.name, "Secret Feed")
     }
 }
