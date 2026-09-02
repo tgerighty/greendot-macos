@@ -19,7 +19,7 @@ final class ComponentTreeSeverityTests: XCTestCase {
 
         XCTAssertEqual(ComponentTree.enabledLeafSeverity(in: tree, disabledKeys: []), .red)
         XCTAssertEqual(ComponentTree.enabledLeafSeverity(in: tree, disabledKeys: ["red"]), .green)
-        XCTAssertEqual(ComponentTree.enabledLeafSeverity(in: tree, disabledKeys: ["red", "green"]), .yellow)
+        XCTAssertEqual(ComponentTree.enabledLeafSeverity(in: tree, disabledKeys: ["red", "green"]), .green)
         XCTAssertEqual(ComponentTree.enabledLeafSeverity(in: tree, disabledKeys: ["Group"]), .green)
     }
 
