@@ -108,7 +108,7 @@ private extension ProviderProbe {
     static let htmlIgnoredMarkupRegex: NSRegularExpression? = {
         recordRegex()
         return try? NSRegularExpression(
-            pattern: "<!--.*?-->|<script\\b[^>]*>.*?</script>|<style\\b[^>]*>.*?</style>",
+            pattern: "<!--.*?-->|<script\\b[^>]*>.*?</script\\s*>|<style\\b[^>]*>.*?</style\\s*>",
             options: [.caseInsensitive, .dotMatchesLineSeparators]
         )
     }()
