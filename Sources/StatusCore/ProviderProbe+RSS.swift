@@ -71,13 +71,7 @@ extension ProviderProbe {
     }
 
     static func isAllowedFeedURL(_ url: URL, relativeTo base: URL) -> Bool {
-        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
-            return false
-        }
-        guard let feedHost = url.host?.lowercased(), let baseHost = base.host?.lowercased() else {
-            return false
-        }
-        return feedHost == baseHost
+        RedirectPolicy.allows(URLRequest(url: url), from: base)
     }
 }
 

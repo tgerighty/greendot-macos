@@ -61,6 +61,30 @@ final class RssRedirectTests: XCTestCase {
                 from: from
             )
         )
+        XCTAssertTrue(
+            RedirectPolicy.allows(
+                URLRequest(url: URL(string: "https://status.example.com/old")!),
+                from: URL(string: "http://status.example.com/old")!
+            )
+        )
+        XCTAssertFalse(
+            ProviderProbe.isAllowedFeedURL(
+                URL(string: "http://status.example.com/feed.xml")!,
+                relativeTo: URL(string: "https://status.example.com/")!
+            )
+        )
+        XCTAssertFalse(
+            ProviderProbe.isAllowedFeedURL(
+                URL(string: "https://status.example.com:8443/feed.xml")!,
+                relativeTo: URL(string: "https://status.example.com/")!
+            )
+        )
+        XCTAssertTrue(
+            ProviderProbe.isAllowedFeedURL(
+                URL(string: "https://status.example.com/feed.xml")!,
+                relativeTo: URL(string: "http://status.example.com/")!
+            )
+        )
     }
 
     func testProbeResolvesAlternateFeedsAgainstRedirectedURL() async throws {

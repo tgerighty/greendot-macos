@@ -15,15 +15,27 @@ public struct HTTPGet: Sendable {
 enum RedirectPolicy {
     static func allows(_ request: URLRequest, from original: URL?) -> Bool {
         guard let original, let next = request.url else { return false }
-        return originKey(original) == originKey(next)
+        guard let fromOrigin = origin(original), let toOrigin = origin(next) else { return false }
+        if fromOrigin == toOrigin { return true }
+        return fromOrigin.host == toOrigin.host
+            && fromOrigin.scheme == "http"
+            && toOrigin.scheme == "https"
+            && fromOrigin.port == 80
+            && toOrigin.port == 443
     }
 
-    static func originKey(_ url: URL) -> String? {
+    static func origin(_ url: URL) -> Origin? {
         guard let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased() else {
             return nil
         }
         let port = url.port ?? (scheme == "https" ? 443 : 80)
-        return scheme + "://" + host + ":" + String(port)
+        return Origin(scheme: scheme, host: host, port: port)
+    }
+
+    struct Origin: Equatable {
+        let scheme: String
+        let host: String
+        let port: Int
     }
 }
 
