@@ -13,6 +13,9 @@ public enum RssParser {
         }
         switch localName(root) {
         case "rss":
+            guard (root.uri ?? "").isEmpty else {
+                throw ParserError.notThisProvider
+            }
             return try parseRSS(root, sourceURL: sourceURL)
         case "feed":
             guard root.uri == "http://www.w3.org/2005/Atom" else {

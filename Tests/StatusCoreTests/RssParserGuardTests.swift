@@ -14,6 +14,24 @@ final class RssParserGuardTests: XCTestCase {
         }
     }
 
+    func testNamespacedRssRootIsRejected() {
+        let data = Data("""
+        <custom:rss xmlns:custom="urn:example">
+          <custom:channel>
+            <custom:title>Custom API</custom:title>
+          </custom:channel>
+        </custom:rss>
+        """.utf8)
+        XCTAssertThrowsError(
+            try RssParser.parse(
+                data: data,
+                sourceURL: URL(string: "https://status.example.com/feed")!
+            )
+        ) { error in
+            XCTAssertEqual(error as? ParserError, .notThisProvider)
+        }
+    }
+
     func testAzureMissingStatusDoesNotMatchContainingHost() throws {
         let data = Data("""
         <rss version="2.0"><channel><title>Azure Status</title>
