@@ -15,6 +15,18 @@ final class StatusPageEditorToastTests: XCTestCase {
     }
     """
 
+    private let twoComponentJSON = """
+    {
+      "page": {"name": "GitHub", "url": "https://www.githubstatus.com"},
+      "status": {"indicator": "major"},
+      "components": [
+        {"name": "API", "status": "major_outage", "group": false},
+        {"name": "Web", "status": "operational", "group": false}
+      ],
+      "incidents": []
+    }
+    """
+
     func testSuccessfulComponentToggleClearsToast() async throws {
         let seed = try await seededEditorMonitor()
         defer { try? FileManager.default.removeItem(at: seed.directory) }
@@ -59,6 +71,26 @@ final class StatusPageEditorToastTests: XCTestCase {
         XCTAssertEqual(monitor.pages[0].displaySeverity, .green)
     }
 
+    func testHealthySiblingToggleDoesNotClearToastWhilePageStaysRed() async throws {
+        let seed = try await seededEditorMonitor(json: twoComponentJSON)
+        defer { try? FileManager.default.removeItem(at: seed.directory) }
+        var cleared: [UUID] = []
+        let editor = StatusPageEditor(
+            monitor: seed.monitor,
+            editingPageID: seed.pageID,
+            onChange: {},
+            presentError: { error in XCTFail("unexpected error: \(error)") },
+            clearToast: { cleared.append($0) }
+        )
+        editor.show()
+        defer { editor.close() }
+
+        try XCTUnwrap(Self.button("component-Web", in: Self.panelView())).performClick(nil)
+
+        XCTAssertTrue(cleared.isEmpty)
+        XCTAssertEqual(seed.monitor.pages[0].displaySeverity, .red)
+    }
+
     func testFailedComponentToggleDoesNotClearToast() async throws {
         let seed = try await seededEditorMonitor()
         defer { try? FileManager.default.removeItem(at: seed.directory) }
@@ -89,14 +121,15 @@ final class StatusPageEditorToastTests: XCTestCase {
         let directory: URL
     }
 
-    private func seededEditorMonitor() async throws -> Seed {
+    private func seededEditorMonitor(json: String? = nil) async throws -> Seed {
         _ = NSApplication.shared
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let store = PageStore(directory: directory)
+        let body = json ?? redJSON
         let monitor = Monitor(
             store: store,
             client: MapHTTPClient(byPath: [
-                "/api/v2/summary.json": (Data(redJSON.utf8), 200)
+                "/api/v2/summary.json": (Data(body.utf8), 200)
             ])
         )
         try monitor.load()

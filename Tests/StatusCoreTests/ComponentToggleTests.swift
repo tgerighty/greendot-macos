@@ -164,16 +164,13 @@ final class ComponentToggleTests: XCTestCase {
         )
     }
 
-    func testToggleComponentByNameDisablesIdAndDescendantKeys() async throws {
+    func testToggleComponentByNamePersistsStableIDs() async throws {
         let (directory, monitor) = try await boxOutageMonitor()
         defer { try? FileManager.default.removeItem(at: directory) }
         let id = monitor.pages[0].id
 
         try monitor.toggleComponent(id: id, name: "Box Web Application")
-        XCTAssertEqual(
-            monitor.pages[0].disabledComponentNames,
-            ["g1", "Box Web Application", "c1", "Login/SSO", "c2", "Search"]
-        )
+        XCTAssertEqual(monitor.pages[0].disabledComponentNames, ["g1", "c1", "c2"])
     }
 
     func testSetAllComponentsRecordsEveryIdAndName() async throws {
@@ -276,6 +273,29 @@ final class ComponentToggleTests: XCTestCase {
 }
 
 extension ComponentToggleTests {
+    func testToggleDoesNotMuteSameTitleDifferentID() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let feed = """
+        <rss version="2.0"><channel><title>Status</title>
+        <item><guid>g1</guid><title>API</title><status>operational</status></item>
+        <item><guid>g2</guid><title>API</title><status>major_outage</status></item>
+        </channel></rss>
+        """
+        var client = MapHTTPClient()
+        let page = URL(string: "https://status.example.com/feed.xml")!
+        client.byURL[page.absoluteString] = (Data(feed.utf8), 200)
+        let monitor = Monitor(store: PageStore(directory: directory), client: client)
+        try await monitor.add(url: page, name: nil)
+        let id = try XCTUnwrap(monitor.pages.first?.id)
+
+        try monitor.toggleComponent(id: id, name: "g1")
+
+        XCTAssertEqual(monitor.pages[0].disabledComponentNames, ["g1"])
+        XCTAssertEqual(monitor.pages[0].enabledComponents.map(\.id), ["g2"])
+        XCTAssertEqual(monitor.pages[0].displaySeverity, .red)
+    }
+
     func testMissingSnapshotIsGrey() {
         let page = WatchedPage(
             url: testURL(host: "status.openai.com"),

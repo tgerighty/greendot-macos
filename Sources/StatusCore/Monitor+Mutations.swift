@@ -90,11 +90,12 @@ extension Monitor {
             let node = ComponentTree.find(name, in: tree)
             let nodes = node.map(ComponentTree.collect) ?? []
             let keys = nodes.isEmpty ? [name] : nodes.flatMap { [$0.id, $0.name] }
+            let persistKeys = nodes.isEmpty ? [name] : nodes.map(\.id)
             let allOn = nodes.isEmpty
                 ? !next.pages[index].disabledComponentNames.contains(name)
                 : nodes.allSatisfy { next.pages[index].isComponentEnabled($0) }
             if allOn {
-                next.pages[index].disabledComponentNames.formUnion(keys)
+                next.pages[index].disabledComponentNames.formUnion(persistKeys)
             } else {
                 keys.forEach { next.pages[index].disabledComponentNames.remove($0) }
             }
