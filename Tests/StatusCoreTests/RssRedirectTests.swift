@@ -242,6 +242,28 @@ final class RssRedirectTests: XCTestCase {
             recording.requested.map(\.absoluteString).contains("https://status.example.com/old.xml")
         )
     }
+
+    func testProbeReadsAlternateLinkWithGreaterThanInQuotedTitle() async throws {
+        let html = """
+        <html><head>
+        <link rel="alternate" title="Status > Incidents" type="application/rss+xml" href="/feed.xml">
+        </head></html>
+        """
+        var inner = MapHTTPClient()
+        inner.byURL["https://status.example.com"] = (Data(html.utf8), 200)
+        inner.byURL["https://status.example.com/feed.xml"] = (Data(feed.utf8), 200)
+        let snap = try await ProviderProbe.probe(
+            pageURL: URL(string: "https://status.example.com")!,
+            client: inner
+        )
+        XCTAssertEqual(snap.provider, .rss)
+        XCTAssertEqual(snap.name, "Secret Feed")
+    }
+
+    func testInjectedURLSessionEnforcesSameOriginRedirects() {
+        let client = URLSessionHTTPClient(session: URLSession(configuration: .ephemeral))
+        XCTAssertTrue(client.enforcesSameOriginRedirects)
+    }
 }
 
 private struct LocatedHTTPClient: HTTPClient {

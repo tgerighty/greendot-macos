@@ -56,8 +56,13 @@ public struct URLSessionHTTPClient: HTTPClient {
     private let redirectDelegate: SameOriginRedirectDelegate?
 
     public init(session: URLSession) {
-        self.session = session
-        self.redirectDelegate = nil
+        let delegate = SameOriginRedirectDelegate()
+        self.redirectDelegate = delegate
+        self.session = URLSession(
+            configuration: session.configuration,
+            delegate: delegate,
+            delegateQueue: nil
+        )
     }
 
     public init() {
@@ -69,6 +74,8 @@ public struct URLSessionHTTPClient: HTTPClient {
             delegateQueue: nil
         )
     }
+
+    var enforcesSameOriginRedirects: Bool { redirectDelegate != nil }
 
     public func get(_ url: URL) async throws -> (Data, Int) {
         let hit = try await getLocated(url)

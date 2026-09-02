@@ -57,11 +57,7 @@ extension ProviderProbe {
     }
 
     static func extractAlternateFeedURL(from html: String, base: URL) -> URL? {
-        guard let regex = alternateLinkRegex else { return nil }
-        let range = NSRange(html.startIndex..<html.endIndex, in: html)
-        for match in regex.matches(in: html, range: range) {
-            guard let tagRange = Range(match.range, in: html) else { continue }
-            let tag = html[tagRange]
+        for tag in linkTags(in: html) {
             let rel = linkAttribute(tag, "rel")?.lowercased() ?? ""
             guard relationTokens(rel).contains("alternate") else { continue }
             let type = linkAttribute(tag, "type") ?? ""
@@ -93,6 +89,52 @@ extension ProviderProbe {
         rel.split { $0.isWhitespace || $0 == "," }.map(String.init)
     }
 
+    static func linkTags(in html: String) -> [Substring] {
+        var tags: [Substring] = []
+        var index = html.startIndex
+        while index < html.endIndex {
+            guard let start = linkTagStart(html, from: index) else { break }
+            guard let end = quotedTagEnd(html, from: start) else { break }
+            tags.append(html[start...end])
+            index = html.index(after: end)
+        }
+        return tags
+    }
+
+    static func linkTagStart(_ html: String, from: String.Index) -> String.Index? {
+        var index = from
+        while index < html.endIndex {
+            if html[index] == "<" {
+                let remaining = html[index...]
+                if remaining.lowercased().hasPrefix("<link") {
+                    let after = html.index(index, offsetBy: 5, limitedBy: html.endIndex) ?? html.endIndex
+                    if after < html.endIndex, html[after].isWhitespace {
+                        return index
+                    }
+                }
+            }
+            index = html.index(after: index)
+        }
+        return nil
+    }
+
+    static func quotedTagEnd(_ html: String, from: String.Index) -> String.Index? {
+        var quote: Character?
+        var index = from
+        while index < html.endIndex {
+            let character = html[index]
+            if let current = quote {
+                if character == current { quote = nil }
+            } else if character == "\"" || character == "'" {
+                quote = character
+            } else if character == ">" {
+                return index
+            }
+            index = html.index(after: index)
+        }
+        return nil
+    }
+
     static func isFeedLinkType(_ type: String) -> Bool {
         let essence = type.split(separator: ";", maxSplits: 1)
             .first?
@@ -111,11 +153,6 @@ private struct RSSHubFeed {
 private extension ProviderProbe {
     static let azureHubFeed = URL(string: "https://rssfeed.azure.status.microsoft/en-us/status/feed/")!
     static let feedSeparator = Data("\n<!--greendot-rss-feed-->\n".utf8)
-
-    static let alternateLinkRegex: NSRegularExpression? = {
-        recordRegex()
-        return try? NSRegularExpression(pattern: "<link\\s[^>]*>", options: [.caseInsensitive])
-    }()
 
     static let htmlIgnoredMarkupRegex: NSRegularExpression? = {
         recordRegex()
