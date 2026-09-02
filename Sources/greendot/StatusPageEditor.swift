@@ -8,6 +8,7 @@ final class StatusPageEditor {
     private let onChange: () -> Void
     private let presentError: (Error) -> Void
     private let clearToast: (UUID) -> Void
+    private let refreshToast: (UUID) -> Void
     private var panel: PagePanelController?
 
     init(
@@ -15,13 +16,15 @@ final class StatusPageEditor {
         editingPageID: UUID?,
         onChange: @escaping () -> Void,
         presentError: @escaping (Error) -> Void,
-        clearToast: @escaping (UUID) -> Void = { _ in }
+        clearToast: @escaping (UUID) -> Void = { _ in },
+        refreshToast: @escaping (UUID) -> Void = { _ in }
     ) {
         self.monitor = monitor
         self.editingPageID = editingPageID
         self.onChange = onChange
         self.presentError = presentError
         self.clearToast = clearToast
+        self.refreshToast = refreshToast
     }
 
     func show() {
@@ -78,7 +81,7 @@ private extension StatusPageEditor {
         guard let pageID else { return nil }
         return { [weak self] name in
             guard let self else { return false }
-            return self.performChange(clearingToastFor: pageID, whenGreen: true) {
+            return self.performChange(reconcilingToastFor: pageID) {
                 try self.monitor.toggleComponent(id: pageID, name: name)
             }
         }
@@ -88,7 +91,7 @@ private extension StatusPageEditor {
         guard let pageID else { return nil }
         return { [weak self] enabled in
             guard let self else { return false }
-            return self.performChange(clearingToastFor: pageID, whenGreen: true) {
+            return self.performChange(reconcilingToastFor: pageID) {
                 try self.monitor.setAllComponents(id: pageID, enabled: enabled)
             }
         }
@@ -112,16 +115,23 @@ private extension StatusPageEditor {
     }
 
     func performChange(
-        clearingToastFor pageID: UUID? = nil,
-        whenGreen: Bool = false,
+        reconcilingToastFor pageID: UUID? = nil,
+        clearingToastFor removedID: UUID? = nil,
         _ work: () throws -> Void
     ) -> Bool {
+        let previous = pageID.flatMap { id in
+            monitor.pages.first { $0.id == id }?.displaySeverity
+        }
         do {
             try work()
-            if let pageID {
-                let nowGreen = monitor.pages.first { $0.id == pageID }?.displaySeverity == .green
-                if !whenGreen || nowGreen {
+            if let removedID {
+                clearToast(removedID)
+            } else if let pageID {
+                let current = monitor.pages.first { $0.id == pageID }?.displaySeverity
+                if current == .green {
                     clearToast(pageID)
+                } else if let current, current != previous {
+                    refreshToast(pageID)
                 }
             }
             onChange()

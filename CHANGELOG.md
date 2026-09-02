@@ -13,7 +13,7 @@
 - `make bench` now benchmarks the release configuration and includes nested
   component selection and large-tree severity workloads.
 - Red, yellow, and grey status-change notifications stay on screen until you click them away. Green notifications clear themselves after 6 seconds.
-- A persistent alert is cleared when you turn Notifications off for that page, or when a component filter change makes the page green.
+- A persistent alert is cleared when you turn Notifications off for that page, or when a component filter change makes the page green. If the page stays yellow or red, the alert is updated to that colour.
 - A green notification that a quit cut short is cleared the next time greendot starts.
 - Status-change notifications include a status-dot image in the issue colour (red, yellow, green, or grey).
 - A first probe of a `*.statuspal.io` host does not GET the HTML page (the host already names the subdomain). First-probe GETs: 4 before, 3 after (second after run 3).

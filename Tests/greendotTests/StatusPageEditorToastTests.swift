@@ -27,6 +27,18 @@ final class StatusPageEditorToastTests: XCTestCase {
     }
     """
 
+    private let redAndYellowJSON = """
+    {
+      "page": {"name": "GitHub", "url": "https://www.githubstatus.com"},
+      "status": {"indicator": "major"},
+      "components": [
+        {"name": "API", "status": "major_outage", "group": false},
+        {"name": "Web", "status": "degraded_performance", "group": false}
+      ],
+      "incidents": []
+    }
+    """
+
     func testSuccessfulComponentToggleClearsToast() async throws {
         let seed = try await seededEditorMonitor()
         defer { try? FileManager.default.removeItem(at: seed.directory) }
@@ -75,12 +87,14 @@ final class StatusPageEditorToastTests: XCTestCase {
         let seed = try await seededEditorMonitor(json: twoComponentJSON)
         defer { try? FileManager.default.removeItem(at: seed.directory) }
         var cleared: [UUID] = []
+        var refreshed: [UUID] = []
         let editor = StatusPageEditor(
             monitor: seed.monitor,
             editingPageID: seed.pageID,
             onChange: {},
             presentError: { error in XCTFail("unexpected error: \(error)") },
-            clearToast: { cleared.append($0) }
+            clearToast: { cleared.append($0) },
+            refreshToast: { refreshed.append($0) }
         )
         editor.show()
         defer { editor.close() }
@@ -88,7 +102,31 @@ final class StatusPageEditorToastTests: XCTestCase {
         try XCTUnwrap(Self.button("component-Web", in: Self.panelView())).performClick(nil)
 
         XCTAssertTrue(cleared.isEmpty)
+        XCTAssertTrue(refreshed.isEmpty)
         XCTAssertEqual(seed.monitor.pages[0].displaySeverity, .red)
+    }
+
+    func testRedToYellowFilterChangeRefreshesToast() async throws {
+        let seed = try await seededEditorMonitor(json: redAndYellowJSON)
+        defer { try? FileManager.default.removeItem(at: seed.directory) }
+        var cleared: [UUID] = []
+        var refreshed: [UUID] = []
+        let editor = StatusPageEditor(
+            monitor: seed.monitor,
+            editingPageID: seed.pageID,
+            onChange: {},
+            presentError: { error in XCTFail("unexpected error: \(error)") },
+            clearToast: { cleared.append($0) },
+            refreshToast: { refreshed.append($0) }
+        )
+        editor.show()
+        defer { editor.close() }
+
+        try XCTUnwrap(Self.button("component-API", in: Self.panelView())).performClick(nil)
+
+        XCTAssertTrue(cleared.isEmpty)
+        XCTAssertEqual(refreshed, [seed.pageID])
+        XCTAssertEqual(seed.monitor.pages[0].displaySeverity, .yellow)
     }
 
     func testFailedComponentToggleDoesNotClearToast() async throws {
