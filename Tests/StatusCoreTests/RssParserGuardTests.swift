@@ -96,6 +96,26 @@ final class RssParserGuardTests: XCTestCase {
         XCTAssertEqual(snap.name, "Secret Feed")
     }
 
+    func testProbeReadsNoBOMUTF16RSSFeedWithEncodingDeclaration() async throws {
+        let xml = """
+        <?xml version="1.0" encoding="utf-16"?>
+        <rss version="2.0"><channel><title>Secret Feed</title>
+        <item><guid>item-1</guid><title>API</title><status>Available</status></item>
+        </channel></rss>
+        """
+        var data = Data()
+        for unit in xml.utf16 {
+            data.append(UInt8(unit & 0xFF))
+            data.append(UInt8(unit >> 8))
+        }
+        var client = MapHTTPClient()
+        let page = URL(string: "https://status.example.com/feed.xml")!
+        client.byURL[page.absoluteString] = (data, 200)
+        let snap = try await ProviderProbe.probe(pageURL: page, client: client)
+        XCTAssertEqual(snap.provider, .rss)
+        XCTAssertEqual(snap.name, "Secret Feed")
+    }
+
     func testLooksLikeFeedSurvivesTruncatedUTF8Prefix() {
         var data = Data("<rss version=\"2.0\"><channel></channel></rss>".utf8)
         data.append(contentsOf: [UInt8](repeating: 0x20, count: max(0, 1023 - data.count)))

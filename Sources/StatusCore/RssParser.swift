@@ -4,7 +4,14 @@ public enum RssParser {
     public static func parse(data: Data, sourceURL: URL) throws -> PageSnapshot {
         let document: XMLDocument
         do {
-            document = try XMLDocument(data: xmlData(data), options: [.nodeLoadExternalEntitiesNever])
+            if let text = utf16XMLString(data) {
+                document = try XMLDocument(
+                    xmlString: utf8XMLDeclaration(text),
+                    options: [.nodeLoadExternalEntitiesNever]
+                )
+            } else {
+                document = try XMLDocument(data: data, options: [.nodeLoadExternalEntitiesNever])
+            }
         } catch {
             throw ParserError.notThisProvider
         }
@@ -30,8 +37,8 @@ public enum RssParser {
     private static let rssNamespace = ""
     private static let atomNamespace = "http://www.w3.org/2005/Atom"
 
-    private static func xmlData(_ data: Data) -> Data {
-        guard data.count >= 2 else { return data }
+    private static func utf16XMLString(_ data: Data) -> String? {
+        guard data.count >= 2 else { return nil }
         let bytes = [UInt8](data.prefix(2))
         let encoding: String.Encoding
         if bytes[0] == 0, bytes[1] == 0x3C {
@@ -39,13 +46,20 @@ public enum RssParser {
         } else if bytes[0] == 0x3C, bytes[1] == 0 {
             encoding = .utf16LittleEndian
         } else {
-            return data
+            return nil
         }
-        guard let text = String(data: data, encoding: encoding),
-              let utf8 = text.data(using: .utf8) else {
-            return data
-        }
-        return utf8
+        return String(data: data, encoding: encoding)
+    }
+
+    private static func utf8XMLDeclaration(_ text: String) -> String {
+        guard let end = text.range(of: "?>") else { return text }
+        let declaration = text[..<end.upperBound]
+        let rewritten = declaration.replacingOccurrences(
+            of: #"encoding\s*=\s*["']utf-16(?:le|be)?["']"#,
+            with: "encoding=\"utf-8\"",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        return rewritten + text[end.upperBound...]
     }
 
     private static func parseRSS(_ root: XMLElement, sourceURL: URL) throws -> PageSnapshot {

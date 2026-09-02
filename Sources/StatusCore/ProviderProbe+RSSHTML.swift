@@ -5,12 +5,23 @@ extension ProviderProbe {
         var tags: [Substring] = []
         var index = html.startIndex
         while index < html.endIndex {
-            guard let start = linkTagStart(html, from: index) else { break }
-            if let end = quotedTagEnd(html, from: start) {
-                tags.append(html[start...end])
+            guard html[index] == "<" else {
+                index = html.index(after: index)
+                continue
+            }
+            if isLinkKeyword(html, from: index) {
+                if let end = quotedTagEnd(html, from: index) {
+                    tags.append(html[index...end])
+                    index = html.index(after: end)
+                } else {
+                    index = html.index(after: index)
+                }
+                continue
+            }
+            if let end = quotedTagEnd(html, from: index) {
                 index = html.index(after: end)
             } else {
-                index = html.index(after: start)
+                index = html.index(after: index)
             }
         }
         return tags
@@ -60,17 +71,6 @@ extension ProviderProbe {
             current = next
         }
         return current
-    }
-
-    static func linkTagStart(_ html: String, from: String.Index) -> String.Index? {
-        var index = from
-        while index < html.endIndex {
-            if html[index] == "<", isLinkKeyword(html, from: index) {
-                return index
-            }
-            index = html.index(after: index)
-        }
-        return nil
     }
 
     static func isLinkKeyword(_ html: String, from: String.Index) -> Bool {

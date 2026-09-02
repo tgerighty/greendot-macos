@@ -92,6 +92,29 @@ final class RssHtmlDiscoveryTests: XCTestCase {
         )
     }
 
+    func testProbeSkipsAlternateLinkInsideIframeSrcdoc() async throws {
+        let html = """
+        <html><head>
+        <iframe srcdoc="<link rel='alternate' type='application/rss+xml' href='/old.xml'>">
+        </iframe>
+        <link rel="alternate" type="application/rss+xml" href="/feed.xml">
+        </head></html>
+        """
+        var inner = MapHTTPClient()
+        inner.byURL["https://status.example.com"] = (Data(html.utf8), 200)
+        inner.byURL["https://status.example.com/feed.xml"] = (Data(feed.utf8), 200)
+        inner.byURL["https://status.example.com/old.xml"] = (Data("<html>old</html>".utf8), 200)
+        let recording = RecordingHTTPClient(inner)
+        let snap = try await ProviderProbe.probe(
+            pageURL: URL(string: "https://status.example.com")!,
+            client: recording
+        )
+        XCTAssertEqual(snap.provider, .rss)
+        XCTAssertFalse(
+            recording.requested.map(\.absoluteString).contains("https://status.example.com/old.xml")
+        )
+    }
+
     func testProbeSkipsUnclosedQuotedLinkAndFindsLaterAlternate() async throws {
         let html = """
         <html><head>
