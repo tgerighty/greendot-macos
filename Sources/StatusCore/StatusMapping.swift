@@ -46,6 +46,39 @@ enum StatusMapping {
         }
     }
 
+    static func rss(_ raw: String?) -> Severity {
+        guard let raw, !raw.isEmpty else { return .green }
+        switch raw.lowercased() {
+        case "available", "operational", "up", "none", "resolved":
+            return .green
+        case "servicedegradation", "degraded", "degraded_performance", "partial_outage",
+             "maintenance", "undermaintenance", "minor":
+            return .yellow
+        case "serviceinterruption", "full_outage", "major_outage", "majoroutage",
+             "critical", "major", "down", "outage":
+            return .red
+        default:
+            return .yellow
+        }
+    }
+
+    static func rssText(_ raw: String?) -> String {
+        guard let raw, !raw.isEmpty else { return "Operational" }
+        switch raw.lowercased() {
+        case "available", "operational", "up", "none", "resolved":
+            return "Operational"
+        case "servicedegradation", "degraded", "degraded_performance", "partial_outage":
+            return "Degraded"
+        case "maintenance", "undermaintenance":
+            return "Maintenance"
+        case "serviceinterruption", "full_outage", "major_outage", "majoroutage",
+             "critical", "major", "down", "outage":
+            return "Major outage"
+        default:
+            return raw
+        }
+    }
+
     static func instatusPage(_ status: String, incidentImpacts: [String]) -> Severity {
         switch status.uppercased() {
         case "UP": return .green

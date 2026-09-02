@@ -14,7 +14,7 @@ On first launch it adds [OpenAI Status](https://status.openai.com/) so you can s
 - Optional per-page notifications when overall status changes, including recovery.
 - Launch at login is on by default.
 
-v1 parsers: Atlassian Statuspage, Statuspal, Instatus, Flashduty. HTML scrape is next.
+v1 parsers: Atlassian Statuspage, Statuspal, Instatus, Flashduty, RSS 2.0, and Atom. HTML scrape of status (not feed discovery) is next.
 
 ## Build
 

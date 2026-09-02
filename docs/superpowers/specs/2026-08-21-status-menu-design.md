@@ -21,7 +21,7 @@ These decisions are settled. Do not re-open them in v1.
 | Auth | Reachable URL only (VPN/LAN). No token, basic auth, or SSO in v1. |
 | Stack | Native Swift. AppKit `NSStatusItem`. Testable core with no AppKit. |
 | Menu | Bar icon = worst real status. Top level = one row per page. Submenu = components, like the ChatGPT status screenshot. |
-| Providers | Atlassian Statuspage, Statuspal, Instatus, Flashduty. HTML scrape is the next slice, not v1. |
+| Providers | Atlassian Statuspage, Statuspal, Instatus, Flashduty, RSS 2.0 / Atom. See [2026-09-02-rss-feeds-design.md](2026-09-02-rss-feeds-design.md). HTML scrape of status is still out of v1. |
 | Notifications | Per-page toggle. Default on. Toast when that page's overall colour changes, including recovery. |
 | Chrome | Menu bar only. No Dock. No settings window. Launch-at-login default on. About greendot opens the native About panel. Copyright © 2026 Terry Gerighty. All rights reserved. The build number is the short GitHub commit hash. |
 | Poll | 60 seconds, global. |
@@ -31,7 +31,7 @@ These decisions are settled. Do not re-open them in v1.
 | Add | Menu item opens a small panel. Paste the human status URL. The app probes JSON endpoints. |
 | Edit | Submenu item opens the same panel with URL and name filled. |
 | Click | Page row, component row, or Open Status Page opens the page URL in the default browser. |
-| Out of v1 | HTML scraper, tokens/SSO, iCloud, App Store/Homebrew, widgets, graphs, per-page poll, component toasts, Dock, settings window. |
+| Out of v1 | HTML scraper of status, tokens/SSO, iCloud, App Store/Homebrew, widgets, graphs, per-page poll, component toasts, Dock, settings window. |
 
 ## Approaches
 
@@ -71,6 +71,7 @@ Probe order:
 2. `{base}/summary.json` — Instatus if the JSON has `page.status`.
 3. `{base}/api/widget/v1/summary.json` — Flashduty if the JSON has `schema_version` and `overall.status`.
 4. Statuspal JSON: `{statuspal-host}/api/v2/status_pages/{subdomain}/summary`. Subdomain comes from `*.statuspal.io` / `*.statuspal.eu`, or from the HTML of `{base}` if it names Statuspal.
+5. RSS 2.0 / Atom. See [2026-09-02-rss-feeds-design.md](2026-09-02-rss-feeds-design.md).
 
 If none match, the add panel shows an error. It does not scrape HTML for status in v1.
 
