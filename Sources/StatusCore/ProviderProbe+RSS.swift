@@ -63,7 +63,7 @@ extension ProviderProbe {
             guard let tagRange = Range(match.range, in: html) else { continue }
             let tag = html[tagRange]
             let rel = linkAttribute(tag, "rel")?.lowercased() ?? ""
-            guard rel.contains("alternate") else { continue }
+            guard relationTokens(rel).contains("alternate") else { continue }
             let type = linkAttribute(tag, "type")?.lowercased() ?? ""
             guard type.contains("rss+xml") || type.contains("atom+xml") else { continue }
             guard let href = linkAttribute(tag, "href"), !href.isEmpty else { continue }
@@ -88,6 +88,10 @@ extension ProviderProbe {
     static func isAllowedFeedURL(_ url: URL, relativeTo base: URL) -> Bool {
         RedirectPolicy.allows(URLRequest(url: url), from: base)
     }
+
+    static func relationTokens(_ rel: String) -> [String] {
+        rel.split { $0.isWhitespace || $0 == "," }.map(String.init)
+    }
 }
 
 private struct RSSHubFeed {
@@ -108,7 +112,10 @@ private extension ProviderProbe {
     static let htmlIgnoredMarkupRegex: NSRegularExpression? = {
         recordRegex()
         return try? NSRegularExpression(
-            pattern: "<!--.*?-->|<script\\b[^>]*>.*?</script\\s*>|<style\\b[^>]*>.*?</style\\s*>",
+            pattern: "<!--.*?-->"
+                + "|<script\\b[^>]*>.*?</script\\s*>"
+                + "|<style\\b[^>]*>.*?</style\\s*>"
+                + "|<template\\b[^>]*>.*?</template\\s*>",
             options: [.caseInsensitive, .dotMatchesLineSeparators]
         )
     }()
