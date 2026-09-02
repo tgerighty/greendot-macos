@@ -17,7 +17,7 @@ extension ProviderProbe {
                 return feedHit(data, sourceURL: context.pageURL, context: context)
             }
             guard let html = String(data: data, encoding: .utf8),
-                  let feedURL = extractAlternateFeedURL(from: html, base: context.base) else {
+                  let feedURL = extractAlternateFeedURL(from: html, base: context.pageURL) else {
                 return nil
             }
             return try await fetchFeed(feedURL, context: context, flags: &flags)

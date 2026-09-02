@@ -254,7 +254,7 @@ final class RssProbeTests: XCTestCase {
         try await monitor.add(url: URL(string: "https://status.cloud.microsoft/")!, name: nil)
         XCTAssertEqual(monitor.pages.count, 1)
         XCTAssertEqual(monitor.pages[0].name, "Microsoft")
-        XCTAssertEqual(monitor.pages[0].url, URL(string: "https://status.cloud.microsoft")!)
+        XCTAssertEqual(monitor.pages[0].url, URL(string: "https://status.cloud.microsoft/")!)
         XCTAssertEqual(monitor.pages[0].snapshot?.components.count, 3)
     }
 }

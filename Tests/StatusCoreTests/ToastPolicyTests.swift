@@ -2,13 +2,16 @@ import XCTest
 @testable import StatusCore
 
 final class ToastPolicyTests: XCTestCase {
+    private let githubID = UUID()
+
     func testNoToastOnFirstFetch() {
         let current = snap(.red)
         XCTAssertNil(ToastPolicy.toast(
             previous: nil,
             current: current,
             notificationsEnabled: true,
-            pageName: "GitHub"
+            pageName: "GitHub",
+            pageID: githubID
         ))
     }
 
@@ -17,7 +20,8 @@ final class ToastPolicyTests: XCTestCase {
             previous: snap(.green),
             current: snap(.red),
             notificationsEnabled: false,
-            pageName: "GitHub"
+            pageName: "GitHub",
+            pageID: githubID
         ))
     }
 
@@ -26,8 +30,10 @@ final class ToastPolicyTests: XCTestCase {
             previous: snap(.green),
             current: snap(.red),
             notificationsEnabled: true,
-            pageName: "GitHub"
+            pageName: "GitHub",
+            pageID: githubID
         )
+        XCTAssertEqual(toast?.pageID, githubID)
         XCTAssertEqual(toast?.pageName, "GitHub")
         XCTAssertEqual(toast?.body, "Major outage")
         XCTAssertEqual(toast?.severity, .red)
@@ -38,8 +44,10 @@ final class ToastPolicyTests: XCTestCase {
             previous: snap(.red),
             current: snap(.green),
             notificationsEnabled: true,
-            pageName: "GitHub"
+            pageName: "GitHub",
+            pageID: githubID
         )
+        XCTAssertEqual(toast?.pageID, githubID)
         XCTAssertEqual(toast?.body, "Operational")
     }
 
@@ -48,15 +56,21 @@ final class ToastPolicyTests: XCTestCase {
             previous: snap(.yellow),
             current: snap(.yellow),
             notificationsEnabled: true,
-            pageName: "GitHub"
+            pageName: "GitHub",
+            pageID: githubID
         ))
     }
 
     func testOnlyGreenToastsAutoDismiss() {
-        XCTAssertEqual(Toast(pageName: "GitHub", body: "Operational", severity: .green).autoDismissSeconds, 6)
+        XCTAssertEqual(
+            Toast(pageID: githubID, pageName: "GitHub", body: "Operational", severity: .green)
+                .autoDismissSeconds,
+            6
+        )
         for severity in [Severity.red, .yellow, .grey] {
             XCTAssertNil(
-                Toast(pageName: "GitHub", body: "Degraded", severity: severity).autoDismissSeconds,
+                Toast(pageID: githubID, pageName: "GitHub", body: "Degraded", severity: severity)
+                    .autoDismissSeconds,
                 "\(severity.rawValue) toast must wait for a click"
             )
         }

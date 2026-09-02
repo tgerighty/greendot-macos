@@ -90,6 +90,16 @@ public enum ProviderProbe {
         return parts.url ?? url
     }
 
+    /// URL stored on a watched page. Keeps query and path, including a trailing slash.
+    public static func persistedPageURL(_ url: URL) -> URL {
+        var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) ?? URLComponents()
+        if parts.scheme == nil {
+            parts.scheme = "https"
+        }
+        parts.fragment = nil
+        return parts.url ?? url
+    }
+
     enum AttemptResult {
         case hit(ProbeHit)
         case miss

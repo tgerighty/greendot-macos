@@ -6,6 +6,8 @@ import XCTest
 
 @MainActor
 final class SystemToastDeliveryTests: XCTestCase {
+    private let githubID = UUID()
+
     func testStartRequestsPermissionThenClearsOnlyStaleAutoDismissToasts() {
         let notifications = RecordingUserNotificationCenter()
         notifications.deliveredRequests = [
@@ -44,9 +46,9 @@ final class SystemToastDeliveryTests: XCTestCase {
             persistent: persistent
         )
 
-        delivery.deliver(Toast(pageName: "GitHub", body: "Operational", severity: .green))
-        delivery.deliver(Toast(pageName: "GitHub", body: "Major outage", severity: .red))
-        delivery.deliver(Toast(pageName: "GitHub", body: "Degraded", severity: .yellow))
+        delivery.deliver(toast(body: "Operational", severity: .green))
+        delivery.deliver(toast(body: "Major outage", severity: .red))
+        delivery.deliver(toast(body: "Degraded", severity: .yellow))
 
         XCTAssertEqual(notifications.addedRequests.map(\.identifier), ["green-id"])
         let green = try XCTUnwrap(notifications.addedRequests.first)
@@ -68,8 +70,8 @@ final class SystemToastDeliveryTests: XCTestCase {
     func testToastAttachmentColourMatchesIssueColour() {
         _ = NSApplication.shared
         for severity in [Severity.red, .yellow, .green, .grey] {
-            let toast = Toast(pageName: "GitHub", body: "Major outage", severity: severity)
-            let content = SystemToastDelivery.content(for: toast)
+            let payload = toast(body: "Major outage", severity: severity)
+            let content = SystemToastDelivery.content(for: payload)
             XCTAssertEqual(content.title, "GitHub")
             XCTAssertEqual(content.body, "Major outage")
             guard let png = Self.attachmentPNG(content),
@@ -88,7 +90,7 @@ final class SystemToastDeliveryTests: XCTestCase {
     func testPersistentPanelStaysUntilClicked() {
         _ = NSApplication.shared
         let presenter = PanelPersistentToastPresenter(playSound: {})
-        presenter.present(Toast(pageName: "GitHub", body: "Major outage", severity: .red))
+        presenter.present(toast(body: "Major outage", severity: .red))
         XCTAssertEqual(presenter.visibleCount, 1)
         let card = presenter.windows.first?.contentView as? NSView
         XCTAssertEqual(card?.accessibilityIdentifier(), "persistent-toast-card")
@@ -96,7 +98,7 @@ final class SystemToastDeliveryTests: XCTestCase {
         XCTAssertTrue(hit === card, "text and icon clicks must hit the card")
         card?.mouseDown(with: NSEvent())
         XCTAssertEqual(presenter.visibleCount, 0)
-        presenter.present(Toast(pageName: "GitHub", body: "Major outage", severity: .red))
+        presenter.present(toast(body: "Major outage", severity: .red))
         XCTAssertEqual(presenter.visibleCount, 1)
         XCTAssertTrue(presenter.windows.first?.contentView?.accessibilityPerformPress() == true)
         XCTAssertEqual(presenter.visibleCount, 0)
@@ -105,24 +107,38 @@ final class SystemToastDeliveryTests: XCTestCase {
     func testPersistentPanelReplacesSamePageAndCapsStack() {
         _ = NSApplication.shared
         let presenter = PanelPersistentToastPresenter(playSound: {})
-        presenter.present(Toast(pageName: "GitHub", body: "Major outage", severity: .red))
-        presenter.present(Toast(pageName: "GitHub", body: "Degraded", severity: .yellow))
+        presenter.present(toast(body: "Major outage", severity: .red))
+        presenter.present(toast(body: "Degraded", severity: .yellow))
         XCTAssertEqual(presenter.visibleCount, 1)
         for index in 1...10 {
-            presenter.present(Toast(pageName: "Page \(index)", body: "Degraded", severity: .yellow))
+            presenter.present(
+                toast(pageID: UUID(), pageName: "Page \(index)", body: "Degraded", severity: .yellow)
+            )
         }
         XCTAssertEqual(presenter.visibleCount, 8)
+    }
+
+    func testPersistentPanelKeepsDistinctPagesThatShareAName() {
+        _ = NSApplication.shared
+        let presenter = PanelPersistentToastPresenter(playSound: {})
+        presenter.present(
+            toast(pageID: UUID(), pageName: "GitHub", body: "Major outage", severity: .red)
+        )
+        presenter.present(
+            toast(pageID: UUID(), pageName: "GitHub", body: "Degraded", severity: .yellow)
+        )
+        XCTAssertEqual(presenter.visibleCount, 2)
     }
 
     func testOnlyAutoDismissToastsCarryTheClearOnLaunchCategory() {
         _ = NSApplication.shared
         let green = SystemToastDelivery.content(
-            for: Toast(pageName: "GitHub", body: "Operational", severity: .green)
+            for: toast(body: "Operational", severity: .green)
         )
         XCTAssertEqual(green.categoryIdentifier, SystemToastDelivery.autoDismissCategory)
         for severity in [Severity.red, .yellow, .grey] {
             let content = SystemToastDelivery.content(
-                for: Toast(pageName: "GitHub", body: "Degraded", severity: severity)
+                for: toast(body: "Degraded", severity: severity)
             )
             XCTAssertEqual(
                 content.categoryIdentifier,
@@ -162,6 +178,20 @@ final class SystemToastDeliveryTests: XCTestCase {
         let green = left.greenComponent - right.greenComponent
         let blue = left.blueComponent - right.blueComponent
         return red * red + green * green + blue * blue
+    }
+
+    private func toast(
+        pageID: UUID? = nil,
+        pageName: String = "GitHub",
+        body: String,
+        severity: Severity
+    ) -> Toast {
+        Toast(
+            pageID: pageID ?? githubID,
+            pageName: pageName,
+            body: body,
+            severity: severity
+        )
     }
 
     private static func request(identifier: String, category: String) -> UNNotificationRequest {

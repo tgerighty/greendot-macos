@@ -34,7 +34,7 @@ extension Monitor {
         let snapshot = try await ProviderProbe.probe(pageURL: url, client: client)
         try Task.checkCancellation()
         let page = WatchedPage(
-            url: ProviderProbe.normalizedBase(url),
+            url: ProviderProbe.persistedPageURL(url),
             name: trimmed(name) ?? snapshot.name,
             notificationsEnabled: true,
             snapshot: snapshot
@@ -56,7 +56,7 @@ extension Monitor {
             guard let index = next.pages.firstIndex(where: { $0.id == id }) else {
                 throw MonitorError.pageNotFound(id)
             }
-            next.pages[index].url = ProviderProbe.normalizedBase(url)
+            next.pages[index].url = ProviderProbe.persistedPageURL(url)
             next.pages[index].name = trimmed(name) ?? snapshot.name
             next.pages[index].snapshot = snapshot
             try Task.checkCancellation()

@@ -18,12 +18,12 @@ final class PanelPersistentToastPresenter: PersistentToastPresenter {
     }
 
     func present(_ toast: Toast) {
-        items.filter { $0.pageName == toast.pageName }.forEach { dismiss($0.window) }
+        items.filter { $0.pageID == toast.pageID }.forEach { dismiss($0.window) }
         while items.count >= maxVisiblePanels() {
             dismiss(items[0].window)
         }
         let window = makeWindow(for: toast)
-        items.append(Item(window: window, pageName: toast.pageName))
+        items.append(Item(window: window, pageID: toast.pageID))
         layoutWindows()
         window.orderFrontRegardless()
         playSound()
@@ -40,7 +40,7 @@ final class PanelPersistentToastPresenter: PersistentToastPresenter {
 
 private struct Item {
     let window: NSWindow
-    let pageName: String
+    let pageID: UUID
 }
 
 private enum PersistentToastLayout {
