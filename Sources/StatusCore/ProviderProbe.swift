@@ -92,10 +92,11 @@ public enum ProviderProbe {
 
     /// URL stored on a watched page. Keeps query and path, including a trailing slash.
     public static func persistedPageURL(_ url: URL) -> URL {
-        var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) ?? URLComponents()
-        if parts.scheme == nil {
-            parts.scheme = "https"
+        var text = url.absoluteString
+        if URLComponents(url: url, resolvingAgainstBaseURL: false)?.scheme == nil {
+            text = "https://" + text
         }
+        var parts = URLComponents(string: text) ?? URLComponents()
         parts.fragment = nil
         return parts.url ?? url
     }

@@ -47,6 +47,39 @@ final class RssPersistTests: XCTestCase {
         XCTAssertEqual(monitor.pages[0].url, edited)
     }
 
+    func testPersistedPageURLAddsHTTPSAuthorityForSchemeLessInput() {
+        let input = URL(string: "status.example.com/feed.xml?token=x#section")!
+        XCTAssertEqual(
+            ProviderProbe.persistedPageURL(input).absoluteString,
+            "https://status.example.com/feed.xml?token=x"
+        )
+    }
+
+    func testProbeIgnoresDataHrefAndReadsUnquotedHref() async throws {
+        let html = """
+        <html><head>
+        <link rel="alternate" type="application/rss+xml" data-href="/wrong.xml">
+        <link rel=alternate type=application/rss+xml href=/feed.xml>
+        </head></html>
+        """
+        var inner = MapHTTPClient()
+        inner.byURL["https://status.example.com"] = (Data(html.utf8), 200)
+        inner.byURL["https://status.example.com/feed.xml"] = (Data(feed.utf8), 200)
+        inner.byURL["https://status.example.com/wrong.xml"] = (Data("<html>wrong</html>".utf8), 200)
+        let recording = RecordingHTTPClient(inner)
+        let snap = try await ProviderProbe.probe(
+            pageURL: URL(string: "https://status.example.com")!,
+            client: recording
+        )
+        XCTAssertEqual(snap.provider, .rss)
+        XCTAssertTrue(
+            recording.requested.map(\.absoluteString).contains("https://status.example.com/feed.xml")
+        )
+        XCTAssertFalse(
+            recording.requested.map(\.absoluteString).contains("https://status.example.com/wrong.xml")
+        )
+    }
+
     func testProbeDecodesHTMLEntitiesInAlternateHref() async throws {
         let html = """
         <html><head>

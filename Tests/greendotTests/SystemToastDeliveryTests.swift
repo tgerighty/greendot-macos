@@ -7,6 +7,9 @@ import XCTest
 @MainActor
 final class SystemToastDeliveryTests: XCTestCase {
     private let githubID = UUID()
+    private static let silentSound: () -> Void = {
+        // Tests do not play a sound.
+    }
 
     func testStartRequestsPermissionThenClearsOnlyStaleAutoDismissToasts() {
         let notifications = RecordingUserNotificationCenter()
@@ -89,7 +92,7 @@ final class SystemToastDeliveryTests: XCTestCase {
 
     func testPersistentPanelStaysUntilClicked() {
         _ = NSApplication.shared
-        let presenter = PanelPersistentToastPresenter(playSound: {})
+        let presenter = PanelPersistentToastPresenter(playSound: Self.silentSound)
         presenter.present(toast(body: "Major outage", severity: .red))
         XCTAssertEqual(presenter.visibleCount, 1)
         let card = presenter.windows.first?.contentView as? NSView
@@ -106,7 +109,7 @@ final class SystemToastDeliveryTests: XCTestCase {
 
     func testPersistentPanelReplacesSamePageAndCapsStack() {
         _ = NSApplication.shared
-        let presenter = PanelPersistentToastPresenter(playSound: {})
+        let presenter = PanelPersistentToastPresenter(playSound: Self.silentSound)
         presenter.present(toast(body: "Major outage", severity: .red))
         presenter.present(toast(body: "Degraded", severity: .yellow))
         XCTAssertEqual(presenter.visibleCount, 1)
@@ -120,7 +123,7 @@ final class SystemToastDeliveryTests: XCTestCase {
 
     func testPersistentPanelQueuesOverflowUntilASlotFrees() {
         _ = NSApplication.shared
-        let presenter = PanelPersistentToastPresenter(playSound: {})
+        let presenter = PanelPersistentToastPresenter(playSound: Self.silentSound)
         for index in 1...8 {
             presenter.present(
                 toast(pageID: UUID(), pageName: "Page \(index)", body: "Degraded", severity: .yellow)
@@ -137,7 +140,7 @@ final class SystemToastDeliveryTests: XCTestCase {
 
     func testPersistentPanelKeepsDistinctPagesThatShareAName() {
         _ = NSApplication.shared
-        let presenter = PanelPersistentToastPresenter(playSound: {})
+        let presenter = PanelPersistentToastPresenter(playSound: Self.silentSound)
         presenter.present(
             toast(pageID: UUID(), pageName: "GitHub", body: "Major outage", severity: .red)
         )

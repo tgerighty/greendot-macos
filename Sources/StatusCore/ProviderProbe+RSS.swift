@@ -248,7 +248,7 @@ private extension ProviderProbe {
         var compiled: [String: NSRegularExpression] = [:]
         for name in ["rel", "type", "href"] {
             if let regex = try? NSRegularExpression(
-                pattern: name + "\\s*=\\s*[\"']([^\"']+)[\"']",
+                pattern: "(?:^|\\s)" + name + "\\s*=\\s*(?:\"([^\"]+)\"|'([^']+)'|([^\\s>]+))",
                 options: [.caseInsensitive]
             ) {
                 compiled[name] = regex
@@ -261,10 +261,13 @@ private extension ProviderProbe {
         guard let regex = attributeRegexByName[name] else { return nil }
         let text = String(tag)
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        guard let match = regex.firstMatch(in: text, range: range),
-              let inner = Range(match.range(at: 1), in: text) else {
-            return nil
+        guard let match = regex.firstMatch(in: text, range: range) else { return nil }
+        for index in 1...3 {
+            let captured = match.range(at: index)
+            if captured.location != NSNotFound, let inner = Range(captured, in: text) {
+                return String(text[inner])
+            }
         }
-        return String(text[inner])
+        return nil
     }
 }
