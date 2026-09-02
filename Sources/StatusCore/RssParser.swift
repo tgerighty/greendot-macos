@@ -15,6 +15,9 @@ public enum RssParser {
         case "rss":
             return try parseRSS(root, sourceURL: sourceURL)
         case "feed":
+            guard root.uri == "http://www.w3.org/2005/Atom" else {
+                throw ParserError.notThisProvider
+            }
             return try parseAtom(root, sourceURL: sourceURL)
         default:
             throw ParserError.notThisProvider
@@ -70,8 +73,12 @@ public enum RssParser {
     }
 
     private static func missingSeverity(for url: URL) -> Severity {
-        let host = url.host?.lowercased() ?? ""
-        return host.contains("azure.status.microsoft") ? .yellow : .green
+        isAzureStatusHost(url.host) ? .yellow : .green
+    }
+
+    private static func isAzureStatusHost(_ host: String?) -> Bool {
+        guard let host = host?.lowercased() else { return false }
+        return host == "azure.status.microsoft" || host.hasSuffix(".azure.status.microsoft")
     }
 
     private static func component(fromRSSItem item: XMLElement, missing: Severity) -> ComponentStatus? {
