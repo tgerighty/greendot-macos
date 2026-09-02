@@ -64,8 +64,8 @@ extension ProviderProbe {
             let tag = html[tagRange]
             let rel = linkAttribute(tag, "rel")?.lowercased() ?? ""
             guard relationTokens(rel).contains("alternate") else { continue }
-            let type = linkAttribute(tag, "type")?.lowercased() ?? ""
-            guard type.contains("rss+xml") || type.contains("atom+xml") else { continue }
+            let type = linkAttribute(tag, "type") ?? ""
+            guard isFeedLinkType(type) else { continue }
             guard let href = linkAttribute(tag, "href"), !href.isEmpty else { continue }
             let decoded = decodeHTMLEntities(href)
             if let url = URL(string: decoded, relativeTo: base)?.absoluteURL,
@@ -91,6 +91,14 @@ extension ProviderProbe {
 
     static func relationTokens(_ rel: String) -> [String] {
         rel.split { $0.isWhitespace || $0 == "," }.map(String.init)
+    }
+
+    static func isFeedLinkType(_ type: String) -> Bool {
+        let essence = type.split(separator: ";", maxSplits: 1)
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+        return essence == "application/rss+xml" || essence == "application/atom+xml"
     }
 }
 

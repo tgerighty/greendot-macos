@@ -12,6 +12,7 @@ protocol UserNotificationCenterClient: AnyObject, Sendable {
         completion: @escaping @Sendable ([UNNotificationRequest]) -> Void
     )
     func removeDeliveredNotifications(withIdentifiers identifiers: [String])
+    func removePendingNotificationRequests(withIdentifiers identifiers: [String])
 }
 
 /// Defers the process-bound system center until delivery starts, with synchronized first access.
@@ -49,6 +50,10 @@ private final class LiveUserNotificationCenterClient: UserNotificationCenterClie
 
     func removeDeliveredNotifications(withIdentifiers identifiers: [String]) {
         center.removeDeliveredNotifications(withIdentifiers: identifiers)
+    }
+
+    func removePendingNotificationRequests(withIdentifiers identifiers: [String]) {
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
     }
 }
 
@@ -131,6 +136,7 @@ final class SystemToastDelivery: ToastDelivery {
     private func cancelAutoDismiss(for pageID: UUID) {
         guard let identifier = pendingAutoDismiss.removeValue(forKey: pageID) else { return }
         notifications.removeDeliveredNotifications(withIdentifiers: [identifier])
+        notifications.removePendingNotificationRequests(withIdentifiers: [identifier])
     }
 
     @MainActor

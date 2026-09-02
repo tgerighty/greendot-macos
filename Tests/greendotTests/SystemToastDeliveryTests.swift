@@ -62,6 +62,7 @@ final class SystemToastDeliveryTests: XCTestCase {
         XCTAssertEqual(green.content.categoryIdentifier, SystemToastDelivery.autoDismissCategory)
         XCTAssertEqual(scheduledDelays, [6])
         XCTAssertEqual(notifications.removedIdentifiers, [["green-id"]])
+        XCTAssertEqual(notifications.removedPendingIdentifiers, [["green-id"]])
         XCTAssertEqual(persistent.presented.map(\.severity), [.red, .yellow])
         XCTAssertEqual(persistent.presented.map(\.body), ["Major outage", "Degraded"])
 
@@ -294,6 +295,7 @@ private final class RecordingUserNotificationCenter: UserNotificationCenterClien
     var addedRequests: [UNNotificationRequest] = []
     var deliveredRequests: [UNNotificationRequest] = []
     var removedIdentifiers: [[String]] = []
+    var removedPendingIdentifiers: [[String]] = []
 
     func requestAuthorization(
         options: UNAuthorizationOptions,
@@ -319,5 +321,10 @@ private final class RecordingUserNotificationCenter: UserNotificationCenterClien
     func removeDeliveredNotifications(withIdentifiers identifiers: [String]) {
         calls.append("remove")
         removedIdentifiers.append(identifiers)
+    }
+
+    func removePendingNotificationRequests(withIdentifiers identifiers: [String]) {
+        calls.append("removePending")
+        removedPendingIdentifiers.append(identifiers)
     }
 }
