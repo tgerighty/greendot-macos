@@ -64,6 +64,7 @@ final class SystemToastDelivery: ToastDelivery {
     private let notifications: any UserNotificationCenterClient
     private let schedule: ToastScheduler
     private let makeIdentifier: () -> String
+    private var persistent: PersistentToastPresenter?
 
     init() {
         notifications = LiveUserNotificationCenterClient()
@@ -73,16 +74,19 @@ final class SystemToastDelivery: ToastDelivery {
             }
         }
         makeIdentifier = { UUID().uuidString }
+        persistent = nil
     }
 
     init(
         notifications: any UserNotificationCenterClient,
         schedule: @escaping ToastScheduler,
-        makeIdentifier: @escaping () -> String
+        makeIdentifier: @escaping () -> String,
+        persistent: PersistentToastPresenter? = nil
     ) {
         self.notifications = notifications
         self.schedule = schedule
         self.makeIdentifier = makeIdentifier
+        self.persistent = persistent
     }
 
     @MainActor
@@ -93,6 +97,10 @@ final class SystemToastDelivery: ToastDelivery {
 
     @MainActor
     func deliver(_ toast: Toast) {
+        guard let seconds = toast.autoDismissSeconds else {
+            persistentPresenter().present(toast)
+            return
+        }
         let identifier = makeIdentifier()
         let request = UNNotificationRequest(
             identifier: identifier,
@@ -100,11 +108,18 @@ final class SystemToastDelivery: ToastDelivery {
             trigger: nil
         )
         notifications.add(request)
-        guard let seconds = toast.autoDismissSeconds else { return }
         let notifications = notifications
         schedule(seconds) {
             notifications.removeDeliveredNotifications(withIdentifiers: [identifier])
         }
+    }
+
+    @MainActor
+    private func persistentPresenter() -> PersistentToastPresenter {
+        if let persistent { return persistent }
+        let created = PanelPersistentToastPresenter()
+        persistent = created
+        return created
     }
 
     @MainActor

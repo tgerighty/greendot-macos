@@ -30,6 +30,7 @@ final class SystemToastDeliveryTests: XCTestCase {
 
     func testDeliverAddsImmediateRequestsAndOnlySchedulesGreenRemoval() throws {
         let notifications = RecordingUserNotificationCenter()
+        let persistent = RecordingPersistentToastPresenter()
         var scheduledDelays: [TimeInterval] = []
         var scheduledActions: [() -> Void] = []
         var identifiers = ["green-id", "red-id"].makeIterator()
@@ -39,13 +40,15 @@ final class SystemToastDeliveryTests: XCTestCase {
                 scheduledDelays.append(delay)
                 scheduledActions.append(action)
             },
-            makeIdentifier: { identifiers.next() ?? "unexpected-id" }
+            makeIdentifier: { identifiers.next() ?? "unexpected-id" },
+            persistent: persistent
         )
 
         delivery.deliver(Toast(pageName: "GitHub", body: "Operational", severity: .green))
         delivery.deliver(Toast(pageName: "GitHub", body: "Major outage", severity: .red))
+        delivery.deliver(Toast(pageName: "GitHub", body: "Degraded", severity: .yellow))
 
-        XCTAssertEqual(notifications.addedRequests.map(\.identifier), ["green-id", "red-id"])
+        XCTAssertEqual(notifications.addedRequests.map(\.identifier), ["green-id"])
         let green = try XCTUnwrap(notifications.addedRequests.first)
         XCTAssertNil(green.trigger)
         XCTAssertEqual(green.content.title, "GitHub")
@@ -54,6 +57,8 @@ final class SystemToastDeliveryTests: XCTestCase {
         XCTAssertEqual(green.content.categoryIdentifier, SystemToastDelivery.autoDismissCategory)
         XCTAssertEqual(scheduledDelays, [6])
         XCTAssertTrue(notifications.removedIdentifiers.isEmpty)
+        XCTAssertEqual(persistent.presented.map(\.severity), [.red, .yellow])
+        XCTAssertEqual(persistent.presented.map(\.body), ["Major outage", "Degraded"])
 
         try XCTUnwrap(scheduledActions.first)()
 
@@ -78,6 +83,17 @@ final class SystemToastDeliveryTests: XCTestCase {
                 "toast image for \(severity.rawValue) sampled \(sampled)"
             )
         }
+    }
+
+    func testPersistentPanelStaysUntilClicked() {
+        _ = NSApplication.shared
+        let presenter = PanelPersistentToastPresenter(playSound: {})
+        presenter.present(Toast(pageName: "GitHub", body: "Major outage", severity: .red))
+        XCTAssertEqual(presenter.visibleCount, 1)
+        let card = presenter.windows.first?.contentView as? NSView
+        XCTAssertEqual(card?.accessibilityIdentifier(), "persistent-toast-card")
+        card?.mouseDown(with: NSEvent())
+        XCTAssertEqual(presenter.visibleCount, 0)
     }
 
     func testOnlyAutoDismissToastsCarryTheClearOnLaunchCategory() {
@@ -134,6 +150,14 @@ final class SystemToastDeliveryTests: XCTestCase {
         let content = UNMutableNotificationContent()
         content.categoryIdentifier = category
         return UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+    }
+}
+
+private final class RecordingPersistentToastPresenter: PersistentToastPresenter {
+    var presented: [Toast] = []
+
+    func present(_ toast: Toast) {
+        presented.append(toast)
     }
 }
 
