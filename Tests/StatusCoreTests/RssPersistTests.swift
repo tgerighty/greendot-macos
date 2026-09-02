@@ -77,6 +77,33 @@ final class RssPersistTests: XCTestCase {
         )
     }
 
+    func testProbeSkipsAlternateLinksInsideScriptAndStyle() async throws {
+        let html = """
+        <html><head>
+        <script>const html = '<link rel="alternate" type="application/rss+xml" href="/old.xml">';</script>
+        <style>/* <link rel="alternate" type="application/rss+xml" href="/css.xml"> */</style>
+        <link rel="alternate" type="application/rss+xml" href="/feed.xml">
+        </head></html>
+        """
+        var inner = MapHTTPClient()
+        inner.byURL["https://status.example.com"] = (Data(html.utf8), 200)
+        inner.byURL["https://status.example.com/feed.xml"] = (Data(feed.utf8), 200)
+        inner.byURL["https://status.example.com/old.xml"] = (Data("<html>old</html>".utf8), 200)
+        inner.byURL["https://status.example.com/css.xml"] = (Data("<html>css</html>".utf8), 200)
+        let recording = RecordingHTTPClient(inner)
+        let snap = try await ProviderProbe.probe(
+            pageURL: URL(string: "https://status.example.com")!,
+            client: recording
+        )
+        XCTAssertEqual(snap.provider, .rss)
+        XCTAssertFalse(
+            recording.requested.map(\.absoluteString).contains("https://status.example.com/old.xml")
+        )
+        XCTAssertFalse(
+            recording.requested.map(\.absoluteString).contains("https://status.example.com/css.xml")
+        )
+    }
+
     func testProbeIgnoresHrefTextInsideQuotedAttributeValues() async throws {
         let html = """
         <html><head>

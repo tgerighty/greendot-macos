@@ -21,7 +21,7 @@ extension ProviderProbe {
             }
             guard let html = String(data: located.data, encoding: .utf8),
                   let feedURL = extractAlternateFeedURL(
-                    from: htmlWithoutComments(html),
+                    from: htmlWithoutIgnoredMarkup(html),
                     base: located.url
                   ) else {
                 return nil
@@ -90,13 +90,16 @@ private extension ProviderProbe {
         return try? NSRegularExpression(pattern: "<link\\s[^>]*>", options: [.caseInsensitive])
     }()
 
-    static let htmlCommentRegex: NSRegularExpression? = {
+    static let htmlIgnoredMarkupRegex: NSRegularExpression? = {
         recordRegex()
-        return try? NSRegularExpression(pattern: "<!--.*?-->", options: [.dotMatchesLineSeparators])
+        return try? NSRegularExpression(
+            pattern: "<!--.*?-->|<script\\b[^>]*>.*?</script>|<style\\b[^>]*>.*?</style>",
+            options: [.caseInsensitive, .dotMatchesLineSeparators]
+        )
     }()
 
-    static func htmlWithoutComments(_ html: String) -> String {
-        guard let regex = htmlCommentRegex else { return html }
+    static func htmlWithoutIgnoredMarkup(_ html: String) -> String {
+        guard let regex = htmlIgnoredMarkupRegex else { return html }
         let range = NSRange(html.startIndex..<html.endIndex, in: html)
         return regex.stringByReplacingMatches(in: html, options: [], range: range, withTemplate: "")
     }
