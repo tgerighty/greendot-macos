@@ -5,6 +5,7 @@ public enum StatusProvider: String, Codable, Equatable, Sendable {
     case statuspal
     case instatus
     case flashduty
+    case aws
     case rss
 }
 
