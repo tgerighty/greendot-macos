@@ -14,6 +14,17 @@ extension ProviderProbe {
         }
     }
 
+    static func probeAWSIfLanding(
+        context: ProbeContext,
+        flags: inout ProbeFlags
+    ) async throws -> ProbeHit? {
+        guard isAWSLanding(context.base) else { return nil }
+        if let hit = try await probeAWS(context: context, flags: &flags) {
+            return hit
+        }
+        throw flags.finalError
+    }
+
     static func probeAWS(
         context: ProbeContext,
         flags: inout ProbeFlags

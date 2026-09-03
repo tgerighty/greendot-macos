@@ -47,11 +47,8 @@ public enum ProviderProbe {
             previousSnapshot: previousSnapshot
         )
         var flags = ProbeFlags()
-        if isAWSLanding(context.base) {
-            if let hit = try await probeAWS(context: context, flags: &flags) {
-                return hit
-            }
-            throw flags.finalError
+        if let hit = try await probeAWSIfLanding(context: context, flags: &flags) {
+            return hit
         }
         for provider in probeOrder(preferring: prefer) {
             switch provider {

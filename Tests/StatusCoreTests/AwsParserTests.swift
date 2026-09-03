@@ -6,7 +6,25 @@ final class AwsParserTests: XCTestCase {
 
     func testTwoEventsBuildsTreeAndOverallRed() throws {
         let data = Data("""
-        [{"arn":"arn:aws:health:me-central-1::event/A","region_name":"UAE","status":"3","service_name":"Multiple services","summary":"Increased Error Rates","impacted_services":{"s3-me-central-1":{"service_name":"Amazon S3","current":"3"}}},{"arn":"arn:aws:health:me-south-1::event/B","region_name":"Bahrain","status":"1","service_name":"Multiple services","impacted_services":{}}]
+        [
+          {
+            "arn":"arn:aws:health:me-central-1::event/A",
+            "region_name":"UAE",
+            "status":"3",
+            "service_name":"Multiple services",
+            "summary":"Increased Error Rates",
+            "impacted_services":{
+              "s3-me-central-1":{"service_name":"Amazon S3","current":"3"}
+            }
+          },
+          {
+            "arn":"arn:aws:health:me-south-1::event/B",
+            "region_name":"Bahrain",
+            "status":"1",
+            "service_name":"Multiple services",
+            "impacted_services":{}
+          }
+        ]
         """.utf8)
         let snap = try AwsParser.parse(data: data, sourceURL: sourceURL)
         XCTAssertEqual(snap.provider, .aws)
@@ -52,7 +70,13 @@ final class AwsParserTests: XCTestCase {
 
     func testNumericStatusIsRed() throws {
         let data = Data("""
-        [{"arn":"arn:aws:health:us-east-1::event/N","region_name":"N. Virginia","status":3,"service_name":"Amazon EC2","impacted_services":{}}]
+        [{
+          "arn":"arn:aws:health:us-east-1::event/N",
+          "region_name":"N. Virginia",
+          "status":3,
+          "service_name":"Amazon EC2",
+          "impacted_services":{}
+        }]
         """.utf8)
         let snap = try AwsParser.parse(data: data, sourceURL: sourceURL)
         XCTAssertEqual(snap.components[0].severity, .red)
@@ -74,7 +98,13 @@ final class AwsParserTests: XCTestCase {
 
     func testMissingChildCurrentIsYellow() throws {
         let data = Data("""
-        [{"arn":"arn:a","service_name":"Multiple services","region_name":"UAE","status":"0","impacted_services":{"s3":{"service_name":"Amazon S3"}}}]
+        [{
+          "arn":"arn:a",
+          "service_name":"Multiple services",
+          "region_name":"UAE",
+          "status":"0",
+          "impacted_services":{"s3":{"service_name":"Amazon S3"}}
+        }]
         """.utf8)
         let snap = try AwsParser.parse(data: data, sourceURL: sourceURL)
         XCTAssertEqual(snap.components[0].children[0].severity, .yellow)
