@@ -8,7 +8,7 @@ public enum ProbeError: Error, Equatable, LocalizedError {
         switch self {
         case .unsupported:
             return "This URL is not a known status page format "
-                + "(Statuspage, Statuspal, Instatus, Flashduty, or RSS/Atom)."
+                + "(Statuspage, Statuspal, Instatus, Flashduty, AWS, or RSS/Atom)."
         case .unreachable:
             return "Could not reach that URL."
         }
@@ -47,6 +47,9 @@ public enum ProviderProbe {
             previousSnapshot: previousSnapshot
         )
         var flags = ProbeFlags()
+        if let hit = try await probeAWSIfLanding(context: context, flags: &flags) {
+            return hit
+        }
         for provider in probeOrder(preferring: prefer) {
             switch provider {
             case .statuspage, .instatus, .flashduty:
@@ -55,6 +58,8 @@ public enum ProviderProbe {
                 }
             case .statuspal:
                 if let hit = try await probeStatuspal(context: context, flags: &flags) { return hit }
+            case .aws:
+                if let hit = flags.record(.miss) { return hit }
             case .rss:
                 if let hit = try await probeRSS(context: context, flags: &flags) { return hit }
             }
@@ -65,15 +70,17 @@ public enum ProviderProbe {
     static func probeOrder(preferring prefer: StatusProvider?) -> [StatusProvider] {
         switch prefer {
         case .none, .statuspage:
-            return [.statuspage, .instatus, .flashduty, .statuspal, .rss]
+            return [.statuspage, .instatus, .flashduty, .statuspal, .aws, .rss]
         case .instatus:
-            return [.instatus, .statuspage, .flashduty, .statuspal, .rss]
+            return [.instatus, .statuspage, .flashduty, .statuspal, .aws, .rss]
         case .flashduty:
-            return [.flashduty, .statuspage, .instatus, .statuspal, .rss]
+            return [.flashduty, .statuspage, .instatus, .statuspal, .aws, .rss]
         case .statuspal:
-            return [.statuspal, .statuspage, .instatus, .flashduty, .rss]
+            return [.statuspal, .statuspage, .instatus, .flashduty, .aws, .rss]
+        case .aws:
+            return [.aws, .statuspage, .instatus, .flashduty, .statuspal, .rss]
         case .rss:
-            return [.rss, .statuspage, .instatus, .flashduty, .statuspal]
+            return [.rss, .statuspage, .instatus, .flashduty, .statuspal, .aws]
         }
     }
 
@@ -162,6 +169,8 @@ public enum ProviderProbe {
             endpoint = context.base.appendingPathComponent("api/widget/v1/summary.json")
             parse = { try FlashdutyParser.parse(data: $0, sourceURL: context.base) }
         case .statuspal, .rss:
+            return .miss
+        case .aws:
             return .miss
         }
         return try await attempt(

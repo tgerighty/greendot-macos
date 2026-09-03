@@ -21,7 +21,7 @@ These decisions are settled. Do not re-open them in v1.
 | Auth | Reachable URL only (VPN/LAN). No token, basic auth, or SSO in v1. |
 | Stack | Native Swift. AppKit `NSStatusItem`. Testable core with no AppKit. |
 | Menu | Bar icon = worst real status. Top level = one row per page. Submenu = components, like the ChatGPT status screenshot. |
-| Providers | Atlassian Statuspage, Statuspal, Instatus, Flashduty, RSS 2.0 / Atom. See [2026-09-02-rss-feeds-design.md](2026-09-02-rss-feeds-design.md). HTML scrape of status is still out of v1. |
+| Providers | Atlassian Statuspage, Statuspal, Instatus, Flashduty, AWS, RSS 2.0 / Atom. See [2026-09-02-rss-feeds-design.md](2026-09-02-rss-feeds-design.md) and [2026-09-03-aws-status-pages-design.md](2026-09-03-aws-status-pages-design.md). HTML scrape of status is still out of v1. |
 | Notifications | Per-page toggle. Default on. Toast when that page's overall colour changes, including recovery. |
 | Chrome | Menu bar only. No Dock. No settings window. Launch-at-login default on. About greendot opens the native About panel. Copyright © 2026 Terry Gerighty. All rights reserved. The build number is the short GitHub commit hash. |
 | Poll | 60 seconds, global. |
@@ -67,11 +67,12 @@ The user pastes the human URL (`https://www.githubstatus.com`), not the JSON URL
 
 Probe order:
 
-1. `{base}/api/v2/summary.json` — Atlassian Statuspage if the JSON has `status.indicator`.
-2. `{base}/summary.json` — Instatus if the JSON has `page.status`.
-3. `{base}/api/widget/v1/summary.json` — Flashduty if the JSON has `schema_version` and `overall.status`.
-4. Statuspal JSON: `{statuspal-host}/api/v2/status_pages/{subdomain}/summary`. Subdomain comes from `*.statuspal.io` / `*.statuspal.eu`, or from the HTML of `{base}` if it names Statuspal.
-5. RSS 2.0 / Atom. See [2026-09-02-rss-feeds-design.md](2026-09-02-rss-feeds-design.md).
+1. AWS Health landing (`https://health.aws.amazon.com/health/status` or `https://status.aws.amazon.com/`). See [2026-09-03-aws-status-pages-design.md](2026-09-03-aws-status-pages-design.md).
+2. `{base}/api/v2/summary.json` — Atlassian Statuspage if the JSON has `status.indicator`.
+3. `{base}/summary.json` — Instatus if the JSON has `page.status`.
+4. `{base}/api/widget/v1/summary.json` — Flashduty if the JSON has `schema_version` and `overall.status`.
+5. Statuspal JSON: `{statuspal-host}/api/v2/status_pages/{subdomain}/summary`. Subdomain comes from `*.statuspal.io` / `*.statuspal.eu`, or from the HTML of `{base}` if it names Statuspal.
+6. RSS 2.0 / Atom. See [2026-09-02-rss-feeds-design.md](2026-09-02-rss-feeds-design.md).
 
 If none match, the add panel shows an error. It does not scrape HTML for status in v1.
 

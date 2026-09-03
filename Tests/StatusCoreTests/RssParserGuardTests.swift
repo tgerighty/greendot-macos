@@ -74,6 +74,44 @@ final class RssParserGuardTests: XCTestCase {
         XCTAssertEqual(snap.components[0].severity, .green)
     }
 
+    func testAWSRSSItemWithoutStatusIsYellow() throws {
+        let data = Data("""
+        <rss version="2.0"><channel><title>Amazon S3 (N. Virginia)</title>
+        <item><title>S3</title></item></channel></rss>
+        """.utf8)
+        let snap = try RssParser.parse(
+            data: data,
+            sourceURL: URL(string: "https://status.aws.amazon.com/rss/s3-us-east-1.rss")!
+        )
+        XCTAssertEqual(snap.overall, .yellow)
+        XCTAssertEqual(snap.components[0].severity, .yellow)
+        XCTAssertEqual(snap.components[0].statusText, "Degraded")
+    }
+
+    func testAWSEmptyRSSChannelIsGreenWithNoComponents() throws {
+        let data = Data("""
+        <rss version="2.0"><channel><title>Amazon S3 (N. Virginia)</title></channel></rss>
+        """.utf8)
+        let snap = try RssParser.parse(
+            data: data,
+            sourceURL: URL(string: "https://status.aws.amazon.com/rss/s3-us-east-1.rss")!
+        )
+        XCTAssertEqual(snap.overall, .green)
+        XCTAssertTrue(snap.components.isEmpty)
+    }
+
+    func testAWSMissingStatusDoesNotMatchContainingHost() throws {
+        let data = Data("""
+        <rss version="2.0"><channel><title>Amazon S3</title>
+        <item><title>S3</title></item></channel></rss>
+        """.utf8)
+        let snap = try RssParser.parse(
+            data: data,
+            sourceURL: URL(string: "https://status.aws.amazon.com.example.com/rss/s3.rss")!
+        )
+        XCTAssertEqual(snap.components[0].severity, .green)
+    }
+
     func testProbeReadsUTF16RSSFeed() async throws {
         let xml = """
         <?xml version="1.0" encoding="utf-16"?>

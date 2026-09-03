@@ -46,6 +46,25 @@ enum StatusMapping {
         }
     }
 
+    static func aws(_ raw: String?) -> Severity {
+        switch raw {
+        case "0": return .green
+        case "1", "2": return .yellow
+        case "3": return .red
+        default: return .yellow
+        }
+    }
+
+    static func awsText(_ raw: String?) -> String {
+        switch raw {
+        case "0": return "Operational"
+        case "1", "2": return "Degraded"
+        case "3": return "Major outage"
+        case nil, "": return "Degraded"
+        default: return raw ?? "Degraded"
+        }
+    }
+
     static func rss(_ raw: String?, missing: Severity = .green) -> Severity {
         guard let raw, !raw.isEmpty else { return missing }
         switch raw.lowercased() {
