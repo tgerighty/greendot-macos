@@ -28,6 +28,7 @@
 
 ### Added
 
+- AWS Health status pages. Paste https://health.aws.amazon.com/health/status or https://status.aws.amazon.com/. One page named AWS. Current events are groups. Impacted services are children. Empty is green. RSS on status.aws.amazon.com with no status is yellow.
 - RSS 2.0 and Atom feeds. Paste a feed URL, HTML that advertises a feed, or https://status.cloud.microsoft/. Items are components. A `<status>` tag sets colour; a missing tag is operational. The Microsoft landing page is one watched page with Microsoft 365, Power Platform, and Azure as groups.
 - Flashduty status pages (for example https://status.deepseek.com). The app reads `{page}/api/widget/v1/summary.json`. The bar uses overall status. Active incidents and in-progress maintenance appear in the menu. Component lists stay empty because that feed has no component tree.
 - `make bench` times the shipped parse, poll, menu, and status-dot paths on in-memory fixtures (no live network).
