@@ -18,7 +18,7 @@ These decisions are settled. Do not re-open them in this slice.
 | Add | One URL still creates one watched page. |
 | Shape | Items are components. No incident list for RSS (that would duplicate the tree). |
 | Colour | Worst enabled leaf. No RSS-only colour policy. |
-| Missing `<status>` | Green / Operational, except Azure status RSS (`*.azure.status.microsoft`) and AWS RSS (`status.aws.amazon.com` and subdomains), where items are incidents so missing `<status>` is yellow. Empty Azure or AWS feed stays green. A containing host does not match. |
+| Missing `<status>` | Then a known `<category>` token (worst wins; unknown tags such as `active` or a region name are ignored). Then description `Status: RESOLVED` (operational) or `Severity:` with a known token. If still missing: green / Operational, except Azure status RSS (`*.azure.status.microsoft`) and AWS RSS (`status.aws.amazon.com` and subdomains), where items are incidents so missing status is yellow. Empty Azure or AWS feed stays green. A containing host does not match. |
 | Unknown `<status>` | Yellow. Raw text is the status text. |
 | Empty feed | No components. Overall green. |
 | Microsoft landing | `https://status.cloud.microsoft/` (empty path) is one page named Microsoft, with three groups: Microsoft 365, Power Platform, Azure. |
@@ -44,16 +44,17 @@ These decisions are settled. Do not re-open them in this slice.
 
 Component id: item `guid`, else Atom `id`, else title. Group ids for the hub: `m365`, `ppac`, `azure`. Mute uses those ids, so a title change does not unmute a row.
 
-`<status>` (case-insensitive):
+Status source, first match: `<status>`; else known `<category>` values (RSS text or Atom `term`, worst wins); else description `Status: RESOLVED` or `Severity:` with a known token. Case-insensitive.
 
 | Raw | Severity | Status text |
 |---|---|---|
-| missing / empty | green | Operational |
+| missing / empty after the sources above | green | Operational |
 | `available`, `operational`, `up`, `none`, `resolved` | green | Operational |
-| `servicedegradation`, `degraded`, `degraded_performance`, `partial_outage` | yellow | Degraded |
+| `servicedegradation`, `degraded`, `degraded_performance`, `partial_outage`, `disruption` | yellow | Degraded |
 | `maintenance`, `undermaintenance` | yellow | Maintenance |
 | `serviceinterruption`, `full_outage`, `major_outage`, `majoroutage`, `critical`, `major`, `down`, `outage` | red | Major outage |
-| anything else | yellow | the raw string |
+| anything else in `<status>` | yellow | the raw string |
+| anything else in `<category>` | ignored | |
 
 Overall severity is `ComponentTree.enabledLeafSeverity` with no disabled keys. An empty group is a leaf (Azure with no items is green and does not pull the bar yellow). A failed hub feed is a grey group with no children.
 
@@ -116,6 +117,14 @@ Parser:
 
 - RSS 2.0 with `<status>ServiceDegradation</status>` → yellow component, id from guid, overall yellow, no incidents.
 - RSS item with no status → green / Operational.
+- RSS item with `<category>outage</category>` and no `<status>` → red / Major outage.
+- RSS item with an unrecognized `<category>` and no `<status>` → green / Operational.
+- RSS item with `active`, `degraded`, and `outage` categories → red (worst known token).
+- RSS item with description `Status: ACTIVE` and `Severity: outage` → red.
+- RSS item with description `Status: RESOLVED` even if `Severity: outage` → green.
+- RSS `<status>` beats `<category>`.
+- Atom `category term="outage"` with no `<status>` → red.
+- RSS `<category>disruption</category>` → yellow / Degraded.
 - Empty channel → green, no components.
 - Atom entry with no status → green; id from `<id>`; link from `href`.
 - JSON body throws `notThisProvider`.

@@ -67,17 +67,27 @@ enum StatusMapping {
 
     static func rss(_ raw: String?, missing: Severity = .green) -> Severity {
         guard let raw, !raw.isEmpty else { return missing }
+        return rssKnownSeverity(raw) ?? .yellow
+    }
+
+    static func rssKnownToken(_ raw: String) -> String? {
+        let token = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty, rssKnownSeverity(token) != nil else { return nil }
+        return token
+    }
+
+    private static func rssKnownSeverity(_ raw: String) -> Severity? {
         switch raw.lowercased() {
         case "available", "operational", "up", "none", "resolved":
             return .green
         case "servicedegradation", "degraded", "degraded_performance", "partial_outage",
-             "maintenance", "undermaintenance", "minor":
+             "maintenance", "undermaintenance", "minor", "disruption":
             return .yellow
         case "serviceinterruption", "full_outage", "major_outage", "majoroutage",
              "critical", "major", "down", "outage":
             return .red
         default:
-            return .yellow
+            return nil
         }
     }
 
@@ -88,7 +98,8 @@ enum StatusMapping {
         switch raw.lowercased() {
         case "available", "operational", "up", "none", "resolved":
             return "Operational"
-        case "servicedegradation", "degraded", "degraded_performance", "partial_outage", "minor":
+        case "servicedegradation", "degraded", "degraded_performance", "partial_outage", "minor",
+             "disruption":
             return "Degraded"
         case "maintenance", "undermaintenance":
             return "Maintenance"

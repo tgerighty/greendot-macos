@@ -43,6 +43,11 @@
 
 ### Fixed
 
+- RSS items that put severity in `<category>` or in the description (for example
+  https://status.x.ai) now set the colour. An active `outage` is red. A
+  `disruption` is yellow. `Status: RESOLVED` in the description stays
+  operational. Unrecognized category tags are ignored, so a region or product
+  name does not turn the bar yellow.
 - Red, yellow, and grey status-change toasts stay on screen until you click them. macOS UserNotifications banners always time out; those colours now use an app-owned panel. Green toasts still clear after 6 seconds.
 - A watched RSS or HTML URL keeps its query string after save, so later polls use the same feed.
 - An HTML page that advertises `feed.xml` as a relative link uses the pasted directory URL, not a slash-stripped host root.
