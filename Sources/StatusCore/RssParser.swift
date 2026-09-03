@@ -114,12 +114,17 @@ public enum RssParser {
     }
 
     private static func missingSeverity(for url: URL) -> Severity {
-        isAzureStatusHost(url.host) ? .yellow : .green
+        isAzureStatusHost(url.host) || isAWSStatusHost(url.host) ? .yellow : .green
     }
 
     private static func isAzureStatusHost(_ host: String?) -> Bool {
         guard let host = host?.lowercased() else { return false }
         return host == "azure.status.microsoft" || host.hasSuffix(".azure.status.microsoft")
+    }
+
+    private static func isAWSStatusHost(_ host: String?) -> Bool {
+        guard let host = host?.lowercased() else { return false }
+        return host == "status.aws.amazon.com" || host.hasSuffix(".status.aws.amazon.com")
     }
 
     private static func component(fromRSSItem item: XMLElement, missing: Severity) -> ComponentStatus? {
