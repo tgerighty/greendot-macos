@@ -49,6 +49,9 @@ public enum AwsParser {
                 id: key
             )
         }
+        .sorted {
+            $0.name == $1.name ? $0.id < $1.id : $0.name < $1.name
+        }
     }
 
     private static func rawStatus(_ value: Any?) -> String? {

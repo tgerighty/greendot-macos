@@ -96,6 +96,25 @@ final class AwsParserTests: XCTestCase {
         XCTAssertEqual(snap.overall, .red)
     }
 
+    func testImpactedServicesAreSortedByNameThenId() throws {
+        let data = Data("""
+        [{
+          "arn":"arn:a",
+          "service_name":"Multiple services",
+          "region_name":"UAE",
+          "status":"3",
+          "impacted_services":{
+            "zeta":{"service_name":"Amazon S3","current":"3"},
+            "alpha":{"service_name":"Amazon EC2","current":"3"},
+            "beta":{"service_name":"Amazon EC2","current":"1"}
+          }
+        }]
+        """.utf8)
+        let snap = try AwsParser.parse(data: data, sourceURL: sourceURL)
+        XCTAssertEqual(snap.components[0].children.map(\.name), ["Amazon EC2", "Amazon EC2", "Amazon S3"])
+        XCTAssertEqual(snap.components[0].children.map(\.id), ["alpha", "beta", "zeta"])
+    }
+
     func testMissingChildCurrentIsYellow() throws {
         let data = Data("""
         [{
