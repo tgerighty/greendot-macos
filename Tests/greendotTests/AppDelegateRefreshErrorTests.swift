@@ -49,7 +49,12 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
         await delegate.pollAndRefresh(monitor)
 
         XCTAssertEqual(delivery.toasts, [
-            Toast(pageName: "GitHub", body: "Major outage", severity: .red)
+            Toast(
+                pageID: monitor.pages[0].id,
+                pageName: "GitHub",
+                body: "Major outage",
+                severity: .red
+            )
         ])
     }
 
@@ -70,7 +75,12 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
 
         XCTAssertEqual(monitor.pages[0].displaySeverity, .red)
         XCTAssertEqual(delivery.toasts, [
-            Toast(pageName: "GitHub", body: "Major outage", severity: .red)
+            Toast(
+                pageID: monitor.pages[0].id,
+                pageName: "GitHub",
+                body: "Major outage",
+                severity: .red
+            )
         ])
     }
 
@@ -110,7 +120,12 @@ final class AppDelegateRefreshErrorTests: XCTestCase {
         XCTAssertEqual(monitor.pages[0].snapshot?.overall, .red)
         XCTAssertEqual(try store.load().pages[0].snapshot?.overall, .red)
         XCTAssertEqual(delivery.toasts, [
-            Toast(pageName: "GitHub", body: "Major outage", severity: .red)
+            Toast(
+                pageID: monitor.pages[0].id,
+                pageName: "GitHub",
+                body: "Major outage",
+                severity: .red
+            )
         ])
 
         try breakPersistence(at: store.configURL)

@@ -11,7 +11,11 @@ protocol UserNotificationCenterClient: AnyObject, Sendable {
     func getDeliveredRequests(
         completion: @escaping @Sendable ([UNNotificationRequest]) -> Void
     )
+    func getPendingNotificationRequests(
+        completion: @escaping @Sendable ([UNNotificationRequest]) -> Void
+    )
     func removeDeliveredNotifications(withIdentifiers identifiers: [String])
+    func removePendingNotificationRequests(withIdentifiers identifiers: [String])
 }
 
 /// Defers the process-bound system center until delivery starts, with synchronized first access.
@@ -47,8 +51,18 @@ private final class LiveUserNotificationCenterClient: UserNotificationCenterClie
         }
     }
 
+    func getPendingNotificationRequests(
+        completion: @escaping @Sendable ([UNNotificationRequest]) -> Void
+    ) {
+        center.getPendingNotificationRequests(completionHandler: completion)
+    }
+
     func removeDeliveredNotifications(withIdentifiers identifiers: [String]) {
         center.removeDeliveredNotifications(withIdentifiers: identifiers)
+    }
+
+    func removePendingNotificationRequests(withIdentifiers identifiers: [String]) {
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
     }
 }
 
@@ -64,6 +78,8 @@ final class SystemToastDelivery: ToastDelivery {
     private let notifications: any UserNotificationCenterClient
     private let schedule: ToastScheduler
     private let makeIdentifier: () -> String
+    private var persistent: PersistentToastPresenter?
+    private var pendingAutoDismiss: [UUID: String] = [:]
 
     init() {
         notifications = LiveUserNotificationCenterClient()
@@ -73,16 +89,19 @@ final class SystemToastDelivery: ToastDelivery {
             }
         }
         makeIdentifier = { UUID().uuidString }
+        persistent = nil
     }
 
     init(
         notifications: any UserNotificationCenterClient,
         schedule: @escaping ToastScheduler,
-        makeIdentifier: @escaping () -> String
+        makeIdentifier: @escaping () -> String,
+        persistent: PersistentToastPresenter? = nil
     ) {
         self.notifications = notifications
         self.schedule = schedule
         self.makeIdentifier = makeIdentifier
+        self.persistent = persistent
     }
 
     @MainActor
@@ -93,18 +112,49 @@ final class SystemToastDelivery: ToastDelivery {
 
     @MainActor
     func deliver(_ toast: Toast) {
+        cancelAutoDismiss(for: toast.pageID)
+        guard let seconds = toast.autoDismissSeconds else {
+            persistentPresenter().present(toast)
+            return
+        }
+        clear(pageID: toast.pageID)
         let identifier = makeIdentifier()
+        pendingAutoDismiss[toast.pageID] = identifier
         let request = UNNotificationRequest(
             identifier: identifier,
             content: Self.content(for: toast),
             trigger: nil
         )
         notifications.add(request)
-        guard let seconds = toast.autoDismissSeconds else { return }
         let notifications = notifications
-        schedule(seconds) {
+        let pageID = toast.pageID
+        schedule(seconds) { [weak self] in
+            guard let self, self.pendingAutoDismiss[pageID] == identifier else { return }
+            self.pendingAutoDismiss.removeValue(forKey: pageID)
             notifications.removeDeliveredNotifications(withIdentifiers: [identifier])
+            notifications.removePendingNotificationRequests(withIdentifiers: [identifier])
         }
+    }
+
+    @MainActor
+    func clear(pageID: UUID) {
+        cancelAutoDismiss(for: pageID)
+        persistent?.clear(pageID: pageID)
+    }
+
+    @MainActor
+    private func cancelAutoDismiss(for pageID: UUID) {
+        guard let identifier = pendingAutoDismiss.removeValue(forKey: pageID) else { return }
+        notifications.removeDeliveredNotifications(withIdentifiers: [identifier])
+        notifications.removePendingNotificationRequests(withIdentifiers: [identifier])
+    }
+
+    @MainActor
+    private func persistentPresenter() -> PersistentToastPresenter {
+        if let persistent { return persistent }
+        let created = PanelPersistentToastPresenter()
+        persistent = created
+        return created
     }
 
     @MainActor
@@ -132,12 +182,20 @@ final class SystemToastDelivery: ToastDelivery {
 
     /// Clears toasts that a quit cut short before they could clear themselves.
     private func clearStaleAutoDismissToasts() {
-        notifications.getDeliveredRequests { [notifications] delivered in
+        let notifications = notifications
+        notifications.getDeliveredRequests { delivered in
             let stale = delivered
                 .filter { $0.content.categoryIdentifier == Self.autoDismissCategory }
                 .map(\.identifier)
             guard !stale.isEmpty else { return }
             notifications.removeDeliveredNotifications(withIdentifiers: stale)
+        }
+        notifications.getPendingNotificationRequests { pending in
+            let stale = pending
+                .filter { $0.content.categoryIdentifier == Self.autoDismissCategory }
+                .map(\.identifier)
+            guard !stale.isEmpty else { return }
+            notifications.removePendingNotificationRequests(withIdentifiers: stale)
         }
     }
 

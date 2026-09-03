@@ -1,3 +1,4 @@
+import Foundation
 import StatusCore
 
 protocol ToastDelivery: AnyObject {
@@ -6,4 +7,7 @@ protocol ToastDelivery: AnyObject {
 
     @MainActor
     func deliver(_ toast: Toast)
+
+    @MainActor
+    func clear(pageID: UUID)
 }

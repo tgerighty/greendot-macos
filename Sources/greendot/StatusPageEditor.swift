@@ -7,18 +7,24 @@ final class StatusPageEditor {
     private let editingPageID: UUID?
     private let onChange: () -> Void
     private let presentError: (Error) -> Void
+    private let clearToast: (UUID) -> Void
+    private let refreshToast: (UUID) -> Void
     private var panel: PagePanelController?
 
     init(
         monitor: Monitor,
         editingPageID: UUID?,
         onChange: @escaping () -> Void,
-        presentError: @escaping (Error) -> Void
+        presentError: @escaping (Error) -> Void,
+        clearToast: @escaping (UUID) -> Void = { _ in },
+        refreshToast: @escaping (UUID) -> Void = { _ in }
     ) {
         self.monitor = monitor
         self.editingPageID = editingPageID
         self.onChange = onChange
         self.presentError = presentError
+        self.clearToast = clearToast
+        self.refreshToast = refreshToast
     }
 
     func show() {
@@ -75,7 +81,7 @@ private extension StatusPageEditor {
         guard let pageID else { return nil }
         return { [weak self] name in
             guard let self else { return false }
-            return self.performChange {
+            return self.performChange(reconcilingToastFor: pageID) {
                 try self.monitor.toggleComponent(id: pageID, name: name)
             }
         }
@@ -85,7 +91,7 @@ private extension StatusPageEditor {
         guard let pageID else { return nil }
         return { [weak self] enabled in
             guard let self else { return false }
-            return self.performChange {
+            return self.performChange(reconcilingToastFor: pageID) {
                 try self.monitor.setAllComponents(id: pageID, enabled: enabled)
             }
         }
@@ -94,7 +100,15 @@ private extension StatusPageEditor {
     func save(pageID: UUID?, url: URL, name: String?) async -> Bool {
         do {
             if let pageID {
+                let previous = monitor.pages.first { $0.id == pageID }
                 try await monitor.edit(id: pageID, url: url, name: name)
+                let current = monitor.pages.first { $0.id == pageID }
+                if current?.displaySeverity == .green {
+                    clearToast(pageID)
+                } else if current?.displaySeverity != previous?.displaySeverity
+                    || current?.url != previous?.url {
+                    refreshToast(pageID)
+                }
             } else {
                 try await monitor.add(url: url, name: name)
             }
@@ -107,9 +121,26 @@ private extension StatusPageEditor {
         }
     }
 
-    func performChange(_ work: () throws -> Void) -> Bool {
+    func performChange(
+        reconcilingToastFor pageID: UUID? = nil,
+        clearingToastFor removedID: UUID? = nil,
+        _ work: () throws -> Void
+    ) -> Bool {
+        let previous = pageID.flatMap { id in
+            monitor.pages.first { $0.id == id }?.displaySeverity
+        }
         do {
             try work()
+            if let removedID {
+                clearToast(removedID)
+            } else if let pageID {
+                let current = monitor.pages.first { $0.id == pageID }?.displaySeverity
+                if current == .green {
+                    clearToast(pageID)
+                } else if let current, current != previous {
+                    refreshToast(pageID)
+                }
+            }
             onChange()
             return true
         } catch {
@@ -119,7 +150,7 @@ private extension StatusPageEditor {
     }
 
     func remove(pageID: UUID) -> Bool {
-        performChange {
+        performChange(clearingToastFor: pageID) {
             try monitor.remove(id: pageID)
         }
     }

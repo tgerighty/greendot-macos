@@ -117,19 +117,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AboutPanel.show()
     }
 
-    @discardableResult
-    @MainActor
-    func performStoreChange(_ work: () throws -> Void) -> Bool {
-        do {
-            try work()
-            rebuild()
-            return true
-        } catch {
-            presentError(error)
-            return false
-        }
-    }
-
     func maybeSeedOpenAI(monitor: Monitor, loadSucceeded: Bool, skipSeed: Bool? = nil) async {
         let skipSeed = skipSeed ?? (ProcessInfo.processInfo.environment["GREENDOT_SKIP_SEED"] != nil)
         guard Self.shouldSeedOpenAI(
@@ -167,10 +154,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onAdd: { [weak self] in self?.openEditor(editingPageID: nil) },
             onEdit: { [weak self] id in self?.openEditor(editingPageID: id) },
             onRemove: { [weak self] id in
-                self?.performStoreChange { try self?.monitor?.remove(id: id) }
+                guard let self else { return }
+                if self.performStoreChange({ try self.monitor?.remove(id: id) }) {
+                    self.toastDelivery.clear(pageID: id)
+                }
             },
             onToggleNotifications: { [weak self] id in
-                self?.performStoreChange { try self?.monitor?.toggleNotifications(id: id) }
+                guard let self, let monitor = self.monitor else { return }
+                self.toggleNotifications(id: id, monitor: monitor)
             },
             onOpen: { url in
                 URLOpener.open(url)
@@ -201,6 +192,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 },
                 presentError: { [weak self] error in
                     self?.presentError(error)
+                },
+                clearToast: { [weak self] pageID in
+                    self?.toastDelivery.clear(pageID: pageID)
+                },
+                refreshToast: { [weak self] pageID in
+                    self?.refreshToast(pageID: pageID)
                 }
             )
             self.editor = editor
@@ -270,6 +267,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 extension AppDelegate {
+    @MainActor
+    func refreshToast(pageID: UUID, monitor: Monitor? = nil) {
+        let pages = (monitor ?? self.monitor)?.pages ?? []
+        guard let page = pages.first(where: { $0.id == pageID }) else {
+            toastDelivery.clear(pageID: pageID)
+            return
+        }
+        guard page.notificationsEnabled else {
+            toastDelivery.clear(pageID: pageID)
+            return
+        }
+        toastDelivery.deliver(
+            Toast(
+                pageID: page.id,
+                pageName: page.name,
+                body: page.displaySeverity.displayName,
+                severity: page.displaySeverity
+            )
+        )
+    }
+
+    @MainActor
+    func toggleNotifications(id: UUID, monitor: Monitor) {
+        let wasEnabled = monitor.pages.first { $0.id == id }?.notificationsEnabled == true
+        if performStoreChange({ try monitor.toggleNotifications(id: id) }), wasEnabled {
+            toastDelivery.clear(pageID: id)
+        }
+    }
+
+    @discardableResult
+    @MainActor
+    func performStoreChange(_ work: () throws -> Void) -> Bool {
+        do {
+            try work()
+            rebuild()
+            return true
+        } catch {
+            presentError(error)
+            return false
+        }
+    }
+
     private func pollAndRefresh() async {
         guard let monitor else { return }
         await pollAndRefresh(monitor)

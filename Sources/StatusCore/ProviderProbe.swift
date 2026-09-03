@@ -7,7 +7,8 @@ public enum ProbeError: Error, Equatable, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .unsupported:
-            return "This URL is not a known status page format (Statuspage, Statuspal, or Instatus)."
+            return "This URL is not a known status page format "
+                + "(Statuspage, Statuspal, Instatus, Flashduty, or RSS/Atom)."
         case .unreachable:
             return "Could not reach that URL."
         }
@@ -40,6 +41,7 @@ public enum ProviderProbe {
     ) async throws -> ProbeHit {
         let context = ProbeContext(
             base: normalizedBase(pageURL),
+            pageURL: pageURL,
             client: client,
             previousBody: previousBody,
             previousSnapshot: previousSnapshot
@@ -47,12 +49,14 @@ public enum ProviderProbe {
         var flags = ProbeFlags()
         for provider in probeOrder(preferring: prefer) {
             switch provider {
-            case .statuspage, .instatus:
+            case .statuspage, .instatus, .flashduty:
                 if let hit = flags.record(try await standardAttempt(for: provider, context: context)) {
                     return hit
                 }
             case .statuspal:
                 if let hit = try await probeStatuspal(context: context, flags: &flags) { return hit }
+            case .rss:
+                if let hit = try await probeRSS(context: context, flags: &flags) { return hit }
             }
         }
         throw flags.finalError
@@ -61,11 +65,15 @@ public enum ProviderProbe {
     static func probeOrder(preferring prefer: StatusProvider?) -> [StatusProvider] {
         switch prefer {
         case .none, .statuspage:
-            return [.statuspage, .instatus, .statuspal]
+            return [.statuspage, .instatus, .flashduty, .statuspal, .rss]
         case .instatus:
-            return [.instatus, .statuspage, .statuspal]
+            return [.instatus, .statuspage, .flashduty, .statuspal, .rss]
+        case .flashduty:
+            return [.flashduty, .statuspage, .instatus, .statuspal, .rss]
         case .statuspal:
-            return [.statuspal, .statuspage, .instatus]
+            return [.statuspal, .statuspage, .instatus, .flashduty, .rss]
+        case .rss:
+            return [.rss, .statuspage, .instatus, .flashduty, .statuspal]
         }
     }
 
@@ -82,20 +90,32 @@ public enum ProviderProbe {
         return parts.url ?? url
     }
 
-    private enum AttemptResult {
+    /// URL stored on a watched page. Keeps query and path, including a trailing slash.
+    public static func persistedPageURL(_ url: URL) -> URL {
+        var text = url.absoluteString
+        if URLComponents(url: url, resolvingAgainstBaseURL: false)?.scheme == nil {
+            text = "https://" + text
+        }
+        var parts = URLComponents(string: text) ?? URLComponents()
+        parts.fragment = nil
+        return parts.url ?? url
+    }
+
+    enum AttemptResult {
         case hit(ProbeHit)
         case miss
         case networkError
     }
 
-    private struct ProbeContext: Sendable {
+    struct ProbeContext: Sendable {
         let base: URL
+        let pageURL: URL
         let client: HTTPClient
         let previousBody: Data?
         let previousSnapshot: PageSnapshot?
     }
 
-    private struct ProbeFlags {
+    struct ProbeFlags {
         var sawNetworkError = false
 
         mutating func recordHTTP(status: Int) {
@@ -121,7 +141,7 @@ public enum ProviderProbe {
         }
     }
 
-    private static func isReachabilityStatus(_ status: Int) -> Bool {
+    static func isReachabilityStatus(_ status: Int) -> Bool {
         status == 0 || status == 429 || (500...599).contains(status)
     }
 
@@ -138,7 +158,10 @@ public enum ProviderProbe {
         case .instatus:
             endpoint = context.base.appendingPathComponent("summary.json")
             parse = { try InstatusParser.parse(data: $0, sourceURL: context.base) }
-        case .statuspal:
+        case .flashduty:
+            endpoint = context.base.appendingPathComponent("api/widget/v1/summary.json")
+            parse = { try FlashdutyParser.parse(data: $0, sourceURL: context.base) }
+        case .statuspal, .rss:
             return .miss
         }
         return try await attempt(
@@ -150,7 +173,7 @@ public enum ProviderProbe {
         )
     }
 
-    private static func attempt(
+    static func attempt(
         _ url: URL,
         client: HTTPClient,
         previousBody: Data?,
@@ -222,7 +245,7 @@ public enum ProviderProbe {
         return nil
     }
 
-    private static func throwIfCancelled(_ error: Error) throws {
+    static func throwIfCancelled(_ error: Error) throws {
         guard !(error is CancellationError || Task.isCancelled) else {
             throw CancellationError()
         }
@@ -277,3 +300,13 @@ private final class CountBox: @unchecked Sendable {
 
 private let parseBox = CountBox()
 private let regexBox = CountBox()
+
+extension ProviderProbe {
+    static func recordParse() {
+        parseBox.increment()
+    }
+
+    static func recordRegex() {
+        regexBox.increment()
+    }
+}

@@ -1,11 +1,13 @@
 import Foundation
 
 public struct Toast: Equatable, Sendable {
+    public var pageID: UUID
     public var pageName: String
     public var body: String
     public var severity: Severity
 
-    public init(pageName: String, body: String, severity: Severity) {
+    public init(pageID: UUID, pageName: String, body: String, severity: Severity) {
+        self.pageID = pageID
         self.pageName = pageName
         self.body = body
         self.severity = severity
@@ -22,12 +24,14 @@ public enum ToastPolicy {
         previous: PageSnapshot?,
         current: PageSnapshot,
         notificationsEnabled: Bool,
-        pageName: String
+        pageName: String,
+        pageID: UUID
     ) -> Toast? {
         guard notificationsEnabled else { return nil }
         guard let previous else { return nil }
         guard previous.overall != current.overall else { return nil }
         return Toast(
+            pageID: pageID,
             pageName: pageName,
             body: Self.body(for: current),
             severity: current.overall

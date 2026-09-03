@@ -44,6 +44,23 @@ final class ComponentPickerStateTests: XCTestCase {
         }
     }
 
+    func testSameTitleSiblingsToggleIndependently() throws {
+        let page = Self.page(
+            components: [
+                ComponentStatus(name: "API", severity: .green, statusText: "Operational", id: "g1"),
+                ComponentStatus(name: "API", severity: .red, statusText: "Major outage", id: "g2")
+            ],
+            disabledKeys: []
+        )
+        let (picker, view) = installPicker(page: page)
+        defer { _ = picker }
+
+        try XCTUnwrap(Self.button("g1", in: view)).performClick(nil)
+
+        XCTAssertEqual(try Self.state("g1", in: view), .off)
+        XCTAssertEqual(try Self.state("g2", in: view), .on)
+    }
+
     func testRejectedChildClickRestoresTheSavedState() throws {
         var toggledKey: String?
         let (picker, view) = installPicker(

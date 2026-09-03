@@ -175,7 +175,8 @@ extension Monitor {
                 return copy
             }(),
             notificationsEnabled: currentPage.notificationsEnabled,
-            pageName: currentPage.name
+            pageName: currentPage.name,
+            pageID: currentPage.id
         )
     }
 

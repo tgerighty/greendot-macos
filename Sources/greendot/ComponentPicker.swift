@@ -126,7 +126,11 @@ final class ComponentPicker: NSObject {
     }
 
     private func setEnabled(_ enabled: Bool, nodes: [ComponentStatus]) {
-        setEnabled(enabled, keys: nodes.flatMap { [$0.id, $0.name] })
+        if enabled {
+            setEnabled(true, keys: nodes.flatMap { [$0.id, $0.name] })
+        } else {
+            setEnabled(false, keys: nodes.map(\.id))
+        }
     }
 
     private func setEnabled(_ enabled: Bool, keys: [String]) {

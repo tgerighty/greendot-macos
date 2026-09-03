@@ -105,7 +105,7 @@ final class PollPerformanceTests: XCTestCase {
         let urls = recording.requested.map(\.absoluteString)
         XCTAssertFalse(urls.contains("https://acme.statuspal.io"), urls.joined(separator: " "))
         XCTAssertTrue(urls.contains("https://statuspal.io/api/v2/status_pages/acme/summary"))
-        XCTAssertEqual(recording.requested.count, 3)
+        XCTAssertEqual(recording.requested.count, 4)
     }
 
     func testUnchangedBodySkipsParseOnSecondPoll() async throws {

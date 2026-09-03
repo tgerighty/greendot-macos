@@ -129,4 +129,137 @@ final class ParserTests: XCTestCase {
         XCTAssertEqual(snap.overall, .red)
         XCTAssertEqual(snap.incidents.first?.title, "Outage")
     }
+
+    func testFlashdutyOperational() throws {
+        let data = Data("""
+        {
+          "schema_version": "1.0",
+          "generated_at": "2026-08-21T09:24:11Z",
+          "poll_after_seconds": 30,
+          "max_stale_seconds": 120,
+          "page": {
+            "name": "DeepSeek",
+            "url": "https://status.deepseek.com"
+          },
+          "overall": {
+            "status": "operational"
+          },
+          "ongoing_incidents": [],
+          "in_progress_maintenances": [],
+          "scheduled_maintenances": []
+        }
+        """.utf8)
+        let snap = try FlashdutyParser.parse(
+            data: data,
+            sourceURL: URL(string: "https://status.deepseek.com")!
+        )
+        XCTAssertEqual(snap.provider, .flashduty)
+        XCTAssertEqual(snap.name, "DeepSeek")
+        XCTAssertEqual(snap.url, URL(string: "https://status.deepseek.com")!)
+        XCTAssertEqual(snap.overall, .green)
+        XCTAssertTrue(snap.components.isEmpty)
+        XCTAssertTrue(snap.incidents.isEmpty)
+        XCTAssertFalse(snap.isUnreachable)
+    }
+
+    func testFlashdutyPartialOutageIncludesIncident() throws {
+        let data = Data("""
+        {
+          "schema_version": "1.0",
+          "page": {"name": "Example Status", "url": "https://status.example.com"},
+          "overall": {"status": "partial_outage"},
+          "ongoing_incidents": [
+            {
+              "id": "1024",
+              "title": "Elevated API error rates",
+              "phase": "investigating",
+              "impact": "partial_outage",
+              "url": "https://status.example.com/incidents/1024",
+              "affected_components": [
+                {"id": "cmp-1", "name": "Public API", "status": "partial_outage"}
+              ]
+            }
+          ],
+          "in_progress_maintenances": [],
+          "scheduled_maintenances": []
+        }
+        """.utf8)
+        let snap = try FlashdutyParser.parse(
+            data: data,
+            sourceURL: URL(string: "https://status.example.com")!
+        )
+        XCTAssertEqual(snap.overall, .yellow)
+        XCTAssertEqual(snap.incidents, [
+            Incident(
+                title: "Elevated API error rates",
+                url: URL(string: "https://status.example.com/incidents/1024")
+            )
+        ])
+        XCTAssertTrue(snap.components.isEmpty)
+    }
+
+    func testFlashdutyFullOutageIsRed() throws {
+        let data = Data("""
+        {
+          "schema_version": "1.0",
+          "page": {"name": "Example Status"},
+          "overall": {"status": "full_outage"},
+          "ongoing_incidents": [],
+          "in_progress_maintenances": [],
+          "scheduled_maintenances": []
+        }
+        """.utf8)
+        let snap = try FlashdutyParser.parse(
+            data: data,
+            sourceURL: URL(string: "https://status.example.com")!
+        )
+        XCTAssertEqual(snap.overall, .red)
+    }
+
+    func testFlashdutyInProgressMaintenanceIsIncidentAndScheduledIsIgnored() throws {
+        let data = Data("""
+        {
+          "schema_version": "1.0",
+          "page": {"name": "Example Status"},
+          "overall": {"status": "maintenance"},
+          "ongoing_incidents": [],
+          "in_progress_maintenances": [
+            {
+              "id": "m1",
+              "title": "Database upgrade",
+              "phase": "ongoing",
+              "url": "https://status.example.com/maintenance/m1"
+            }
+          ],
+          "scheduled_maintenances": [
+            {"id": "m2", "title": "Next week window", "phase": "scheduled"}
+          ]
+        }
+        """.utf8)
+        let snap = try FlashdutyParser.parse(
+            data: data,
+            sourceURL: URL(string: "https://status.example.com")!
+        )
+        XCTAssertEqual(snap.overall, .yellow)
+        XCTAssertEqual(snap.incidents, [
+            Incident(
+                title: "Database upgrade",
+                url: URL(string: "https://status.example.com/maintenance/m1")
+            )
+        ])
+    }
+
+    func testFlashdutyRejectsStatuspageJSON() {
+        let data = Data("""
+        {
+          "page": {"name": "GitHub", "url": "https://www.githubstatus.com"},
+          "status": {"indicator": "none"},
+          "components": [],
+          "incidents": []
+        }
+        """.utf8)
+        XCTAssertThrowsError(
+            try FlashdutyParser.parse(data: data, sourceURL: URL(string: "https://www.githubstatus.com")!)
+        )
+    }
 }

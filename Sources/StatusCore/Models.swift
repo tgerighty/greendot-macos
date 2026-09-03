@@ -4,6 +4,8 @@ public enum StatusProvider: String, Codable, Equatable, Sendable {
     case statuspage
     case statuspal
     case instatus
+    case flashduty
+    case rss
 }
 
 public struct ComponentStatus: Equatable, Sendable {
@@ -143,6 +145,16 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
             guard isComponentEnabled(item) else { return nil }
             var copy = item
             copy.children = filterEnabled(item.children)
+            if !copy.children.isEmpty {
+                copy.severity = ComponentTree.enabledLeafSeverity(
+                    in: copy.children,
+                    disabledKeys: []
+                )
+                copy.statusText = copy.severity.displayName
+            } else if item.isGroup, !item.children.isEmpty {
+                copy.severity = .green
+                copy.statusText = copy.severity.displayName
+            }
             return copy
         }
     }
