@@ -41,6 +41,12 @@ public final class PageStore: @unchecked Sendable {
             .appendingPathComponent("greendot", isDirectory: true)
     }
 
+    private static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        return encoder
+    }()
+
     public func load() throws -> AppConfig {
         let data: Data
         do {
@@ -65,7 +71,7 @@ public final class PageStore: @unchecked Sendable {
     public func save(_ config: AppConfig) throws {
         try validate(config)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let data = try JSONEncoder().encode(config)
+        let data = try Self.encoder.encode(config)
         try data.write(to: configURL, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: configURL.path)
     }

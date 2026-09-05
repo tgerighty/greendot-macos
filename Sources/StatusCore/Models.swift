@@ -176,4 +176,14 @@ extension WatchedPage: Codable {
         disabledComponentNames = try container.decodeIfPresent(Set<String>.self, forKey: .disabledComponentNames) ?? []
         snapshot = try container.decodeIfPresent(PageSnapshot.self, forKey: .snapshot)
     }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(url, forKey: .url)
+        try container.encode(name, forKey: .name)
+        try container.encode(notificationsEnabled, forKey: .notificationsEnabled)
+        try container.encode(disabledComponentNames.sorted(), forKey: .disabledComponentNames)
+        try container.encodeIfPresent(snapshot, forKey: .snapshot)
+    }
 }

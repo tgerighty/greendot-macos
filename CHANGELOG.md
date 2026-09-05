@@ -4,6 +4,7 @@
 
 ### Changed
 
+- `config.json` is pretty-printed with sorted keys and plain slashes. `disabledComponentNames` is written as a sorted array. The same settings always produce the same bytes, so the file diffs cleanly.
 - Nested component checkbox refreshes now calculate subtree states in one pass.
   Release benchmark, 160-level tree and 20 clicks: 360.462 ms before, 6.781 ms
   after (five-run median).
