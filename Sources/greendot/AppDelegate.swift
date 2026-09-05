@@ -62,7 +62,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if Self.shouldPoll(loadSucceeded: loadSucceeded) {
-            let poll = Self.pollInterval(from: ProcessInfo.processInfo.environment["GREENDOT_POLL_SECONDS"])
+            let poll = Self.pollInterval(
+                from: ProcessInfo.processInfo.environment["GREENDOT_POLL_SECONDS"],
+                configured: monitor.pollSeconds
+            )
             pollTimer = Timer.scheduledTimer(withTimeInterval: poll, repeats: true) { [weak self] _ in
                 Task { @MainActor [weak self] in
                     await self?.pollAndRefresh()
@@ -97,14 +100,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadSucceeded
     }
 
-    nonisolated static func pollInterval(from rawValue: String?) -> TimeInterval {
-        guard let rawValue,
-              let interval = Double(rawValue),
-              interval.isFinite,
-              interval > 0 else {
-            return 60
+    nonisolated static func pollInterval(from rawValue: String?, configured: TimeInterval) -> TimeInterval {
+        if let rawValue, let interval = Double(rawValue), interval.isFinite, interval > 0 {
+            return interval
         }
-        return interval
+        return AppConfig.validPollSeconds(configured)
     }
 
     /// Pulse flashes grey while a page is unreachable.

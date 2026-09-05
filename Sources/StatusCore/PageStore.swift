@@ -2,14 +2,28 @@ import Foundation
 
 public struct AppConfig: Equatable, Sendable {
     public static let currentVersion = 2
+    public static let defaultPollSeconds: TimeInterval = 60
     public var version: Int
+    public var pollSeconds: TimeInterval
     public var pages: [WatchedPage]
     public var didSetLaunchAtLogin: Bool
 
-    public init(version: Int = currentVersion, pages: [WatchedPage] = [], didSetLaunchAtLogin: Bool = false) {
+    public init(
+        version: Int = currentVersion,
+        pollSeconds: TimeInterval = defaultPollSeconds,
+        pages: [WatchedPage] = [],
+        didSetLaunchAtLogin: Bool = false
+    ) {
         self.version = version
+        self.pollSeconds = pollSeconds
         self.pages = pages
         self.didSetLaunchAtLogin = didSetLaunchAtLogin
+    }
+
+    /// Missing, non-finite, or zero and below becomes the default.
+    public static func validPollSeconds(_ value: TimeInterval?) -> TimeInterval {
+        guard let value, value.isFinite, value > 0 else { return defaultPollSeconds }
+        return value
     }
 }
 

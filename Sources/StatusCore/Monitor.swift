@@ -27,6 +27,10 @@ public final class Monitor: @unchecked Sendable {
         withStateLock { config.pages }
     }
 
+    public var pollSeconds: TimeInterval {
+        withStateLock { config.pollSeconds }
+    }
+
     func withStateLock<T>(_ body: () -> T) -> T {
         stateLock.lock()
         defer { stateLock.unlock() }

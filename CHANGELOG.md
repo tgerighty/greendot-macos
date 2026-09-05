@@ -5,6 +5,7 @@
 ### Added
 
 - `state.json` holds the cached poll results and the launch-at-login flag. `config.json` holds only your settings, so you can copy it to another machine or send it to a colleague. greendot reads a version 1 file and splits it on the next save.
+- `pollSeconds` in `config.json` sets the time between polls. The default is 60 seconds. `GREENDOT_POLL_SECONDS` still overrides the file.
 
 ### Changed
 
