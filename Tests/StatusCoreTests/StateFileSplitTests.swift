@@ -110,20 +110,12 @@ final class StateFileSplitTests: XCTestCase {
         let store = PageStore(directory: dir)
         let state = """
         {
-          "version": 2,
-          "didSetLaunchAtLogin": false,
+          "version": 2, "didSetLaunchAtLogin": false,
           "snapshots": {
             "00000000-0000-0000-0000-000000000001": {
               "url": "https://www.githubstatus.com",
-              "snapshot": {
-                "name": "GitHub",
-                "url": "https://www.githubstatus.com",
-                "provider": "statuspage",
-                "overall": "red",
-                "components": [],
-                "incidents": [],
-                "isUnreachable": false
-              }
+              "snapshot": {"name": "GitHub", "url": "https://www.githubstatus.com", "provider": "statuspage",
+                           "overall": "red", "components": [], "incidents": [], "isUnreachable": false}
             }
           }
         }
@@ -258,26 +250,16 @@ final class StateFileSplitTests: XCTestCase {
     /// A version-1 file: the snapshot is inline and `didSetLaunchAtLogin` is at the top level.
     private static let legacyConfigJSON = """
     {
-      "version": 1,
-      "didSetLaunchAtLogin": true,
+      "version": 1, "didSetLaunchAtLogin": true,
       "pages": [
         {
-          "id": "00000000-0000-0000-0000-000000000001",
-          "url": "https://www.githubstatus.com",
-          "name": "GitHub",
-          "notificationsEnabled": true,
-          "disabledComponentNames": [],
+          "id": "00000000-0000-0000-0000-000000000001", "name": "GitHub",
+          "url": "https://www.githubstatus.com", "notificationsEnabled": true, "disabledComponentNames": [],
           "snapshot": {
-            "name": "GitHub",
-            "url": "https://www.githubstatus.com",
-            "provider": "statuspage",
-            "overall": "yellow",
-            "components": [
-              {"id": "c1", "name": "API", "severity": "yellow",
-               "statusText": "Degraded", "children": [], "isGroup": false}
-            ],
-            "incidents": [],
-            "isUnreachable": false
+            "name": "GitHub", "url": "https://www.githubstatus.com", "provider": "statuspage",
+            "overall": "yellow", "incidents": [], "isUnreachable": false,
+            "components": [{"id": "c1", "name": "API", "severity": "yellow",
+                            "statusText": "Degraded", "children": [], "isGroup": false}]
           }
         }
       ]
@@ -353,6 +335,27 @@ final class StateFileLaunchFlagTests: XCTestCase {
         let loaded = try store.load()
         XCTAssertEqual(loaded.pages.map(\.name), ["GitHub renamed"])
         XCTAssertEqual(loaded.pages[0].snapshot?.overall, .green)
+    }
+
+    func testLoadDoesNotChangeModeOfDirectoryLeftAtStatePath() throws {
+        try XCTSkipIf(getuid() == 0, "root bypasses file modes")
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        try store.save(AppConfig(didSetLaunchAtLogin: true))
+        // A directory keeps its execute bit, or the next save cannot clear the files inside it.
+        try FileManager.default.removeItem(at: store.stateURL)
+        try FileManager.default.createDirectory(at: store.stateURL, withIntermediateDirectories: true)
+        try Data().write(to: store.stateURL.appendingPathComponent("junk"))
+        let before = try StateFileFixtures.mode(store.stateURL)
+
+        _ = try store.load()
+
+        XCTAssertEqual(try StateFileFixtures.mode(store.stateURL), before)
+        XCTAssertNoThrow(try store.save(AppConfig(didSetLaunchAtLogin: true)))
+        var isDirectory: ObjCBool = true
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.stateURL.path, isDirectory: &isDirectory))
+        XCTAssertFalse(isDirectory.boolValue)
     }
 }
 

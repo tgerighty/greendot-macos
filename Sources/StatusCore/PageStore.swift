@@ -100,9 +100,19 @@ public final class PageStore: @unchecked Sendable {
     /// A file copied in from another machine can carry a wider mode. A feed url can hold a token.
     /// Best effort: a read-only volume or a foreign owner must not fail the load.
     private func tightenPermissions() {
-        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: configURL.path)
-        guard FileManager.default.fileExists(atPath: stateURL.path) else { return }
-        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: stateURL.path)
+        if isRegularFile(configURL) {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: configURL.path)
+        }
+        if isRegularFile(stateURL) {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: stateURL.path)
+        }
+    }
+
+    /// Only files. A directory left at a path needs its execute bit so save can clear it.
+    /// A `URL` caches its resource values, so ask the file system instead.
+    private func isRegularFile(_ url: URL) -> Bool {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        return attributes?[.type] as? FileAttributeType == .typeRegular
     }
 
     /// A cache file that cannot be read is ignored. Settings never depend on it.
@@ -180,8 +190,8 @@ public final class PageStore: @unchecked Sendable {
     /// state.json is our cache; a directory in its place is junk we can clear.
     /// Best effort: a directory that stays fails the write below, which rolls the save back.
     private func clearDirectoryAtStatePath() {
-        let isDirectory = (try? stateURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory
-        guard isDirectory == true else { return }
+        let attributes = try? FileManager.default.attributesOfItem(atPath: stateURL.path)
+        guard attributes?[.type] as? FileAttributeType == .typeDirectory else { return }
         try? FileManager.default.removeItem(at: stateURL)
     }
 
