@@ -87,7 +87,7 @@ public final class PageStore: @unchecked Sendable {
             throw StoreError.corrupt
         }
         guard decoded.version <= AppConfig.currentVersion else { throw StoreError.corrupt }
-        var config = Self.uniquingPageIDs(decoded)
+        var config = Self.uniquingPageIDs(Self.strippingLegacyState(decoded))
         config.version = AppConfig.currentVersion
         applyState(to: &config)
         if Self.needsIDNormalisation(data) {
@@ -134,6 +134,18 @@ public final class PageStore: @unchecked Sendable {
             // A cached result belongs to the url it was polled from. A hand-edited url drops it.
             config.pages[index].snapshot = entry.url == config.pages[index].url ? entry.snapshot : nil
         }
+    }
+
+    /// Version 2 keeps machine-local data in state.json only. Inline copies in a shared file are stale.
+    /// A version-1 file keeps its inline data, which `applyState` then migrates.
+    private static func strippingLegacyState(_ config: AppConfig) -> AppConfig {
+        guard config.version >= 2 else { return config }
+        var next = config
+        next.didSetLaunchAtLogin = false
+        for index in next.pages.indices {
+            next.pages[index].snapshot = nil
+        }
+        return next
     }
 
     /// Keeps every page. The second and later pages with a repeated id get a fresh one.
