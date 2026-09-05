@@ -27,6 +27,10 @@ final class AppDelegateConfigMenuTests: XCTestCase {
     }
 
     func testReloadConfigPicksUpAPageAddedOnDiskAndRestartsTheTimer() throws {
+        try XCTSkipIf(
+            ProcessInfo.processInfo.environment["GREENDOT_POLL_SECONDS"] != nil,
+            "env var overrides the configured interval"
+        )
         _ = NSApplication.shared
         let seeded = try Self.seeded()
         let (store, monitor) = (seeded.store, seeded.monitor)
@@ -65,12 +69,14 @@ final class AppDelegateConfigMenuTests: XCTestCase {
         var presented: Error?
         delegate.presentError = { presented = $0 }
 
+        delegate.restartPollTimer(interval: 42)
+
         try Data("{".utf8).write(to: store.configURL)
         delegate.reloadConfig()
 
         XCTAssertEqual(presented as? StoreError, .corrupt)
         XCTAssertEqual(monitor.pages.map(\.name), ["GitHub"])
-        XCTAssertNil(delegate.pollTimer)
+        XCTAssertEqual(delegate.pollTimer?.timeInterval, 42)
     }
 
     private static func seeded() throws -> Seeded {

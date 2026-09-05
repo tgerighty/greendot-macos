@@ -116,6 +116,30 @@ final class StateFileSplitTests: XCTestCase {
         XCTAssertFalse(loaded.didSetLaunchAtLogin)
     }
 
+    func testSaveKeepsBothFilesAtMode0600EvenWhenTheBytesDoNotChange() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        var config = AppConfig(didSetLaunchAtLogin: true)
+        config.pages = [try Self.page(name: "GitHub")]
+
+        try store.save(config)
+
+        XCTAssertEqual(try Self.mode(store.configURL), 0o600)
+        XCTAssertEqual(try Self.mode(store.stateURL), 0o600)
+
+        // A file copied in from another machine can carry mode 0644 with identical bytes.
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: store.configURL.path)
+        try store.save(config)
+
+        XCTAssertEqual(try Self.mode(store.configURL), 0o600)
+    }
+
+    private static func mode(_ url: URL) throws -> Int16 {
+        let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+        return try XCTUnwrap(attrs[.posixPermissions] as? NSNumber).int16Value
+    }
+
     /// A version-1 file: the snapshot is inline and `didSetLaunchAtLogin` is at the top level.
     private static let legacyConfigJSON = """
     {

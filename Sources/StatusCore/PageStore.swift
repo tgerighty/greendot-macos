@@ -104,6 +104,7 @@ public final class PageStore: @unchecked Sendable {
     }
 
     /// Keeps every page. The second and later pages with a repeated id get a fresh one.
+    /// This must agree with `needsIDNormalisation`. Both compare parsed `UUID`s. Change the two together.
     private static func uniquingPageIDs(_ config: AppConfig) -> AppConfig {
         var next = config
         var seen: Set<UUID> = []
@@ -116,6 +117,7 @@ public final class PageStore: @unchecked Sendable {
     }
 
     /// True when a page has no id, an id string that is not a UUID, or an id another page also uses.
+    /// This must agree with `uniquingPageIDs`. Both compare parsed `UUID`s. Change the two together.
     private static func needsIDNormalisation(_ data: Data) -> Bool {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let pages = root["pages"] as? [[String: Any]] else { return false }
@@ -147,8 +149,10 @@ public final class PageStore: @unchecked Sendable {
     }
 
     private func writeIfChanged(_ data: Data, to url: URL) throws {
-        if let existing = try? Data(contentsOf: url), existing == data { return }
-        try data.write(to: url, options: .atomic)
+        if (try? Data(contentsOf: url)) != data {
+            try data.write(to: url, options: .atomic)
+        }
+        // Always. A file copied in from another machine can have identical bytes and a wider mode.
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 

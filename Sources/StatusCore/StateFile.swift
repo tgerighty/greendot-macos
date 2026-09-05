@@ -37,6 +37,8 @@ extension AppConfig: Codable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         version = try container.decodeIfPresent(Int.self, forKey: .version) ?? AppConfig.currentVersion
+        // try? swallows a wrong JSON type so a bad pollSeconds falls back to the default instead of
+        // failing the load.
         let rawPollSeconds = (try? container.decodeIfPresent(TimeInterval.self, forKey: .pollSeconds)) ?? nil
         pollSeconds = AppConfig.validPollSeconds(rawPollSeconds)
         pages = try container.decodeIfPresent([WatchedPage].self, forKey: .pages) ?? []

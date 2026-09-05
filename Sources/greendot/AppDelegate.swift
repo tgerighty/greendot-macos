@@ -284,7 +284,7 @@ extension AppDelegate {
             from: ProcessInfo.processInfo.environment["GREENDOT_POLL_SECONDS"],
             configured: monitor.pollSeconds
         ))
-        Task { await self.pollAndRefresh() }
+        Task { [weak self] in await self?.pollAndRefresh() }
     }
 
     @MainActor

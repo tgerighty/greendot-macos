@@ -94,6 +94,30 @@ final class PageStoreValidationTests: XCTestCase {
         XCTAssertEqual(try store.load().pages.map(\.id), config.pages.map(\.id))
     }
 
+    func testLoadMintsIDWhenIDStringIsNotAUUID() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let json = """
+        {
+          "version": 1,
+          "pages": [
+            {"id": "not-a-uuid", "url": "https://first.example.com", "name": "First"}
+          ],
+          "didSetLaunchAtLogin": false
+        }
+        """
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = PageStore(directory: directory)
+        try Data(json.utf8).write(to: store.configURL)
+
+        let config = try store.load()
+
+        XCTAssertEqual(config.pages.map(\.name), ["First"])
+        let text = try XCTUnwrap(String(data: try Data(contentsOf: store.configURL), encoding: .utf8))
+        XCTAssertTrue(text.contains(config.pages[0].id.uuidString), text)
+        XCTAssertEqual(try store.load().pages.map(\.id), config.pages.map(\.id))
+    }
+
     func testCleanLoadDoesNotRewriteConfigFile() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
