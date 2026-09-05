@@ -44,7 +44,7 @@ final class StateFileSplitTests: XCTestCase {
         XCTAssertEqual(loaded.pages[0].displaySeverity, .grey)
     }
 
-    func testCorruptStateFileIsIgnored() throws {
+    func testCorruptStateFileDropsSnapshotsButIsNotFirstRun() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = PageStore(directory: dir)
@@ -55,7 +55,7 @@ final class StateFileSplitTests: XCTestCase {
         try Data("{".utf8).write(to: store.stateURL)
 
         let loaded = try store.load()
-        XCTAssertFalse(loaded.didSetLaunchAtLogin)
+        XCTAssertTrue(loaded.didSetLaunchAtLogin)
         XCTAssertNil(loaded.pages[0].snapshot)
         XCTAssertEqual(loaded.pages.map(\.name), ["GitHub"])
     }
@@ -190,6 +190,24 @@ final class StateFileSplitTests: XCTestCase {
         try store.save(config)
 
         XCTAssertEqual(try Self.mode(store.configURL), 0o600)
+    }
+
+    func testLoadTightensModeOfCopiedConfigFile() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        var config = AppConfig()
+        config.pages = [try Self.page(name: "GitHub")]
+        try store.save(config)
+
+        // A config copied in from another machine keeps its wider mode. Every id is valid, so no save runs.
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: store.configURL.path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: store.stateURL.path)
+
+        _ = try store.load()
+
+        XCTAssertEqual(try Self.mode(store.configURL), 0o600)
+        XCTAssertEqual(try Self.mode(store.stateURL), 0o600)
     }
 
     private static func mode(_ url: URL) throws -> Int16 {

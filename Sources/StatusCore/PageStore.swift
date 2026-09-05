@@ -75,6 +75,7 @@ public final class PageStore: @unchecked Sendable {
             }
             return AppConfig()
         }
+        tightenPermissions()
         let decoded: AppConfig
         do {
             decoded = try JSONDecoder().decode(AppConfig.self, from: data)
@@ -91,10 +92,22 @@ public final class PageStore: @unchecked Sendable {
         return config
     }
 
+    /// A file copied in from another machine can carry a wider mode. A feed url can hold a token.
+    /// Best effort: a read-only volume or a foreign owner must not fail the load.
+    private func tightenPermissions() {
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: configURL.path)
+        guard FileManager.default.fileExists(atPath: stateURL.path) else { return }
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: stateURL.path)
+    }
+
     /// A cache file that cannot be read is ignored. Settings never depend on it.
     private func applyState(to config: inout AppConfig) {
-        guard let data = try? Data(contentsOf: stateURL),
-              let state = try? JSONDecoder().decode(StateFile.self, from: data) else { return }
+        guard let data = try? Data(contentsOf: stateURL) else { return }
+        guard let state = try? JSONDecoder().decode(StateFile.self, from: data) else {
+            // A corrupt file can only exist when the app has run before, so this is not a first run.
+            config.didSetLaunchAtLogin = true
+            return
+        }
         config.didSetLaunchAtLogin = state.didSetLaunchAtLogin
         for index in config.pages.indices {
             guard let entry = state.snapshots[config.pages[index].id.uuidString] else { continue }
