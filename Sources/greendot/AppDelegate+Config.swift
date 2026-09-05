@@ -46,6 +46,10 @@ extension AppDelegate {
             return
         }
         configLoadFailed = false
+        // A launch whose load failed skipped first-run setup. Do it now.
+        if ProcessInfo.processInfo.environment["GREENDOT_SKIP_LOGIN_ITEM"] == nil {
+            monitor.enableLaunchAtLoginOnFirstRun()
+        }
         reconcileToasts(before: before)
         rebuild()
         restartPollTimer(interval: Self.pollInterval(
