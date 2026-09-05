@@ -102,6 +102,56 @@ final class AppDelegateConfigMenuTests: XCTestCase {
         XCTAssertEqual(delegate.pollTimer?.timeInterval, 42)
     }
 
+    func testReloadConfigCancelsPendingFirstRunSeed() async throws {
+        _ = NSApplication.shared
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        try store.save(AppConfig())
+        let client = ControllableHTTPClient()
+        let monitor = Monitor(store: store, client: client)
+        try monitor.load()
+        let delegate = AppDelegate(toastDelivery: InMemoryToastDelivery())
+        defer { client.failAll() }
+        defer { delegate.pollTimer?.invalidate() }
+        delegate.store = store
+        delegate.monitor = monitor
+        var presented: Error?
+        delegate.presentError = { presented = $0 }
+        var seedFailure: Error?
+        delegate.seedFailureDiagnostic = { seedFailure = $0 }
+
+        delegate.startupTask = Task {
+            await delegate.maybeSeedOpenAI(monitor: monitor, loadSucceeded: true, skipSeed: false)
+        }
+        let startup = delegate.startupTask
+        await client.waitUntilRequestCount(1)
+
+        var imported = AppConfig()
+        imported.pages = [
+            WatchedPage(url: try XCTUnwrap(URL(string: "https://www.githubstatus.com")), name: "GitHub")
+        ]
+        try store.save(imported)
+
+        delegate.reloadConfig()
+        client.complete(request: 1, with: Data(Self.openAISummaryJSON.utf8))
+        await startup?.value
+
+        XCTAssertEqual(monitor.pages.map(\.name), ["GitHub"])
+        XCTAssertEqual(try store.load().pages.map(\.name), ["GitHub"])
+        XCTAssertNil(presented)
+        XCTAssertNil(seedFailure)
+    }
+
+    private static let openAISummaryJSON = """
+    {
+      "page": {"name": "OpenAI", "url": "https://status.openai.com"},
+      "status": {"indicator": "none"},
+      "components": [{"name": "API", "status": "operational", "group": false}],
+      "incidents": []
+    }
+    """
+
     private static func seeded() throws -> Seeded {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let store = PageStore(directory: dir)

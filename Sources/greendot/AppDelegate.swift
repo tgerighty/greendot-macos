@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var monitor: Monitor?
     var store: PageStore?
     var pollTimer: Timer?
+    var startupTask: Task<Void, Never>?
     private var pulseTimer: Timer?
     private var editor: StatusPageEditor?
     private var toastDelivery: any ToastDelivery = SystemToastDelivery()
@@ -59,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         installUITestHooks()
 
-        Task {
+        startupTask = Task {
             await self.maybeSeedOpenAI(monitor: monitor, loadSucceeded: loadSucceeded)
             if Self.shouldPoll(loadSucceeded: loadSucceeded) {
                 await self.pollAndRefresh()
@@ -282,6 +283,9 @@ extension AppDelegate {
     /// Reads the file again. On failure the in-memory config and the old timer stay.
     @MainActor
     func reloadConfig() {
+        // A first-run seed still probing must not append OpenAI to the config the user just loaded.
+        startupTask?.cancel()
+        startupTask = nil
         guard let monitor, loadMonitor(monitor) else { return }
         rebuild()
         restartPollTimer(interval: Self.pollInterval(
