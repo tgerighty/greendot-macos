@@ -9,8 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var pollTimer: Timer?
     var startupTask: Task<Void, Never>?
     private var pulseTimer: Timer?
-    private var editor: StatusPageEditor?
-    private var toastDelivery: any ToastDelivery = SystemToastDelivery()
+    var editor: StatusPageEditor?
+    var toastDelivery: any ToastDelivery = SystemToastDelivery()
     private var pollRefreshState = (presentedError: false, latestInvocation: UInt64(0))
     var presentError: @MainActor (Error) -> Void = { error in
         _ = NSAlert(error: error).runModal()
@@ -135,7 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @MainActor
-    private func rebuild() {
+    func rebuild() {
         guard let monitor else { return }
         statusMenu?.update(makeStatusMenuState(monitor))
     }
@@ -182,7 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @MainActor
-    private func openEditor(editingPageID: UUID?) {
+    func openEditor(editingPageID: UUID?) {
         Task { @MainActor [weak self] in
             guard let self, let monitor = self.monitor else { return }
             let previous = self.editor
@@ -270,41 +270,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 extension AppDelegate {
-    /// Writes the config first when the file is missing, so the Finder can select it.
-    @MainActor
-    func revealConfig() {
-        guard let store else { return }
-        if !FileManager.default.fileExists(atPath: store.configURL.path), let monitor {
-            guard performStoreChange({ try monitor.saveCurrentConfig() }) else { return }
-        }
-        revealConfigFile(store.configURL)
-    }
-
-    /// Reads the file again. On failure the in-memory config and the old timer stay.
-    @MainActor
-    func reloadConfig() {
-        // A first-run seed still probing must not append OpenAI to the config the user just loaded.
-        startupTask?.cancel()
-        startupTask = nil
-        guard let monitor, loadMonitor(monitor) else { return }
-        rebuild()
-        restartPollTimer(interval: Self.pollInterval(
-            from: ProcessInfo.processInfo.environment["GREENDOT_POLL_SECONDS"],
-            configured: monitor.pollSeconds
-        ))
-        Task { [weak self] in await self?.pollAndRefresh() }
-    }
-
-    @MainActor
-    func restartPollTimer(interval: TimeInterval) {
-        pollTimer?.invalidate()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                await self?.pollAndRefresh()
-            }
-        }
-    }
-
     @MainActor
     func refreshToast(pageID: UUID, monitor: Monitor? = nil) {
         let pages = (monitor ?? self.monitor)?.pages ?? []
@@ -347,7 +312,7 @@ extension AppDelegate {
         }
     }
 
-    private func pollAndRefresh() async {
+    func pollAndRefresh() async {
         guard let monitor else { return }
         await pollAndRefresh(monitor)
     }

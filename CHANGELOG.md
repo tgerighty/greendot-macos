@@ -15,6 +15,8 @@
 - greendot sets mode `0600` on `config.json` and `state.json` each time it loads them, so a file copied in with a wider mode is protected at once.
 - A `state.json` that exists but cannot be read no longer counts as a first launch, so greendot does not turn Launch at Login back on.
 - Reload Config cancels a first-run OpenAI seed that is still probing, so the seed cannot append OpenAI to a config you just loaded.
+- Reload Config closes an open Add or Edit panel first, so a save that is still probing cannot write over the config you just loaded.
+- Reload Config clears the notification of a page that the new file removes or mutes.
 - A hand-edited `config.json` loads. greendot gives a page without an `id` a new one, and gives a repeated `id` a new one. It rewrites the file only when it changed an `id`.
 - `config.json` is pretty-printed with sorted keys and plain slashes. `disabledComponentNames` is written as a sorted array. The same settings always produce the same bytes, so the file diffs cleanly.
 - Nested component checkbox refreshes now calculate subtree states in one pass.
