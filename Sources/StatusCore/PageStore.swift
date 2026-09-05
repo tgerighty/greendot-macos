@@ -29,11 +29,14 @@ public struct AppConfig: Equatable, Sendable {
 
 public enum StoreError: Error, Equatable, LocalizedError {
     case corrupt
+    case changedOnDisk
 
     public var errorDescription: String? {
         switch self {
         case .corrupt:
             return "The saved status list could not be read."
+        case .changedOnDisk:
+            return "config.json changed on disk. Click Reload Config to use the new file."
         }
     }
 }
@@ -42,6 +45,9 @@ public final class PageStore: @unchecked Sendable {
     public let configURL: URL
     public let stateURL: URL
     private let directory: URL
+    private let knownConfigLock = NSLock()
+    /// The config bytes this store last read or wrote. A file that no longer matches them is the user's.
+    private var lastKnownConfigData: Data?
 
     public init(directory: URL) {
         self.directory = directory
@@ -75,10 +81,12 @@ public final class PageStore: @unchecked Sendable {
             }
             // No pages, so no snapshots attach. The launch flag still belongs to the user.
             var config = AppConfig()
+            setLastKnownConfigData(nil)
             tightenPermissions()
             applyState(to: &config)
             return config
         }
+        setLastKnownConfigData(data)
         tightenPermissions()
         let decoded: AppConfig
         do {
@@ -176,8 +184,6 @@ public final class PageStore: @unchecked Sendable {
 
     public func save(_ config: AppConfig) throws {
         try validate(config)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        clearDirectoryAtStatePath()
         let previousConfig: Data?
         do {
             previousConfig = try Data(contentsOf: configURL)
@@ -186,7 +192,11 @@ public final class PageStore: @unchecked Sendable {
             guard !FileManager.default.fileExists(atPath: configURL.path) else { throw error }
             previousConfig = nil
         }
-        try writeIfChanged(try Self.encoder.encode(config), to: configURL)
+        try refuseWhenConfigChangedOnDisk(previousConfig)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        clearDirectoryAtStatePath()
+        let configData = try Self.encoder.encode(config)
+        try writeIfChanged(configData, to: configURL)
         let state = StateFile(
             didSetLaunchAtLogin: config.didSetLaunchAtLogin,
             snapshots: Self.snapshots(of: config)
@@ -197,6 +207,22 @@ public final class PageStore: @unchecked Sendable {
             restoreConfig(previousConfig)
             throw error
         }
+        setLastKnownConfigData(configData)
+    }
+
+    /// config.json belongs to the user. A file that changed under us is a copy or an edit we must keep.
+    /// A store that never read the file writes freely; the first save owns it.
+    private func refuseWhenConfigChangedOnDisk(_ previousConfig: Data?) throws {
+        knownConfigLock.lock()
+        defer { knownConfigLock.unlock() }
+        guard let lastKnownConfigData, let previousConfig, previousConfig != lastKnownConfigData else { return }
+        throw StoreError.changedOnDisk
+    }
+
+    private func setLastKnownConfigData(_ data: Data?) {
+        knownConfigLock.lock()
+        defer { knownConfigLock.unlock() }
+        lastKnownConfigData = data
     }
 
     /// state.json is our cache; a directory in its place is junk we can clear.

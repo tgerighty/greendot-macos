@@ -43,6 +43,7 @@ These decisions are settled. Do not re-open them in this slice.
 | Menu | Two new items directly under "Refresh": "Reveal Config File" (identifier `reveal-config`) and "Reload Config" (identifier `reload-config`). |
 | Reveal | `NSWorkspace.shared.activateFileViewerSelecting([store.configURL])`. |
 | Reload | Calls the existing public `Monitor.load()`. On success: rebuild the menu, replace the poll timer with the loaded interval, poll once now. On failure: `presentError`, keep the in-memory config, stop polling until a reload succeeds, so a poll cannot write the old settings over the file the user is fixing. |
+| Changed on disk | `PageStore.save` refuses to write when `config.json` differs from the bytes the store last read or wrote, and throws `StoreError.changedOnDisk`. The user clicks Reload Config to adopt the file. |
 | Toasts on reload | No change. Pages that disappear keep any delivered toast until the next clear. |
 | First-run seed | Unchanged. |
 | Secrets in URLs | Not redacted. README warns the user. |
