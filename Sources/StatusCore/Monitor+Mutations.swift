@@ -14,6 +14,11 @@ extension Monitor {
         }
     }
 
+    /// Drops the results of polls that are already in flight. Reload uses this after a failed load.
+    public func discardInFlightPolls() {
+        withStateLock { latestPollIdentity &+= 1 }
+    }
+
     /// Writes the current config. Reveal Config File uses this when no file exists yet.
     public func saveCurrentConfig() throws {
         try commitWatchedPageMutation { _ in }

@@ -48,6 +48,45 @@ final class AppDelegateReloadTests: XCTestCase {
         XCTAssertNil(presented)
     }
 
+    func testFailedReloadDoesNotLetAPollOverwriteTheFile() async throws {
+        _ = NSApplication.shared
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        var config = AppConfig()
+        config.pages = [
+            WatchedPage(url: try XCTUnwrap(URL(string: "https://www.githubstatus.com")), name: "GitHub")
+        ]
+        try store.save(config)
+        let client = ControllableHTTPClient()
+        let monitor = Monitor(store: store, client: client)
+        try monitor.load()
+        let delegate = AppDelegate(toastDelivery: InMemoryToastDelivery())
+        defer { delegate.pollTimer?.invalidate() }
+        defer { client.failAll() }
+        delegate.store = store
+        delegate.monitor = monitor
+        delegate.presentError = { _ in }
+
+        let poll = Task { await delegate.pollAndRefresh(monitor) }
+        await client.waitUntilRequestCount(1)
+        let corrupt = Data("{".utf8)
+        try corrupt.write(to: store.configURL)
+        delegate.reloadConfig()
+        client.complete(request: 1, with: Data(Self.githubSummaryJSON.utf8))
+        await poll.value
+
+        XCTAssertEqual(try Data(contentsOf: store.configURL), corrupt)
+        XCTAssertNil(delegate.pollTimer)
+        XCTAssertTrue(delegate.configLoadFailed)
+
+        try store.save(config)
+        delegate.reloadConfig()
+
+        XCTAssertFalse(delegate.configLoadFailed)
+        XCTAssertNotNil(delegate.pollTimer)
+    }
+
     func testReloadConfigClearsToastsForRemovedAndMutedPages() throws {
         _ = NSApplication.shared
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -114,6 +153,15 @@ final class AppDelegateReloadTests: XCTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
         XCTAssertNil(weakEditor, "Editor must be released on the next run-loop turn")
     }
+
+    private static let githubSummaryJSON = """
+    {
+      "page": {"name": "GitHub", "url": "https://www.githubstatus.com"},
+      "status": {"indicator": "none"},
+      "components": [{"name": "API", "status": "operational", "group": false}],
+      "incidents": []
+    }
+    """
 
     private static let openAISummaryJSON = """
     {

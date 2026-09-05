@@ -94,12 +94,15 @@ final class AppDelegateConfigMenuTests: XCTestCase {
 
         delegate.restartPollTimer(interval: 42)
 
-        try Data("{".utf8).write(to: store.configURL)
+        let corrupt = Data("{".utf8)
+        try corrupt.write(to: store.configURL)
         delegate.reloadConfig()
 
         XCTAssertEqual(presented as? StoreError, .corrupt)
         XCTAssertEqual(monitor.pages.map(\.name), ["GitHub"])
-        XCTAssertEqual(delegate.pollTimer?.timeInterval, 42)
+        XCTAssertNil(delegate.pollTimer)
+        XCTAssertTrue(delegate.configLoadFailed)
+        XCTAssertEqual(try Data(contentsOf: store.configURL), corrupt)
     }
 
     func testReloadConfigCancelsPendingFirstRunSeed() async throws {

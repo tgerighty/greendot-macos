@@ -12,7 +12,8 @@ extension AppDelegate {
         revealConfigFile(store.configURL)
     }
 
-    /// Reads the file again. On failure the in-memory config and the old timer stay.
+    /// Reads the file again.
+    /// On failure the in-memory config stays, polling stops, and nothing is written until a reload succeeds.
     @MainActor
     func reloadConfig() {
         // A first-run seed still probing must not append OpenAI to the config the user just loaded.
@@ -27,7 +28,14 @@ extension AppDelegate {
         DispatchQueue.main.async { _ = closingEditor }
         guard let monitor else { return }
         let before = monitor.pages
-        guard loadMonitor(monitor) else { return }
+        guard loadMonitor(monitor) else {
+            configLoadFailed = true
+            monitor.discardInFlightPolls()
+            pollTimer?.invalidate()
+            pollTimer = nil
+            return
+        }
+        configLoadFailed = false
         reconcileToasts(before: before)
         rebuild()
         restartPollTimer(interval: Self.pollInterval(

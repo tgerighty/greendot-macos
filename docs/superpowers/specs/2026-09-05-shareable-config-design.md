@@ -42,7 +42,7 @@ These decisions are settled. Do not re-open them in this slice.
 | `pollSeconds` | `AppConfig.pollSeconds: TimeInterval`, default `60`. Always written. On decode: missing, non-finite, or `<= 0` becomes `60`. Env `GREENDOT_POLL_SECONDS` still overrides the file when set and valid (UI tests use it). |
 | Menu | Two new items directly under "Refresh": "Reveal Config File" (identifier `reveal-config`) and "Reload Config" (identifier `reload-config`). |
 | Reveal | `NSWorkspace.shared.activateFileViewerSelecting([store.configURL])`. |
-| Reload | Calls the existing public `Monitor.load()`. On success: rebuild the menu, replace the poll timer with the loaded interval, poll once now. On failure: `presentError`, keep the in-memory config, keep the old timer. |
+| Reload | Calls the existing public `Monitor.load()`. On success: rebuild the menu, replace the poll timer with the loaded interval, poll once now. On failure: `presentError`, keep the in-memory config, stop polling until a reload succeeds, so a poll cannot write the old settings over the file the user is fixing. |
 | Toasts on reload | No change. Pages that disappear keep any delivered toast until the next clear. |
 | First-run seed | Unchanged. |
 | Secrets in URLs | Not redacted. README warns the user. |

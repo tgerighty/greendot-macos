@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var store: PageStore?
     var pollTimer: Timer?
     var startupTask: Task<Void, Never>?
+    var configLoadFailed = false
     private var pulseTimer: Timer?
     var editor: StatusPageEditor?
     var toastDelivery: any ToastDelivery = SystemToastDelivery()
@@ -46,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.store = store
         monitor.onLaunchAtLoginEnable = { LaunchAtLogin.enable() }
         let loadSucceeded = loadMonitor(monitor)
+        configLoadFailed = !loadSucceeded
         self.monitor = monitor
 
         toastDelivery.start()
@@ -318,6 +320,8 @@ extension AppDelegate {
     }
 
     func pollAndRefresh(_ monitor: Monitor) async {
+        // A failed reload must not let a poll write the old settings over the file the user is fixing.
+        guard !configLoadFailed else { return }
         let invocation = await MainActor.run {
             pollRefreshState.latestInvocation &+= 1
             return pollRefreshState.latestInvocation
