@@ -4,7 +4,7 @@
 
 ### Added
 
-- Reveal Config File and Reload Config in the status menu. Reveal Config File shows `config.json` in the Finder. Reload Config reads the file again, rebuilds the menu, restarts the poll timer, and polls once. A file that greendot cannot read shows an alert, keeps the pages on screen, and stops polling until a reload succeeds, so a poll cannot write the old settings over the file you are fixing. Reveal Config File creates `config.json` first if it does not exist.
+- Reveal Config File and Reload Config in the status menu. Reveal Config File shows `config.json` in the Finder. Reload Config reads the file again, rebuilds the menu, restarts the poll timer, and polls once. A file that greendot cannot read shows an alert, keeps the pages on screen, and stops polling and menu changes until a reload succeeds, so nothing writes the old settings over the file you are fixing. Reveal Config File creates `config.json` first if it does not exist.
 - `state.json` holds the cached poll results and the launch-at-login flag. `config.json` holds only your settings, so you can copy it to another machine or send it to a colleague. greendot reads a version 1 file and splits it on the next save.
 - `pollSeconds` in `config.json` sets the time between polls. The default is 60 seconds. `GREENDOT_POLL_SECONDS` still overrides the file.
 
@@ -17,6 +17,7 @@
 - Reload Config cancels a first-run OpenAI seed that is still probing, so the seed cannot append OpenAI to a config you just loaded.
 - Reload Config closes an open Add or Edit panel first, so a save that is still probing cannot write over the config you just loaded.
 - Reload Config reconciles notifications with the new file. It clears the notification of a page that the file removes, mutes, makes green, or gives a new URL, and it updates the colour or name of a page that changes but stays unhealthy.
+- A version 2 `config.json` that still carries version 1 `snapshot` or `didSetLaunchAtLogin` fields ignores them. Machine-local data comes from `state.json` only.
 - A hand-edited `config.json` loads. greendot gives a page without an `id` a new one, and gives a repeated `id` a new one. It rewrites the file only when it changed an `id`.
 - `config.json` is pretty-printed with sorted keys and plain slashes. `disabledComponentNames` is written as a sorted array. The same settings always produce the same bytes, so the file diffs cleanly.
 - Nested component checkbox refreshes now calculate subtree states in one pass.

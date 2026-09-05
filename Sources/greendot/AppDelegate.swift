@@ -187,6 +187,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func openEditor(editingPageID: UUID?) {
         Task { @MainActor [weak self] in
             guard let self, let monitor = self.monitor else { return }
+            // The editor saves on change, so it must not open over a config the app could not read.
+            guard !self.configLoadFailed else {
+                self.presentError(ConfigMenuError.reloadRequired)
+                return
+            }
             let previous = self.editor
             previous?.close()
             let editor = StatusPageEditor(
@@ -304,6 +309,11 @@ extension AppDelegate {
     @discardableResult
     @MainActor
     func performStoreChange(_ work: () throws -> Void) -> Bool {
+        // A failed reload must not let a menu change write the old settings over the file the user is fixing.
+        guard !configLoadFailed else {
+            presentError(ConfigMenuError.reloadRequired)
+            return false
+        }
         do {
             try work()
             rebuild()

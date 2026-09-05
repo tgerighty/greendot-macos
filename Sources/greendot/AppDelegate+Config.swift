@@ -1,6 +1,15 @@
 import AppKit
 import StatusCore
 
+/// Refuses a menu change while the config on disk is unreadable.
+enum ConfigMenuError: Error, LocalizedError {
+    case reloadRequired
+
+    var errorDescription: String? {
+        "greendot could not read config.json. Correct the file, then click Reload Config."
+    }
+}
+
 extension AppDelegate {
     /// Writes the config first when the file is missing, so the Finder can select it.
     @MainActor
@@ -13,7 +22,8 @@ extension AppDelegate {
     }
 
     /// Reads the file again.
-    /// On failure the in-memory config stays, polling stops, and nothing is written until a reload succeeds.
+    /// On failure the in-memory config stays, polling and settings changes stop,
+    /// and nothing is written until a reload succeeds.
     @MainActor
     func reloadConfig() {
         // A first-run seed still probing must not append OpenAI to the config the user just loaded.

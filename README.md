@@ -61,7 +61,7 @@ Open `config.json` in a text editor. The file is pretty-printed, and the keys ar
 
 greendot repairs a broken page list. It gives a page without an `id` a new `id`. It gives the second of two pages with the same `id` a new `id`.
 
-If greendot cannot read the file, it shows an alert and keeps the pages that are on screen. greendot stops polling until you click Reload Config with a file it can read. Correct the file and click Reload Config.
+If greendot cannot read the file, it shows an alert and keeps the pages that are on screen. greendot stops polling and blocks changes from the menu until you click Reload Config with a file it can read. Correct the file and click Reload Config.
 
 ### Poll interval
 

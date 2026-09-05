@@ -347,3 +347,54 @@ final class AppDelegateReloadToastTests: XCTestCase {
         ComponentStatus(name: name, severity: severity, statusText: severity.displayName)
     }
 }
+
+@MainActor
+final class AppDelegateFailedReloadTests: XCTestCase {
+    private var presented: Error?
+
+    func testFailedReloadBlocksMenuMutationsUntilReloadSucceeds() throws {
+        let (store, delegate) = try failedReloadFixture()
+        defer { delegate.pollTimer?.invalidate() }
+        let monitor = try XCTUnwrap(delegate.monitor)
+        let pageID = monitor.pages[0].id
+        XCTAssertFalse(delegate.performStoreChange { try monitor.remove(id: pageID) })
+        XCTAssertTrue(presented is ConfigMenuError)
+        XCTAssertEqual(monitor.pages.count, 1)
+        XCTAssertEqual(try Data(contentsOf: store.configURL), Data("{".utf8))
+        try store.save(AppConfig(pages: monitor.pages))
+        delegate.reloadConfig()
+        XCTAssertFalse(delegate.configLoadFailed)
+        XCTAssertTrue(delegate.performStoreChange { try monitor.toggleNotifications(id: pageID) })
+    }
+
+    func testFailedReloadRefusesToOpenEditor() throws {
+        let (_, delegate) = try failedReloadFixture()
+        defer { delegate.pollTimer?.invalidate() }
+        defer { delegate.editor?.close() }
+        delegate.openEditor(editingPageID: nil)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        XCTAssertNil(delegate.editor)
+        XCTAssertTrue(presented is ConfigMenuError)
+    }
+
+    /// Seeds one page, corrupts config.json, then reloads, so the failure flag is set.
+    private func failedReloadFixture() throws -> (PageStore, AppDelegate) {
+        _ = NSApplication.shared
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        let page = WatchedPage(url: try XCTUnwrap(URL(string: "https://a.example.com")), name: "A")
+        try store.save(AppConfig(pages: [page]))
+        let monitor = Monitor(store: store, client: MapHTTPClient())
+        try monitor.load()
+        let delegate = AppDelegate(toastDelivery: InMemoryToastDelivery())
+        delegate.store = store
+        delegate.monitor = monitor
+        delegate.presentError = { [weak self] in self?.presented = $0 }
+        try Data("{".utf8).write(to: store.configURL)
+        delegate.reloadConfig()
+        XCTAssertTrue(delegate.configLoadFailed)
+        presented = nil
+        return (store, delegate)
+    }
+}
