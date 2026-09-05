@@ -19,8 +19,12 @@ extension AppDelegate {
         startupTask?.cancel()
         startupTask = nil
         // An open Add/Edit panel still probing must not save over the config the user just loaded.
-        editor?.close()
+        // Releasing it inside the status-item menu action over-releases AppKit view arrays
+        // (SIGSEGV in NSArray dealloc), so keep it alive until the next run-loop turn.
+        let closingEditor = editor
+        closingEditor?.close()
         editor = nil
+        DispatchQueue.main.async { _ = closingEditor }
         guard let monitor else { return }
         let before = monitor.pages
         guard loadMonitor(monitor) else { return }

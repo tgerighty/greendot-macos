@@ -84,6 +84,37 @@ final class AppDelegateReloadTests: XCTestCase {
         XCTAssertFalse(delivery.clearedPageIDs.contains(pageC.id))
     }
 
+    func testReloadConfigKeepsClosedEditorAliveUntilNextRunLoopTurn() throws {
+        _ = NSApplication.shared
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        try store.save(AppConfig())
+        let monitor = Monitor(store: store, client: MapHTTPClient())
+        try monitor.load()
+        let delegate = AppDelegate(toastDelivery: InMemoryToastDelivery())
+        defer { delegate.pollTimer?.invalidate() }
+        delegate.store = store
+        delegate.monitor = monitor
+        delegate.presentError = { XCTFail("unexpected error: \($0)") }
+
+        weak var weakEditor: StatusPageEditor?
+        autoreleasepool {
+            delegate.openEditor(editingPageID: nil)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            weakEditor = delegate.editor
+            XCTAssertNotNil(weakEditor, "Editor must exist before the reload")
+
+            delegate.reloadConfig()
+
+            XCTAssertNil(delegate.editor)
+            XCTAssertNotNil(weakEditor, "Editor must stay alive during the menu action")
+        }
+
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        XCTAssertNil(weakEditor, "Editor must be released on the next run-loop turn")
+    }
+
     private static let openAISummaryJSON = """
     {
       "page": {"name": "OpenAI", "url": "https://status.openai.com"},
