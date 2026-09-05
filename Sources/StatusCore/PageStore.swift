@@ -102,9 +102,14 @@ public final class PageStore: @unchecked Sendable {
 
     /// A cache file that cannot be read is ignored. Settings never depend on it.
     private func applyState(to config: inout AppConfig) {
-        guard let data = try? Data(contentsOf: stateURL) else { return }
+        let exists = FileManager.default.fileExists(atPath: stateURL.path)
+        guard let data = try? Data(contentsOf: stateURL) else {
+            // A file that exists but cannot be read still proves the app has run before.
+            if exists { config.didSetLaunchAtLogin = true }
+            return
+        }
         guard let state = try? JSONDecoder().decode(StateFile.self, from: data) else {
-            // A corrupt file can only exist when the app has run before, so this is not a first run.
+            // A file that cannot be decoded can only exist when the app has run before.
             config.didSetLaunchAtLogin = true
             return
         }

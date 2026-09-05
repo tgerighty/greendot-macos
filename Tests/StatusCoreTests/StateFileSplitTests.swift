@@ -60,6 +60,24 @@ final class StateFileSplitTests: XCTestCase {
         XCTAssertEqual(loaded.pages.map(\.name), ["GitHub"])
     }
 
+    func testUnreadableStateFileDropsSnapshotsButIsNotFirstRun() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        var config = AppConfig(didSetLaunchAtLogin: true)
+        config.pages = [try Self.page(name: "GitHub")]
+        try store.save(config)
+
+        // A directory cannot be read as a file, but it still exists at the state path.
+        try FileManager.default.removeItem(at: store.stateURL)
+        try FileManager.default.createDirectory(at: store.stateURL, withIntermediateDirectories: true)
+
+        let loaded = try store.load()
+        XCTAssertTrue(loaded.didSetLaunchAtLogin)
+        XCTAssertNil(loaded.pages[0].snapshot)
+        XCTAssertEqual(loaded.pages.map(\.name), ["GitHub"])
+    }
+
     func testVersion1FileLoadsInlineStateAndNextSaveSplitsIt() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }
