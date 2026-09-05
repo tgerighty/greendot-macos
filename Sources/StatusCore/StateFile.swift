@@ -49,7 +49,9 @@ extension AppConfig: Codable {
         let rawPollSeconds = (try? container.decodeIfPresent(TimeInterval.self, forKey: .pollSeconds)) ?? nil
         pollSeconds = AppConfig.validPollSeconds(rawPollSeconds)
         pages = try container.decodeIfPresent([WatchedPage].self, forKey: .pages) ?? []
-        didSetLaunchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .didSetLaunchAtLogin) ?? false
+        // Legacy version-1 field. A wrong type is ignored, not fatal.
+        let rawLaunchFlag = (try? container.decodeIfPresent(Bool.self, forKey: .didSetLaunchAtLogin)) ?? nil
+        didSetLaunchAtLogin = rawLaunchFlag ?? false
     }
 
     public func encode(to encoder: Encoder) throws {

@@ -175,7 +175,8 @@ extension WatchedPage: Codable {
         name = try container.decode(String.self, forKey: .name)
         notificationsEnabled = try container.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true
         disabledComponentNames = try container.decodeIfPresent(Set<String>.self, forKey: .disabledComponentNames) ?? []
-        snapshot = try container.decodeIfPresent(PageSnapshot.self, forKey: .snapshot)
+        // Legacy version-1 field. A wrong type is ignored, not fatal.
+        snapshot = (try? container.decodeIfPresent(PageSnapshot.self, forKey: .snapshot)) ?? nil
     }
 
     public func encode(to encoder: Encoder) throws {
