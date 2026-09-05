@@ -49,7 +49,7 @@ extension AppDelegate {
 
     /// Matches each open toast against the reloaded config, as an editor change does.
     /// Clears the toast of a page the reload removed, muted, made green, or left without a
-    /// cached result. Refreshes the toast of a page that changed colour but stays unhealthy.
+    /// cached result. Refreshes the toast of a page that changed colour or name but stays unhealthy.
     @MainActor
     private func reconcileToasts(before: [WatchedPage]) {
         let current = monitor?.pages ?? []
@@ -61,7 +61,7 @@ extension AppDelegate {
                 toastDelivery.clear(pageID: page.id)
                 continue
             }
-            guard reloaded.displaySeverity != page.displaySeverity else { continue }
+            guard reloaded.displaySeverity != page.displaySeverity || reloaded.name != page.name else { continue }
             refreshToast(pageID: page.id)
         }
     }

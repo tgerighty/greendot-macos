@@ -237,6 +237,22 @@ final class AppDelegateReloadToastTests: XCTestCase {
         XCTAssertTrue(fixture.delivery.toasts.isEmpty)
     }
 
+    func testReloadConfigRefreshesToastWhenPageIsRenamed() throws {
+        let page = try Self.redPage(components: [Self.component("API", .red)])
+        let fixture = try makeFixture(page: page)
+        defer { fixture.delegate.pollTimer?.invalidate() }
+        var renamed = page
+        renamed.name = "Renamed"
+        try Self.writeConfig(pages: [renamed], to: fixture.store)
+
+        fixture.delegate.reloadConfig()
+
+        XCTAssertEqual(fixture.delivery.toasts.map(\.pageID), [page.id])
+        XCTAssertEqual(fixture.delivery.toasts.first?.pageName, "Renamed")
+        XCTAssertEqual(fixture.delivery.toasts.first?.severity, .red)
+        XCTAssertFalse(fixture.delivery.clearedPageIDs.contains(page.id))
+    }
+
     private func makeFixture(page: WatchedPage) throws -> Fixture {
         _ = NSApplication.shared
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
