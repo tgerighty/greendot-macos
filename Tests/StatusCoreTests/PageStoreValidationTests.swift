@@ -36,6 +36,40 @@ final class PageStoreValidationTests: XCTestCase {
         XCTAssertEqual(try store.load().pages.map(\.id), config.pages.map(\.id))
     }
 
+    func testLoadMintsNewIDWhenIDsRepeatInDifferentHexCase() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let json = """
+        {
+          "version": 1,
+          "pages": [
+            {
+              "id": "00000000-0000-0000-0000-00000000000A",
+              "url": "https://first.example.com",
+              "name": "First"
+            },
+            {
+              "id": "00000000-0000-0000-0000-00000000000a",
+              "url": "https://second.example.com",
+              "name": "Second"
+            }
+          ],
+          "didSetLaunchAtLogin": false
+        }
+        """
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = PageStore(directory: directory)
+        try Data(json.utf8).write(to: store.configURL)
+
+        let config = try store.load()
+
+        XCTAssertEqual(config.pages.map(\.name), ["First", "Second"])
+        XCTAssertEqual(config.pages[0].id.uuidString, "00000000-0000-0000-0000-00000000000A")
+        XCTAssertNotEqual(config.pages[1].id, config.pages[0].id)
+        // A second load returns the same ids, which proves the file was rewritten.
+        XCTAssertEqual(try store.load().pages.map(\.id), config.pages.map(\.id))
+    }
+
     func testLoadMintsMissingPageIDAndRewritesFile() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

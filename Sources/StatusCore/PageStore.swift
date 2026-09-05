@@ -85,14 +85,14 @@ public final class PageStore: @unchecked Sendable {
         return next
     }
 
-    /// True when the file misses an id, holds an unreadable id, or repeats one.
+    /// True when a page has no id, an id string that is not a UUID, or an id another page also uses.
     private static func needsIDNormalisation(_ data: Data) -> Bool {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let pages = root["pages"] as? [[String: Any]] else { return false }
-        var seen: Set<String> = []
+        var seen: Set<UUID> = []
         for page in pages {
-            guard let raw = page["id"] as? String, UUID(uuidString: raw) != nil else { return true }
-            guard seen.insert(raw).inserted else { return true }
+            guard let raw = page["id"] as? String, let parsed = UUID(uuidString: raw) else { return true }
+            guard seen.insert(parsed).inserted else { return true }
         }
         return false
     }
