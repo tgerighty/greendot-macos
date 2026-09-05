@@ -269,9 +269,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 extension AppDelegate {
+    /// Writes the config first when the file is missing, so the Finder can select it.
     @MainActor
     func revealConfig() {
         guard let store else { return }
+        if !FileManager.default.fileExists(atPath: store.configURL.path), let monitor {
+            guard performStoreChange({ try monitor.saveCurrentConfig() }) else { return }
+        }
         revealConfigFile(store.configURL)
     }
 

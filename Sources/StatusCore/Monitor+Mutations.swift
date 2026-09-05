@@ -14,6 +14,11 @@ extension Monitor {
         }
     }
 
+    /// Writes the current config. Reveal Config File uses this when no file exists yet.
+    public func saveCurrentConfig() throws {
+        try commitWatchedPageMutation { _ in }
+    }
+
     public func enableLaunchAtLoginOnFirstRun() {
         let didChange: Bool = {
             transitionLock.lock()

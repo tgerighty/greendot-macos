@@ -49,7 +49,7 @@ Copy `config.json`. Do not copy `state.json`.
 
 Quit greendot on the other machine before you copy the file. If greendot runs, click Reload Config immediately after you copy the file. A poll can overwrite a file that you copied in.
 
-1. Open the greendot menu. Click Reveal Config File. The Finder shows `config.json`.
+1. Open the greendot menu. Click Reveal Config File. The Finder shows `config.json`. If the file does not exist yet, greendot creates it first.
 2. Copy the file to the same folder on the other machine.
 3. On the other machine, open the greendot menu. Click Reload Config.
 

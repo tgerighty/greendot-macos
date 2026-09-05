@@ -26,6 +26,29 @@ final class AppDelegateConfigMenuTests: XCTestCase {
         XCTAssertEqual(revealed, [store.configURL])
     }
 
+    func testRevealConfigCreatesMissingConfigFile() throws {
+        _ = NSApplication.shared
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        let monitor = Monitor(store: store, client: MapHTTPClient())
+        try monitor.load()
+        let delegate = AppDelegate(toastDelivery: InMemoryToastDelivery())
+        delegate.store = store
+        delegate.monitor = monitor
+        var revealed: [URL] = []
+        delegate.revealConfigFile = { revealed.append($0) }
+        var presented: Error?
+        delegate.presentError = { presented = $0 }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.configURL.path))
+
+        delegate.revealConfig()
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.configURL.path))
+        XCTAssertEqual(revealed, [store.configURL])
+        XCTAssertNil(presented)
+    }
+
     func testReloadConfigPicksUpAPageAddedOnDiskAndRestartsTheTimer() throws {
         try XCTSkipIf(
             ProcessInfo.processInfo.environment["GREENDOT_POLL_SECONDS"] != nil,
