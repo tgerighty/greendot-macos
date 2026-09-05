@@ -75,6 +75,7 @@ public final class PageStore: @unchecked Sendable {
             }
             // No pages, so no snapshots attach. The launch flag still belongs to the user.
             var config = AppConfig()
+            tightenPermissions()
             applyState(to: &config)
             return config
         }
@@ -154,6 +155,7 @@ public final class PageStore: @unchecked Sendable {
     public func save(_ config: AppConfig) throws {
         try validate(config)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        clearDirectoryAtStatePath()
         let previousConfig: Data?
         do {
             previousConfig = try Data(contentsOf: configURL)
@@ -173,6 +175,14 @@ public final class PageStore: @unchecked Sendable {
             restoreConfig(previousConfig)
             throw error
         }
+    }
+
+    /// state.json is our cache; a directory in its place is junk we can clear.
+    /// Best effort: a directory that stays fails the write below, which rolls the save back.
+    private func clearDirectoryAtStatePath() {
+        let isDirectory = (try? stateURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory
+        guard isDirectory == true else { return }
+        try? FileManager.default.removeItem(at: stateURL)
     }
 
     /// A settings change must not stay on disk when the cache write fails; the app keeps its old

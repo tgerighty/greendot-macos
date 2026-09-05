@@ -119,6 +119,7 @@ final class PageStoreValidationTests: XCTestCase {
     }
 
     func testIDNormalisationLoadSucceedsWhenStateFileCannotBeWritten() throws {
+        try XCTSkipIf(getuid() == 0, "root bypasses file modes")
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let json = """
@@ -141,8 +142,9 @@ final class PageStoreValidationTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let store = PageStore(directory: directory)
         try Data(json.utf8).write(to: store.configURL)
-        // A directory cannot be replaced by a file write, so the rewrite of state.json must fail.
-        try FileManager.default.createDirectory(at: store.stateURL, withIntermediateDirectories: true)
+        // A directory that cannot be cleared blocks the rewrite of state.json, so it must fail.
+        try StateFileFixtures.blockStatePath(store)
+        defer { StateFileFixtures.unblockStatePath(store) }
 
         let loaded = try store.load()
 

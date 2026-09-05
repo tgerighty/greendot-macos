@@ -7,7 +7,7 @@ final class StateFileSplitTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = PageStore(directory: dir)
         var config = AppConfig(didSetLaunchAtLogin: true)
-        config.pages = [try Self.page(name: "GitHub")]
+        config.pages = [try StateFileFixtures.page(name: "GitHub")]
 
         try store.save(config)
 
@@ -32,7 +32,7 @@ final class StateFileSplitTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = PageStore(directory: dir)
         var config = AppConfig(didSetLaunchAtLogin: true)
-        config.pages = [try Self.page(name: "GitHub")]
+        config.pages = [try StateFileFixtures.page(name: "GitHub")]
         try store.save(config)
 
         try FileManager.default.removeItem(at: store.stateURL)
@@ -49,7 +49,7 @@ final class StateFileSplitTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = PageStore(directory: dir)
         var config = AppConfig(didSetLaunchAtLogin: true)
-        config.pages = [try Self.page(name: "GitHub")]
+        config.pages = [try StateFileFixtures.page(name: "GitHub")]
         try store.save(config)
 
         try Data("{".utf8).write(to: store.stateURL)
@@ -65,7 +65,7 @@ final class StateFileSplitTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = PageStore(directory: dir)
         var config = AppConfig(didSetLaunchAtLogin: true)
-        config.pages = [try Self.page(name: "GitHub")]
+        config.pages = [try StateFileFixtures.page(name: "GitHub")]
         try store.save(config)
 
         // A directory cannot be read as a file, but it still exists at the state path.
@@ -142,7 +142,7 @@ final class StateFileSplitTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = PageStore(directory: dir)
         var config = AppConfig()
-        config.pages = [try Self.page(name: "GitHub")]
+        config.pages = [try StateFileFixtures.page(name: "GitHub")]
         try store.save(config)
 
         // A hand edit of config.json changes the url and keeps the id. state.json still holds the old url.
@@ -159,32 +159,35 @@ final class StateFileSplitTests: XCTestCase {
     }
 
     func testFailedStateWriteRestoresConfigFile() throws {
+        try XCTSkipIf(getuid() == 0, "root bypasses file modes")
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = PageStore(directory: dir)
         var config = AppConfig()
-        config.pages = [try Self.page(name: "GitHub")]
+        config.pages = [try StateFileFixtures.page(name: "GitHub")]
         try store.save(config)
         let originalConfigData = try Data(contentsOf: store.configURL)
 
-        try FileManager.default.removeItem(at: store.stateURL)
-        try FileManager.default.createDirectory(at: store.stateURL, withIntermediateDirectories: true)
+        try StateFileFixtures.blockStatePath(store)
+        defer { StateFileFixtures.unblockStatePath(store) }
         var mutated = config
         mutated.pages[0].name = "GitHub renamed"
 
         XCTAssertThrowsError(try store.save(mutated))
 
         XCTAssertEqual(try Data(contentsOf: store.configURL), originalConfigData)
-        XCTAssertEqual(try Self.mode(store.configURL), 0o600)
+        XCTAssertEqual(try StateFileFixtures.mode(store.configURL), 0o600)
     }
 
     func testFailedStateWriteOnFirstSaveLeavesNoConfigFile() throws {
+        try XCTSkipIf(getuid() == 0, "root bypasses file modes")
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = PageStore(directory: dir)
-        try FileManager.default.createDirectory(at: store.stateURL, withIntermediateDirectories: true)
+        try StateFileFixtures.blockStatePath(store)
+        defer { StateFileFixtures.unblockStatePath(store) }
         var config = AppConfig()
-        config.pages = [try Self.page(name: "GitHub")]
+        config.pages = [try StateFileFixtures.page(name: "GitHub")]
 
         XCTAssertThrowsError(try store.save(config))
 
@@ -197,14 +200,14 @@ final class StateFileSplitTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = PageStore(directory: dir)
         var config = AppConfig()
-        config.pages = [try Self.page(name: "GitHub")]
+        config.pages = [try StateFileFixtures.page(name: "GitHub")]
         try store.save(config)
         let originalConfigData = try Data(contentsOf: store.configURL)
 
         // A config that cannot be read cannot be rolled back, so the save must not start.
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: store.configURL.path)
-        try FileManager.default.removeItem(at: store.stateURL)
-        try FileManager.default.createDirectory(at: store.stateURL, withIntermediateDirectories: true)
+        try StateFileFixtures.blockStatePath(store)
+        defer { StateFileFixtures.unblockStatePath(store) }
         var mutated = config
         mutated.pages[0].name = "GitHub renamed"
 
@@ -220,18 +223,18 @@ final class StateFileSplitTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = PageStore(directory: dir)
         var config = AppConfig(didSetLaunchAtLogin: true)
-        config.pages = [try Self.page(name: "GitHub")]
+        config.pages = [try StateFileFixtures.page(name: "GitHub")]
 
         try store.save(config)
 
-        XCTAssertEqual(try Self.mode(store.configURL), 0o600)
-        XCTAssertEqual(try Self.mode(store.stateURL), 0o600)
+        XCTAssertEqual(try StateFileFixtures.mode(store.configURL), 0o600)
+        XCTAssertEqual(try StateFileFixtures.mode(store.stateURL), 0o600)
 
         // A file copied in from another machine can carry mode 0644 with identical bytes.
         try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: store.configURL.path)
         try store.save(config)
 
-        XCTAssertEqual(try Self.mode(store.configURL), 0o600)
+        XCTAssertEqual(try StateFileFixtures.mode(store.configURL), 0o600)
     }
 
     func testLoadTightensModeOfCopiedConfigFile() throws {
@@ -239,7 +242,7 @@ final class StateFileSplitTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = PageStore(directory: dir)
         var config = AppConfig()
-        config.pages = [try Self.page(name: "GitHub")]
+        config.pages = [try StateFileFixtures.page(name: "GitHub")]
         try store.save(config)
 
         // A config copied in from another machine keeps its wider mode. Every id is valid, so no save runs.
@@ -248,13 +251,8 @@ final class StateFileSplitTests: XCTestCase {
 
         _ = try store.load()
 
-        XCTAssertEqual(try Self.mode(store.configURL), 0o600)
-        XCTAssertEqual(try Self.mode(store.stateURL), 0o600)
-    }
-
-    private static func mode(_ url: URL) throws -> Int16 {
-        let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
-        return try XCTUnwrap(attrs[.posixPermissions] as? NSNumber).int16Value
+        XCTAssertEqual(try StateFileFixtures.mode(store.configURL), 0o600)
+        XCTAssertEqual(try StateFileFixtures.mode(store.stateURL), 0o600)
     }
 
     /// A version-1 file: the snapshot is inline and `didSetLaunchAtLogin` is at the top level.
@@ -285,24 +283,6 @@ final class StateFileSplitTests: XCTestCase {
       ]
     }
     """
-
-    private static func page(name: String) throws -> WatchedPage {
-        let url = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
-        return WatchedPage(
-            id: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000001")),
-            url: url,
-            name: name,
-            snapshot: PageSnapshot(
-                name: name,
-                url: url,
-                provider: .statuspage,
-                overall: .green,
-                components: [ComponentStatus(name: "API", severity: .green, statusText: "Operational")],
-                incidents: [],
-                isUnreachable: false
-            )
-        )
-    }
 }
 
 final class StateFileLaunchFlagTests: XCTestCase {
@@ -320,5 +300,84 @@ final class StateFileLaunchFlagTests: XCTestCase {
         XCTAssertTrue(loaded.pages.isEmpty)
         XCTAssertTrue(loaded.didSetLaunchAtLogin)
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.configURL.path))
+    }
+
+    func testMissingConfigFileStillTightensStateFileMode() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        try store.save(AppConfig(didSetLaunchAtLogin: true))
+
+        // A state file copied in from another machine keeps its wider mode. It can hold a token.
+        try FileManager.default.removeItem(at: store.configURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: store.stateURL.path)
+
+        _ = try store.load()
+
+        XCTAssertEqual(try StateFileFixtures.mode(store.stateURL), 0o600)
+    }
+
+    func testSaveReplacesDirectoryLeftAtStatePath() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        var config = AppConfig(didSetLaunchAtLogin: true)
+        config.pages = [try StateFileFixtures.page(name: "GitHub")]
+        try store.save(config)
+
+        // Junk at the cache path must not block the next save.
+        try FileManager.default.removeItem(at: store.stateURL)
+        try FileManager.default.createDirectory(at: store.stateURL, withIntermediateDirectories: true)
+        var mutated = config
+        mutated.pages[0].name = "GitHub renamed"
+
+        XCTAssertNoThrow(try store.save(mutated))
+
+        var isDirectory: ObjCBool = true
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.stateURL.path, isDirectory: &isDirectory))
+        XCTAssertFalse(isDirectory.boolValue)
+        let loaded = try store.load()
+        XCTAssertEqual(loaded.pages.map(\.name), ["GitHub renamed"])
+        XCTAssertEqual(loaded.pages[0].snapshot?.overall, .green)
+    }
+}
+
+/// Fixtures shared by the state-file tests.
+enum StateFileFixtures {
+    static func mode(_ url: URL) throws -> Int16 {
+        let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+        return try XCTUnwrap(attrs[.posixPermissions] as? NSNumber).int16Value
+    }
+
+    /// Leaves a directory at the state path that `save` cannot clear, so the state write fails.
+    /// A read-only directory cannot be emptied, so the removal fails and the write after it fails.
+    static func blockStatePath(_ store: PageStore) throws {
+        try? FileManager.default.removeItem(at: store.stateURL)
+        try FileManager.default.createDirectory(at: store.stateURL, withIntermediateDirectories: true)
+        try Data().write(to: store.stateURL.appendingPathComponent("junk"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: store.stateURL.path)
+    }
+
+    /// Lets the test tear-down remove the temporary directory.
+    static func unblockStatePath(_ store: PageStore) {
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: store.stateURL.path)
+    }
+
+    static func page(name: String) throws -> WatchedPage {
+        let url = try XCTUnwrap(URL(string: "https://www.githubstatus.com"))
+        return WatchedPage(
+            id: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000001")),
+            url: url,
+            name: name,
+            snapshot: PageSnapshot(
+                name: name,
+                url: url,
+                provider: .statuspage,
+                overall: .green,
+                components: [ComponentStatus(name: "API", severity: .green, statusText: "Operational")],
+                incidents: [],
+                isUnreachable: false
+            )
+        )
     }
 }
