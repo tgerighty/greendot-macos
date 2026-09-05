@@ -153,7 +153,7 @@ final class PollPerformanceTests: XCTestCase {
         XCTAssertEqual(snap.overall, .yellow)
     }
 
-    func testUnchangedPollDoesNotRewriteConfig() async throws {
+    func testUnchangedPollRewritesNeitherFile() async throws {
         let client = MapHTTPClient(byPath: [
             "/api/v2/summary.json": (Self.statuspageJSON, 200)
         ])
@@ -174,7 +174,7 @@ final class PollPerformanceTests: XCTestCase {
         XCTAssertEqual(monitor.pages[0].displaySeverity, .yellow)
     }
 
-    func testChangedPollStillRewritesConfig() async throws {
+    func testChangedPollRewritesOnlyStateFile() async throws {
         let client = MapHTTPClient(byPath: [
             "/api/v2/summary.json": (Self.statuspageJSON, 200)
         ])

@@ -44,6 +44,22 @@ final class StateFileSplitTests: XCTestCase {
         XCTAssertEqual(loaded.pages[0].displaySeverity, .grey)
     }
 
+    func testCorruptStateFileIsIgnored() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        var config = AppConfig(didSetLaunchAtLogin: true)
+        config.pages = [try Self.page(name: "GitHub")]
+        try store.save(config)
+
+        try Data("{".utf8).write(to: store.stateURL)
+
+        let loaded = try store.load()
+        XCTAssertFalse(loaded.didSetLaunchAtLogin)
+        XCTAssertNil(loaded.pages[0].snapshot)
+        XCTAssertEqual(loaded.pages.map(\.name), ["GitHub"])
+    }
+
     func testVersion1FileLoadsInlineStateAndNextSaveSplitsIt() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }
