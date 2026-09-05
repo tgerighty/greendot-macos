@@ -136,5 +136,6 @@ final class PageStoreValidationTests: XCTestCase {
             XCTAssertEqual(error as? StoreError, .corrupt)
         }
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.configURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.stateURL.path))
     }
 }

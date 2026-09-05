@@ -81,4 +81,18 @@ final class MonitorFirstRunTests: XCTestCase {
         XCTAssertEqual(callbackCount, 1)
         XCTAssertTrue(try store.load().didSetLaunchAtLogin)
     }
+
+    func testLaunchAtLoginFlagRoundTripsThroughStateFile() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PageStore(directory: directory)
+
+        try store.save(AppConfig(didSetLaunchAtLogin: true))
+
+        let configText = try XCTUnwrap(String(data: try Data(contentsOf: store.configURL), encoding: .utf8))
+        let stateText = try XCTUnwrap(String(data: try Data(contentsOf: store.stateURL), encoding: .utf8))
+        XCTAssertFalse(configText.contains("didSetLaunchAtLogin"), configText)
+        XCTAssertTrue(stateText.contains("didSetLaunchAtLogin"), stateText)
+        XCTAssertTrue(try store.load().didSetLaunchAtLogin)
+    }
 }

@@ -162,14 +162,15 @@ final class PollPerformanceTests: XCTestCase {
             pages: [BenchmarkFixtures.greenPage(host: "a.example", name: "A", provider: .statuspage)]
         )
         defer { try? FileManager.default.removeItem(at: dir) }
-        let configURL = PageStore(directory: dir).configURL
+        let store = PageStore(directory: dir)
         _ = try await monitor.pollAll()
         XCTAssertEqual(monitor.pages[0].displaySeverity, .yellow)
         XCTAssertEqual(monitor.pages[0].snapshot?.incidents.first?.title, "API slow")
-        let afterFirst = try inode(configURL)
+        let configAfterFirst = try inode(store.configURL)
+        let stateAfterFirst = try inode(store.stateURL)
         _ = try await monitor.pollAll()
-        let afterSecond = try inode(configURL)
-        XCTAssertEqual(afterFirst, afterSecond)
+        XCTAssertEqual(try inode(store.configURL), configAfterFirst)
+        XCTAssertEqual(try inode(store.stateURL), stateAfterFirst)
         XCTAssertEqual(monitor.pages[0].displaySeverity, .yellow)
     }
 
@@ -182,11 +183,12 @@ final class PollPerformanceTests: XCTestCase {
             pages: [BenchmarkFixtures.greenPage(host: "a.example", name: "A", provider: .statuspage)]
         )
         defer { try? FileManager.default.removeItem(at: dir) }
-        let configURL = PageStore(directory: dir).configURL
-        let before = try inode(configURL)
+        let store = PageStore(directory: dir)
+        let configBefore = try inode(store.configURL)
+        let stateBefore = try inode(store.stateURL)
         _ = try await monitor.pollAll()
-        let after = try inode(configURL)
-        XCTAssertNotEqual(before, after)
+        XCTAssertEqual(try inode(store.configURL), configBefore)
+        XCTAssertNotEqual(try inode(store.stateURL), stateBefore)
         XCTAssertEqual(monitor.pages[0].displaySeverity, .yellow)
     }
 

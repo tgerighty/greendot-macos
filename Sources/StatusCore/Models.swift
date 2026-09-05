@@ -185,6 +185,5 @@ extension WatchedPage: Codable {
         try container.encode(name, forKey: .name)
         try container.encode(notificationsEnabled, forKey: .notificationsEnabled)
         try container.encode(disabledComponentNames.sorted(), forKey: .disabledComponentNames)
-        try container.encodeIfPresent(snapshot, forKey: .snapshot)
     }
 }

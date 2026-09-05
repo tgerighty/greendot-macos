@@ -1,7 +1,7 @@
 import Foundation
 
-public struct AppConfig: Codable, Equatable, Sendable {
-    public static let currentVersion = 1
+public struct AppConfig: Equatable, Sendable {
+    public static let currentVersion = 2
     public var version: Int
     public var pages: [WatchedPage]
     public var didSetLaunchAtLogin: Bool
@@ -26,11 +26,13 @@ public enum StoreError: Error, Equatable, LocalizedError {
 
 public final class PageStore: @unchecked Sendable {
     public let configURL: URL
+    public let stateURL: URL
     private let directory: URL
 
     public init(directory: URL) {
         self.directory = directory
         self.configURL = directory.appendingPathComponent("config.json")
+        self.stateURL = directory.appendingPathComponent("state.json")
     }
 
     public static var defaultDirectory: URL {
@@ -66,11 +68,25 @@ public final class PageStore: @unchecked Sendable {
             throw StoreError.corrupt
         }
         guard decoded.version <= AppConfig.currentVersion else { throw StoreError.corrupt }
-        let config = Self.uniquingPageIDs(decoded)
+        var config = Self.uniquingPageIDs(decoded)
+        config.version = AppConfig.currentVersion
+        applyState(to: &config)
         if Self.needsIDNormalisation(data) {
             try save(config)
         }
         return config
+    }
+
+    /// A cache file that cannot be read is ignored. Settings never depend on it.
+    private func applyState(to config: inout AppConfig) {
+        guard let data = try? Data(contentsOf: stateURL),
+              let state = try? JSONDecoder().decode(StateFile.self, from: data) else { return }
+        config.didSetLaunchAtLogin = state.didSetLaunchAtLogin
+        for index in config.pages.indices {
+            if let snapshot = state.snapshots[config.pages[index].id.uuidString] {
+                config.pages[index].snapshot = snapshot
+            }
+        }
     }
 
     /// Keeps every page. The second and later pages with a repeated id get a fresh one.
@@ -100,9 +116,26 @@ public final class PageStore: @unchecked Sendable {
     public func save(_ config: AppConfig) throws {
         try validate(config)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let data = try Self.encoder.encode(config)
-        try data.write(to: configURL, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: configURL.path)
+        try writeIfChanged(try Self.encoder.encode(config), to: configURL)
+        let state = StateFile(
+            didSetLaunchAtLogin: config.didSetLaunchAtLogin,
+            snapshots: Self.snapshots(of: config)
+        )
+        try writeIfChanged(try Self.encoder.encode(state), to: stateURL)
+    }
+
+    private static func snapshots(of config: AppConfig) -> [String: PageSnapshot] {
+        var result: [String: PageSnapshot] = [:]
+        for page in config.pages {
+            result[page.id.uuidString] = page.snapshot
+        }
+        return result
+    }
+
+    private func writeIfChanged(_ data: Data, to url: URL) throws {
+        if let existing = try? Data(contentsOf: url), existing == data { return }
+        try data.write(to: url, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 
     private func validate(_ config: AppConfig) throws {
