@@ -51,6 +51,7 @@
 
 ### Fixed
 
+- An RSS description with characters that change length when lowercased (for example `İ`) no longer reads the status token from the wrong position or crashes.
 - RSS items that put severity in `<category>` or in the description (for example
   https://status.x.ai) now set the colour. An active `outage` is red. A
   `disruption` is yellow. `Status: RESOLVED` in the description stays

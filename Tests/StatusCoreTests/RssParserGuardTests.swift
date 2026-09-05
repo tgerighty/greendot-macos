@@ -29,6 +29,19 @@ final class RssParserGuardTests: XCTestCase {
         XCTAssertEqual(snap.overall, .red)
     }
 
+    func testRSSDescriptionSeveritySurvivesLengthChangingLowercase() throws {
+        let data = Data("""
+        <rss version="2.0"><channel><title>Status</title>
+        <item><description>İİİİİİİİ İstanbul region. Severity: major</description></item>
+        </channel></rss>
+        """.utf8)
+        let snap = try RssParser.parse(
+            data: data,
+            sourceURL: URL(string: "https://status.example.com/feed")!
+        )
+        XCTAssertEqual(snap.components[0].severity, StatusMapping.rss("major"))
+    }
+
     func testNamespacedChannelTitleDoesNotReplaceRSSTitle() throws {
         let data = Data("""
         <rss version="2.0"><channel>

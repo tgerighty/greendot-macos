@@ -218,7 +218,7 @@ public enum RssParser {
         let haystack = text.lowercased()
         let needle = label.lowercased() + ":"
         guard let start = haystack.range(of: needle) else { return nil }
-        let rest = text[start.upperBound...].drop { $0.isWhitespace }
+        let rest = haystack[start.upperBound...].drop { $0.isWhitespace }
         let token = rest.prefix { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }
         return token.isEmpty ? nil : String(token)
     }
