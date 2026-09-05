@@ -304,3 +304,21 @@ final class StateFileSplitTests: XCTestCase {
         )
     }
 }
+
+final class StateFileLaunchFlagTests: XCTestCase {
+    func testMissingConfigFileStillReadsLaunchFlagFromStateFile() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        try store.save(AppConfig(didSetLaunchAtLogin: true))
+
+        // Only config.json is deleted. state.json still holds the launch choice.
+        try FileManager.default.removeItem(at: store.configURL)
+
+        let loaded = try store.load()
+
+        XCTAssertTrue(loaded.pages.isEmpty)
+        XCTAssertTrue(loaded.didSetLaunchAtLogin)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.configURL.path))
+    }
+}

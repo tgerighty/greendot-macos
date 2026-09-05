@@ -35,10 +35,10 @@ These decisions are settled. Do not re-open them in this slice.
 | Skip unchanged writes | `PageStore.save` reads each target file first and does not write when the bytes are identical. A poll that changes only a snapshot rewrites `state.json` and does not touch `config.json`. |
 | Version | `AppConfig.currentVersion = 2`. Load accepts `version <= 2`. A version-1 file (snapshots inline in pages, `didSetLaunchAtLogin` at top level) loads and is split on the next save. When `state.json` has a snapshot for a page id, it wins over an inline one. |
 | Missing `state.json` | Load as `didSetLaunchAtLogin: false`, no snapshots. This is the normal case after copying only `config.json`. A `state.json` that exists but cannot be read drops the snapshots and sets `didSetLaunchAtLogin` to true, because the app has run before. |
-| Missing `config.json` | Load as empty `AppConfig`, as today. |
+| Missing `config.json` | Load as empty `AppConfig`. A surviving `state.json` still supplies `didSetLaunchAtLogin`. |
 | Missing page `id` | Mint a `UUID()` on decode. |
 | Duplicate page `id` | Keep every page. Mint a fresh `UUID()` for the second and later pages with the same id. Save still rejects duplicates (should be unreachable). |
-| Normalised load rewrites | When load minted or replaced any id, `PageStore.load` saves the normalised config back before returning. A load that changed nothing does not write. |
+| Normalised load rewrites | When load minted or replaced any id, `PageStore.load` saves the normalised config back before returning. The rewrite is best effort: a failed write does not fail the load. A load that changed nothing does not write. |
 | `pollSeconds` | `AppConfig.pollSeconds: TimeInterval`, default `60`. Always written. On decode: missing, non-finite, or `<= 0` becomes `60`. Env `GREENDOT_POLL_SECONDS` still overrides the file when set and valid (UI tests use it). |
 | Menu | Two new items directly under "Refresh": "Reveal Config File" (identifier `reveal-config`) and "Reload Config" (identifier `reload-config`). |
 | Reveal | `NSWorkspace.shared.activateFileViewerSelecting([store.configURL])`. |

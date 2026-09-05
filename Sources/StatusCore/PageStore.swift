@@ -73,7 +73,10 @@ public final class PageStore: @unchecked Sendable {
                   nsError.code == NSFileReadNoSuchFileError || nsError.code == NSFileNoSuchFileError else {
                 throw error
             }
-            return AppConfig()
+            // No pages, so no snapshots attach. The launch flag still belongs to the user.
+            var config = AppConfig()
+            applyState(to: &config)
+            return config
         }
         tightenPermissions()
         let decoded: AppConfig
@@ -87,7 +90,8 @@ public final class PageStore: @unchecked Sendable {
         config.version = AppConfig.currentVersion
         applyState(to: &config)
         if Self.needsIDNormalisation(data) {
-            try save(config)
+            // Best effort. The ids are already unique in memory; the next successful save persists them.
+            try? save(config)
         }
         return config
     }

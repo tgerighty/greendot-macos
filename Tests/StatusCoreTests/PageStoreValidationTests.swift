@@ -118,6 +118,40 @@ final class PageStoreValidationTests: XCTestCase {
         XCTAssertEqual(try store.load().pages.map(\.id), config.pages.map(\.id))
     }
 
+    func testIDNormalisationLoadSucceedsWhenStateFileCannotBeWritten() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let json = """
+        {
+          "version": 2,
+          "pages": [
+            {
+              "id": "00000000-0000-0000-0000-000000000001",
+              "url": "https://first.example.com",
+              "name": "First"
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000001",
+              "url": "https://second.example.com",
+              "name": "Second"
+            }
+          ]
+        }
+        """
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = PageStore(directory: directory)
+        try Data(json.utf8).write(to: store.configURL)
+        // A directory cannot be replaced by a file write, so the rewrite of state.json must fail.
+        try FileManager.default.createDirectory(at: store.stateURL, withIntermediateDirectories: true)
+
+        let loaded = try store.load()
+
+        XCTAssertEqual(loaded.pages.map(\.name), ["First", "Second"])
+        XCTAssertNotEqual(loaded.pages[1].id, loaded.pages[0].id)
+        // A state file that exists but cannot be read still proves the app has run before.
+        XCTAssertTrue(loaded.didSetLaunchAtLogin)
+    }
+
     func testCleanLoadDoesNotRewriteConfigFile() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
