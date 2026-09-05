@@ -145,7 +145,14 @@ public final class PageStore: @unchecked Sendable {
     public func save(_ config: AppConfig) throws {
         try validate(config)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let previousConfig = try? Data(contentsOf: configURL)
+        let previousConfig: Data?
+        do {
+            previousConfig = try Data(contentsOf: configURL)
+        } catch {
+            // A file that exists but cannot be read cannot be rolled back. Refuse to write over it.
+            guard !FileManager.default.fileExists(atPath: configURL.path) else { throw error }
+            previousConfig = nil
+        }
         try writeIfChanged(try Self.encoder.encode(config), to: configURL)
         let state = StateFile(
             didSetLaunchAtLogin: config.didSetLaunchAtLogin,

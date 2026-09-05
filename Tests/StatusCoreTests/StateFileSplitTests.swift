@@ -173,6 +173,30 @@ final class StateFileSplitTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.configURL.path))
     }
 
+    func testUnreadableConfigFileAbortsSaveAndIsKeptIntact() throws {
+        try XCTSkipIf(getuid() == 0, "root bypasses file modes")
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        var config = AppConfig()
+        config.pages = [try Self.page(name: "GitHub")]
+        try store.save(config)
+        let originalConfigData = try Data(contentsOf: store.configURL)
+
+        // A config that cannot be read cannot be rolled back, so the save must not start.
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: store.configURL.path)
+        try FileManager.default.removeItem(at: store.stateURL)
+        try FileManager.default.createDirectory(at: store.stateURL, withIntermediateDirectories: true)
+        var mutated = config
+        mutated.pages[0].name = "GitHub renamed"
+
+        XCTAssertThrowsError(try store.save(mutated))
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.configURL.path))
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: store.configURL.path)
+        XCTAssertEqual(try Data(contentsOf: store.configURL), originalConfigData)
+    }
+
     func testSaveKeepsBothFilesAtMode0600EvenWhenTheBytesDoNotChange() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }
