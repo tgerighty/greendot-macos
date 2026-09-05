@@ -85,8 +85,8 @@ load():
 
 | Test | Change |
 |---|---|
-| `PollPerformanceTests.testChangedPollStillRewritesConfig` | Assert `state.json` inode changes and `config.json` inode does not. |
-| `PollPerformanceTests.testUnchangedPollDoesNotRewriteConfig` | Also assert `state.json` inode unchanged. |
+| `PollPerformanceTests.testChangedPollRewritesOnlyStateFile` | Assert `state.json` inode changes and `config.json` inode does not. |
+| `PollPerformanceTests.testUnchangedPollRewritesNeitherFile` | Also assert `state.json` inode unchanged. |
 | `PageStoreValidationTests.testLoadRejectsDuplicateWatchedPageIDs` | Becomes: load keeps both pages, second gets a new id, file is rewritten with unique ids. |
 | `ProbeAndMonitorTests.testPageStoreLoadUnsupportedVersionThrows` | Version 3 throws. |
 | `MonitorFirstRunTests` | `didSetLaunchAtLogin` round-trips through `state.json`; assertions on `store.load()` unchanged. |
