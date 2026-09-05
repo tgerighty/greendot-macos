@@ -250,6 +250,8 @@ final class StatusMenuControllerTests: XCTestCase {
             onToggleNotifications: { _ in XCTFail("Unexpected notification action") },
             onOpen: { _ in XCTFail("Unexpected open action") },
             onRefresh: { XCTFail("Unexpected refresh action") },
+            onRevealConfig: { XCTFail("Unexpected reveal-config action") },
+            onReloadConfig: { XCTFail("Unexpected reload-config action") },
             onToggleLaunchAtLogin: { XCTFail("Unexpected launch-at-login action") },
             onAbout: { XCTFail("Unexpected about action") },
             onQuit: { XCTFail("Unexpected quit action") }

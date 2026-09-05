@@ -4,6 +4,7 @@
 
 ### Added
 
+- Reveal Config File and Reload Config in the status menu. Reveal Config File shows `config.json` in the Finder. Reload Config reads the file again, rebuilds the menu, restarts the poll timer, and polls once. A file that greendot cannot read shows an alert and keeps the pages on screen.
 - `state.json` holds the cached poll results and the launch-at-login flag. `config.json` holds only your settings, so you can copy it to another machine or send it to a colleague. greendot reads a version 1 file and splits it on the next save.
 - `pollSeconds` in `config.json` sets the time between polls. The default is 60 seconds. `GREENDOT_POLL_SECONDS` still overrides the file.
 

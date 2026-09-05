@@ -4,14 +4,18 @@ import StatusCore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusMenu: StatusMenuController?
-    private var monitor: Monitor?
-    private var pollTimer: Timer?
+    var monitor: Monitor?
+    var store: PageStore?
+    var pollTimer: Timer?
     private var pulseTimer: Timer?
     private var editor: StatusPageEditor?
     private var toastDelivery: any ToastDelivery = SystemToastDelivery()
     private var pollRefreshState = (presentedError: false, latestInvocation: UInt64(0))
     var presentError: @MainActor (Error) -> Void = { error in
         _ = NSAlert(error: error).runModal()
+    }
+    var revealConfigFile: @MainActor (URL) -> Void = { url in
+        NSWorkspace.shared.activateFileViewerSelecting([url])
     }
     var seedFailureDiagnostic: @MainActor (Error) -> Void = { error in
         NSLog("greendot: OpenAI seed failed: \(error.localizedDescription)")
@@ -38,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             client = URLSessionHTTPClient()
         }
         let monitor = Monitor(store: store, client: client)
+        self.store = store
         monitor.onLaunchAtLoginEnable = { LaunchAtLogin.enable() }
         let loadSucceeded = loadMonitor(monitor)
         self.monitor = monitor
@@ -62,15 +67,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if Self.shouldPoll(loadSucceeded: loadSucceeded) {
-            let poll = Self.pollInterval(
+            restartPollTimer(interval: Self.pollInterval(
                 from: ProcessInfo.processInfo.environment["GREENDOT_POLL_SECONDS"],
                 configured: monitor.pollSeconds
-            )
-            pollTimer = Timer.scheduledTimer(withTimeInterval: poll, repeats: true) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    await self?.pollAndRefresh()
-                }
-            }
+            ))
         }
         pulseTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
@@ -169,6 +169,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onRefresh: { [weak self] in
                 Task { await self?.pollAndRefresh() }
             },
+            onRevealConfig: { [weak self] in self?.revealConfig() },
+            onReloadConfig: { [weak self] in self?.reloadConfig() },
             onToggleLaunchAtLogin: { [weak self] in
                 LaunchAtLogin.toggle()
                 self?.rebuild()
@@ -267,6 +269,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 extension AppDelegate {
+    @MainActor
+    func revealConfig() {
+        guard let store else { return }
+        revealConfigFile(store.configURL)
+    }
+
+    /// Reads the file again. On failure the in-memory config and the old timer stay.
+    @MainActor
+    func reloadConfig() {
+        guard let monitor, loadMonitor(monitor) else { return }
+        rebuild()
+        restartPollTimer(interval: Self.pollInterval(
+            from: ProcessInfo.processInfo.environment["GREENDOT_POLL_SECONDS"],
+            configured: monitor.pollSeconds
+        ))
+        Task { await self.pollAndRefresh() }
+    }
+
+    @MainActor
+    func restartPollTimer(interval: TimeInterval) {
+        pollTimer?.invalidate()
+        pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.pollAndRefresh()
+            }
+        }
+    }
+
     @MainActor
     func refreshToast(pageID: UUID, monitor: Monitor? = nil) {
         let pages = (monitor ?? self.monitor)?.pages ?? []
