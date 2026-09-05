@@ -37,10 +37,11 @@ extension AppDelegate {
         editor = nil
         DispatchQueue.main.async { _ = closingEditor }
         guard let monitor else { return }
+        // Drop polls already in flight before reading the file, so none of them can save the old settings over it.
+        monitor.discardInFlightPolls()
         let before = monitor.pages
         guard loadMonitor(monitor) else {
             configLoadFailed = true
-            monitor.discardInFlightPolls()
             pollTimer?.invalidate()
             pollTimer = nil
             return

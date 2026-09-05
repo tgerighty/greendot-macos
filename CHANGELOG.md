@@ -17,7 +17,7 @@
 - Reload Config cancels a first-run OpenAI seed that is still probing, so the seed cannot append OpenAI to a config you just loaded.
 - Reload Config closes an open Add or Edit panel first, so a save that is still probing cannot write over the config you just loaded.
 - Reload Config reconciles notifications with the new file. It clears the notification of a page that the file removes, mutes, makes green, or gives a new URL, and it updates the colour or name of a page that changes but stays unhealthy.
-- A version 2 `config.json` that still carries version 1 `snapshot` or `didSetLaunchAtLogin` fields ignores them. Machine-local data comes from `state.json` only.
+- A version 2 `config.json` that still carries version 1 `snapshot` or `didSetLaunchAtLogin` fields ignores them, even when they have the wrong type. Machine-local data comes from `state.json` only.
 - A hand-edited `config.json` loads. greendot gives a page without an `id` a new one, and gives a repeated `id` a new one. It rewrites the file only when it changed an `id`.
 - `config.json` is pretty-printed with sorted keys and plain slashes. `disabledComponentNames` is written as a sorted array. The same settings always produce the same bytes, so the file diffs cleanly.
 - Nested component checkbox refreshes now calculate subtree states in one pass.
