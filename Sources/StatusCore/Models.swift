@@ -169,7 +169,8 @@ extension WatchedPage: Codable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(UUID.self, forKey: .id)
+        let rawID = try container.decodeIfPresent(String.self, forKey: .id)
+        id = rawID.flatMap(UUID.init(uuidString:)) ?? UUID()
         url = try container.decode(URL.self, forKey: .url)
         name = try container.decode(String.self, forKey: .name)
         notificationsEnabled = try container.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true

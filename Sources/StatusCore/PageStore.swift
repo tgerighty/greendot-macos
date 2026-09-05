@@ -59,13 +59,42 @@ public final class PageStore: @unchecked Sendable {
             }
             return AppConfig()
         }
+        let decoded: AppConfig
         do {
-            let decoded = try JSONDecoder().decode(AppConfig.self, from: data)
-            try validate(decoded)
-            return decoded
+            decoded = try JSONDecoder().decode(AppConfig.self, from: data)
         } catch {
             throw StoreError.corrupt
         }
+        guard decoded.version <= AppConfig.currentVersion else { throw StoreError.corrupt }
+        let config = Self.uniquingPageIDs(decoded)
+        if Self.needsIDNormalisation(data) {
+            try save(config)
+        }
+        return config
+    }
+
+    /// Keeps every page. The second and later pages with a repeated id get a fresh one.
+    private static func uniquingPageIDs(_ config: AppConfig) -> AppConfig {
+        var next = config
+        var seen: Set<UUID> = []
+        for index in next.pages.indices where !seen.insert(next.pages[index].id).inserted {
+            let fresh = UUID()
+            next.pages[index].id = fresh
+            seen.insert(fresh)
+        }
+        return next
+    }
+
+    /// True when the file misses an id, holds an unreadable id, or repeats one.
+    private static func needsIDNormalisation(_ data: Data) -> Bool {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let pages = root["pages"] as? [[String: Any]] else { return false }
+        var seen: Set<String> = []
+        for page in pages {
+            guard let raw = page["id"] as? String, UUID(uuidString: raw) != nil else { return true }
+            guard seen.insert(raw).inserted else { return true }
+        }
+        return false
     }
 
     public func save(_ config: AppConfig) throws {
