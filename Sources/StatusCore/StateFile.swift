@@ -29,7 +29,8 @@ struct StateFile: Codable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         version = try container.decodeIfPresent(Int.self, forKey: .version) ?? AppConfig.currentVersion
-        didSetLaunchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .didSetLaunchAtLogin) ?? false
+        // Every state file greendot writes carries this key. A file without it still proves a prior launch.
+        didSetLaunchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .didSetLaunchAtLogin) ?? true
         snapshots = try container.decodeIfPresent([String: PageState].self, forKey: .snapshots) ?? [:]
     }
 }

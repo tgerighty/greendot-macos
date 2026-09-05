@@ -317,6 +317,20 @@ final class StateFileLaunchFlagTests: XCTestCase {
         XCTAssertEqual(try StateFileFixtures.mode(store.stateURL), 0o600)
     }
 
+    func testStateFileWithoutLaunchFlagCountsAsPriorLaunch() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let store = PageStore(directory: dir)
+        try Data(#"{"version":2,"pollSeconds":60,"pages":[]}"#.utf8).write(to: store.configURL)
+
+        // A damaged state file that still parses proves a prior launch just as a corrupt one does.
+        for state in [#"{"version":2,"snapshots":{}}"#, "{}"] {
+            try Data(state.utf8).write(to: store.stateURL)
+            XCTAssertTrue(try store.load().didSetLaunchAtLogin, state)
+        }
+    }
+
     func testSaveReplacesDirectoryLeftAtStatePath() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }
