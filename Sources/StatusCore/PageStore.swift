@@ -97,9 +97,9 @@ public final class PageStore: @unchecked Sendable {
               let state = try? JSONDecoder().decode(StateFile.self, from: data) else { return }
         config.didSetLaunchAtLogin = state.didSetLaunchAtLogin
         for index in config.pages.indices {
-            if let snapshot = state.snapshots[config.pages[index].id.uuidString] {
-                config.pages[index].snapshot = snapshot
-            }
+            guard let entry = state.snapshots[config.pages[index].id.uuidString] else { continue }
+            // A cached result belongs to the url it was polled from. A hand-edited url drops it.
+            config.pages[index].snapshot = entry.url == config.pages[index].url ? entry.snapshot : nil
         }
     }
 
@@ -132,18 +132,36 @@ public final class PageStore: @unchecked Sendable {
     public func save(_ config: AppConfig) throws {
         try validate(config)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let previousConfig = try? Data(contentsOf: configURL)
         try writeIfChanged(try Self.encoder.encode(config), to: configURL)
         let state = StateFile(
             didSetLaunchAtLogin: config.didSetLaunchAtLogin,
             snapshots: Self.snapshots(of: config)
         )
-        try writeIfChanged(try Self.encoder.encode(state), to: stateURL)
+        do {
+            try writeIfChanged(try Self.encoder.encode(state), to: stateURL)
+        } catch {
+            restoreConfig(previousConfig)
+            throw error
+        }
     }
 
-    private static func snapshots(of config: AppConfig) -> [String: PageSnapshot] {
-        var result: [String: PageSnapshot] = [:]
+    /// A settings change must not stay on disk when the cache write fails; the app keeps its old
+    /// in-memory state. Best effort: the original error is the one the caller sees.
+    private func restoreConfig(_ previous: Data?) {
+        guard let previous else {
+            try? FileManager.default.removeItem(at: configURL)
+            return
+        }
+        try? previous.write(to: configURL, options: .atomic)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: configURL.path)
+    }
+
+    private static func snapshots(of config: AppConfig) -> [String: PageState] {
+        var result: [String: PageState] = [:]
         for page in config.pages {
-            result[page.id.uuidString] = page.snapshot
+            guard let snapshot = page.snapshot else { continue }
+            result[page.id.uuidString] = PageState(url: page.url, snapshot: snapshot)
         }
         return result
     }

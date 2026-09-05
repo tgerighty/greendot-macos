@@ -10,6 +10,8 @@
 
 ### Changed
 
+- A cached poll result in `state.json` is used only when its URL matches the page URL in `config.json`. A hand-edited URL starts with no cached status.
+- A save that cannot write `state.json` restores the previous `config.json`, so a settings change the app did not accept never stays on disk.
 - A hand-edited `config.json` loads. greendot gives a page without an `id` a new one, and gives a repeated `id` a new one. It rewrites the file only when it changed an `id`.
 - `config.json` is pretty-printed with sorted keys and plain slashes. `disabledComponentNames` is written as a sorted array. The same settings always produce the same bytes, so the file diffs cleanly.
 - Nested component checkbox refreshes now calculate subtree states in one pass.

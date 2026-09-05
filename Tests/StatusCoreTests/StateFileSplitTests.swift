@@ -96,13 +96,16 @@ final class StateFileSplitTests: XCTestCase {
           "didSetLaunchAtLogin": false,
           "snapshots": {
             "00000000-0000-0000-0000-000000000001": {
-              "name": "GitHub",
               "url": "https://www.githubstatus.com",
-              "provider": "statuspage",
-              "overall": "red",
-              "components": [],
-              "incidents": [],
-              "isUnreachable": false
+              "snapshot": {
+                "name": "GitHub",
+                "url": "https://www.githubstatus.com",
+                "provider": "statuspage",
+                "overall": "red",
+                "components": [],
+                "incidents": [],
+                "isUnreachable": false
+              }
             }
           }
         }
@@ -114,6 +117,60 @@ final class StateFileSplitTests: XCTestCase {
 
         XCTAssertEqual(loaded.pages[0].snapshot?.overall, .red)
         XCTAssertFalse(loaded.didSetLaunchAtLogin)
+    }
+
+    func testChangedURLDropsCachedSnapshot() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        var config = AppConfig()
+        config.pages = [try Self.page(name: "GitHub")]
+        try store.save(config)
+
+        // A hand edit of config.json changes the url and keeps the id. state.json still holds the old url.
+        var edited = try store.load()
+        XCTAssertNotNil(edited.pages[0].snapshot)
+        let newURL = try XCTUnwrap(URL(string: "https://status.example.com"))
+        edited.pages[0].url = newURL
+        try JSONEncoder().encode(edited).write(to: store.configURL)
+
+        let loaded = try store.load()
+
+        XCTAssertEqual(loaded.pages[0].url, newURL)
+        XCTAssertNil(loaded.pages[0].snapshot)
+    }
+
+    func testFailedStateWriteRestoresConfigFile() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        var config = AppConfig()
+        config.pages = [try Self.page(name: "GitHub")]
+        try store.save(config)
+        let originalConfigData = try Data(contentsOf: store.configURL)
+
+        try FileManager.default.removeItem(at: store.stateURL)
+        try FileManager.default.createDirectory(at: store.stateURL, withIntermediateDirectories: true)
+        var mutated = config
+        mutated.pages[0].name = "GitHub renamed"
+
+        XCTAssertThrowsError(try store.save(mutated))
+
+        XCTAssertEqual(try Data(contentsOf: store.configURL), originalConfigData)
+        XCTAssertEqual(try Self.mode(store.configURL), 0o600)
+    }
+
+    func testFailedStateWriteOnFirstSaveLeavesNoConfigFile() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        try FileManager.default.createDirectory(at: store.stateURL, withIntermediateDirectories: true)
+        var config = AppConfig()
+        config.pages = [try Self.page(name: "GitHub")]
+
+        XCTAssertThrowsError(try store.save(config))
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.configURL.path))
     }
 
     func testSaveKeepsBothFilesAtMode0600EvenWhenTheBytesDoNotChange() throws {

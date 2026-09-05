@@ -29,7 +29,7 @@ These decisions are settled. Do not re-open them in this slice.
 |---|---|
 | Files | Two files in the config directory. `config.json` holds settings. `state.json` holds machine-local cache. Both mode `0600`, atomic write. |
 | `config.json` shape | `{ "version": 2, "pollSeconds": 60, "pages": [ { "id": "<uuid>", "url": "...", "name": "...", "notificationsEnabled": true, "disabledComponentNames": ["a", "b"] } ] }`. No `snapshot`. No `didSetLaunchAtLogin`. |
-| `state.json` shape | `{ "version": 2, "didSetLaunchAtLogin": true, "snapshots": { "<page uuid>": <PageSnapshot> } }`. |
+| `state.json` shape | `{ "version": 2, "didSetLaunchAtLogin": true, "snapshots": { "<page uuid>": { "url": "...", "snapshot": <PageSnapshot> } } }`. A snapshot is used only when its url equals the page url. |
 | In-memory model | `AppConfig` stays the single in-memory truth for `Monitor`, including `pages[].snapshot` and `didSetLaunchAtLogin`. Only `PageStore` knows about the two files. `Monitor` code does not change for the split. |
 | Encoding | `JSONEncoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]` for both files. `disabledComponentNames` is encoded as a sorted array. The same `AppConfig` always encodes to the same bytes. |
 | Skip unchanged writes | `PageStore.save` reads each target file first and does not write when the bytes are identical. A poll that changes only a snapshot rewrites `state.json` and does not touch `config.json`. |

@@ -1,5 +1,11 @@
 import Foundation
 
+/// One cached poll result and the page url it came from.
+struct PageState: Codable {
+    var url: URL
+    var snapshot: PageSnapshot
+}
+
 /// `state.json`. The machine-local cache. `config.json` holds settings only.
 struct StateFile: Codable {
     enum CodingKeys: String, CodingKey {
@@ -8,12 +14,12 @@ struct StateFile: Codable {
 
     var version: Int
     var didSetLaunchAtLogin: Bool
-    var snapshots: [String: PageSnapshot]
+    var snapshots: [String: PageState]
 
     init(
         version: Int = AppConfig.currentVersion,
         didSetLaunchAtLogin: Bool,
-        snapshots: [String: PageSnapshot]
+        snapshots: [String: PageState]
     ) {
         self.version = version
         self.didSetLaunchAtLogin = didSetLaunchAtLogin
@@ -24,7 +30,7 @@ struct StateFile: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         version = try container.decodeIfPresent(Int.self, forKey: .version) ?? AppConfig.currentVersion
         didSetLaunchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .didSetLaunchAtLogin) ?? false
-        snapshots = try container.decodeIfPresent([String: PageSnapshot].self, forKey: .snapshots) ?? [:]
+        snapshots = try container.decodeIfPresent([String: PageState].self, forKey: .snapshots) ?? [:]
     }
 }
 
