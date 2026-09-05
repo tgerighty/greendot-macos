@@ -134,3 +134,121 @@ final class AppDelegateReloadTests: XCTestCase {
         findView(NSButton.self, identifier: identifier, in: view)
     }
 }
+
+@MainActor
+final class AppDelegateReloadToastTests: XCTestCase {
+    private struct Fixture {
+        let store: PageStore
+        let monitor: Monitor
+        let delegate: AppDelegate
+        let delivery: InMemoryToastDelivery
+    }
+
+    func testReloadConfigClearsToastWhenPageURLChanges() throws {
+        let page = try Self.redPage(components: [Self.component("API", .red)])
+        let fixture = try makeFixture(page: page)
+        defer { fixture.delegate.pollTimer?.invalidate() }
+        var moved = page
+        moved.url = try XCTUnwrap(URL(string: "https://moved.example.com"))
+        try Self.writeConfig(pages: [moved], to: fixture.store)
+
+        fixture.delegate.reloadConfig()
+
+        XCTAssertTrue(fixture.delivery.clearedPageIDs.contains(page.id))
+        XCTAssertTrue(fixture.delivery.toasts.isEmpty)
+    }
+
+    func testReloadConfigClearsToastWhenFilterMakesPageGreen() throws {
+        let page = try Self.redPage(components: [
+            Self.component("API", .red),
+            Self.component("Web", .green)
+        ])
+        let fixture = try makeFixture(page: page)
+        defer { fixture.delegate.pollTimer?.invalidate() }
+        var filtered = page
+        filtered.disabledComponentNames = ["API"]
+        try Self.writeConfig(pages: [filtered], to: fixture.store)
+
+        fixture.delegate.reloadConfig()
+
+        XCTAssertEqual(fixture.monitor.pages.first?.displaySeverity, .green)
+        XCTAssertTrue(fixture.delivery.clearedPageIDs.contains(page.id))
+    }
+
+    func testReloadConfigRefreshesToastWhenSeverityChangesButStaysUnhealthy() throws {
+        let page = try Self.redPage(components: [
+            Self.component("API", .red),
+            Self.component("Web", .yellow)
+        ])
+        let fixture = try makeFixture(page: page)
+        defer { fixture.delegate.pollTimer?.invalidate() }
+        var filtered = page
+        filtered.disabledComponentNames = ["API"]
+        try Self.writeConfig(pages: [filtered], to: fixture.store)
+
+        fixture.delegate.reloadConfig()
+
+        XCTAssertEqual(fixture.delivery.toasts.map(\.pageID), [page.id])
+        XCTAssertEqual(fixture.delivery.toasts.first?.severity, .yellow)
+        XCTAssertFalse(fixture.delivery.clearedPageIDs.contains(page.id))
+    }
+
+    func testReloadConfigKeepsToastWhenPageIsUnchanged() throws {
+        let page = try Self.redPage(components: [Self.component("API", .red)])
+        let fixture = try makeFixture(page: page)
+        defer { fixture.delegate.pollTimer?.invalidate() }
+        try Self.writeConfig(pages: [page], to: fixture.store)
+
+        fixture.delegate.reloadConfig()
+
+        XCTAssertEqual(fixture.monitor.pages.first?.displaySeverity, .red)
+        XCTAssertFalse(fixture.delivery.clearedPageIDs.contains(page.id))
+        XCTAssertTrue(fixture.delivery.toasts.isEmpty)
+    }
+
+    private func makeFixture(page: WatchedPage) throws -> Fixture {
+        _ = NSApplication.shared
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        var config = AppConfig()
+        config.pages = [page]
+        try store.save(config)
+        let monitor = Monitor(store: store, client: MapHTTPClient())
+        try monitor.load()
+        let delivery = InMemoryToastDelivery()
+        let delegate = AppDelegate(toastDelivery: delivery)
+        delegate.store = store
+        delegate.monitor = monitor
+        delegate.presentError = { XCTFail("unexpected error: \($0)") }
+        return Fixture(store: store, monitor: monitor, delegate: delegate, delivery: delivery)
+    }
+
+    /// Writes config.json only. state.json keeps its cached snapshot, as a hand edit does.
+    private static func writeConfig(pages: [WatchedPage], to store: PageStore) throws {
+        var config = AppConfig()
+        config.pages = pages
+        try JSONEncoder().encode(config).write(to: store.configURL, options: .atomic)
+    }
+
+    private static func redPage(components: [ComponentStatus]) throws -> WatchedPage {
+        let url = try XCTUnwrap(URL(string: "https://a.example.com"))
+        return WatchedPage(
+            url: url,
+            name: "A",
+            snapshot: PageSnapshot(
+                name: "A",
+                url: url,
+                provider: .statuspage,
+                overall: .red,
+                components: components,
+                incidents: [],
+                isUnreachable: false
+            )
+        )
+    }
+
+    private static func component(_ name: String, _ severity: Severity) -> ComponentStatus {
+        ComponentStatus(name: name, severity: severity, statusText: severity.displayName)
+    }
+}

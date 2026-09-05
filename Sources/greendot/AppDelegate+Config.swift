@@ -24,7 +24,7 @@ extension AppDelegate {
         guard let monitor else { return }
         let before = monitor.pages
         guard loadMonitor(monitor) else { return }
-        clearObsoleteToasts(before: before)
+        reconcileToasts(before: before)
         rebuild()
         restartPollTimer(interval: Self.pollInterval(
             from: ProcessInfo.processInfo.environment["GREENDOT_POLL_SECONDS"],
@@ -43,14 +43,22 @@ extension AppDelegate {
         }
     }
 
-    /// Clears the toasts of pages the reloaded config removed or muted.
+    /// Matches each open toast against the reloaded config, as an editor change does.
+    /// Clears the toast of a page the reload removed, muted, made green, or left without a
+    /// cached result. Refreshes the toast of a page that changed colour but stays unhealthy.
     @MainActor
-    private func clearObsoleteToasts(before: [WatchedPage]) {
+    private func reconcileToasts(before: [WatchedPage]) {
         let current = monitor?.pages ?? []
         for page in before {
-            let reloaded = current.first { $0.id == page.id }
-            guard reloaded == nil || reloaded?.notificationsEnabled == false else { continue }
-            toastDelivery.clear(pageID: page.id)
+            guard let reloaded = current.first(where: { $0.id == page.id }),
+                  reloaded.notificationsEnabled,
+                  reloaded.snapshot != nil,
+                  reloaded.displaySeverity != .green else {
+                toastDelivery.clear(pageID: page.id)
+                continue
+            }
+            guard reloaded.displaySeverity != page.displaySeverity else { continue }
+            refreshToast(pageID: page.id)
         }
     }
 }
