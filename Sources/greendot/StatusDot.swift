@@ -8,13 +8,10 @@ enum StatusDot {
         var size: CGFloat
     }
 
-    private static let lock = NSLock()
     private static var cache: [Key: NSImage] = [:]
 
     static func image(_ severity: Severity, size: CGFloat = 12) -> NSImage {
         let key = Key(severity: severity, size: size)
-        lock.lock()
-        defer { lock.unlock() }
         if let hit = cache[key] { return hit }
         let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
             color(severity).setFill()
