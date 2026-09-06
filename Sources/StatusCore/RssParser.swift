@@ -132,7 +132,7 @@ public enum RssParser {
         let guid = text(item, "guid", uri: rssNamespace)
         let name = title ?? guid ?? text(item, "description", uri: rssNamespace)
         guard let name else { return nil }
-        let raw = text(item, "status", uri: rssNamespace)
+        let raw = itemStatus(item, uri: rssNamespace)
         return ComponentStatus(
             name: name,
             severity: StatusMapping.rss(raw, missing: missing),
@@ -146,7 +146,7 @@ public enum RssParser {
         let entryID = text(entry, "id", uri: atomNamespace)
         let name = title ?? entryID
         guard let name else { return nil }
-        let raw = text(entry, "status", uri: atomNamespace)
+        let raw = itemStatus(entry, uri: atomNamespace)
         return ComponentStatus(
             name: name,
             severity: StatusMapping.rss(raw, missing: missing),
@@ -198,6 +198,39 @@ public enum RssParser {
         guard let url = URL(string: raw), let scheme = url.scheme?.lowercased() else { return nil }
         guard scheme == "http" || scheme == "https" else { return nil }
         return url
+    }
+
+    private static func itemStatus(_ element: XMLElement, uri: String) -> String? {
+        text(element, "status", uri: uri)
+            ?? knownCategory(element, uri: uri)
+            ?? descriptionStatus(text(element, "description", uri: uri))
+    }
+
+    private static func descriptionStatus(_ description: String?) -> String? {
+        guard let description else { return nil }
+        if let status = labeledValue(description, "status"), status.lowercased() == "resolved" {
+            return status
+        }
+        return labeledValue(description, "severity").flatMap(StatusMapping.rssKnownToken)
+    }
+
+    private static func labeledValue(_ text: String, _ label: String) -> String? {
+        let haystack = text.lowercased()
+        let needle = label.lowercased() + ":"
+        guard let start = haystack.range(of: needle) else { return nil }
+        let rest = haystack[start.upperBound...].drop { $0.isWhitespace }
+        let token = rest.prefix { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }
+        return token.isEmpty ? nil : String(token)
+    }
+
+    private static func knownCategory(_ element: XMLElement, uri: String) -> String? {
+        let tokens = children(element, "category", uri: uri).compactMap { node -> String? in
+            let raw = node.attribute(forName: "term")?.stringValue ?? textValue(node)
+            return raw.flatMap(StatusMapping.rssKnownToken)
+        }
+        guard !tokens.isEmpty else { return nil }
+        let worst = Aggregator.fromSeverities(tokens.map { StatusMapping.rss($0) })
+        return tokens.first { StatusMapping.rss($0) == worst }
     }
 
     private static func text(_ element: XMLElement, _ name: String, uri: String) -> String? {

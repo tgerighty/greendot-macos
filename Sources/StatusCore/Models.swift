@@ -169,11 +169,22 @@ extension WatchedPage: Codable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(UUID.self, forKey: .id)
+        let rawID = try container.decodeIfPresent(String.self, forKey: .id)
+        id = rawID.flatMap(UUID.init(uuidString:)) ?? UUID()
         url = try container.decode(URL.self, forKey: .url)
         name = try container.decode(String.self, forKey: .name)
         notificationsEnabled = try container.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true
         disabledComponentNames = try container.decodeIfPresent(Set<String>.self, forKey: .disabledComponentNames) ?? []
-        snapshot = try container.decodeIfPresent(PageSnapshot.self, forKey: .snapshot)
+        // Legacy version-1 field. A wrong type is ignored, not fatal.
+        snapshot = (try? container.decodeIfPresent(PageSnapshot.self, forKey: .snapshot)) ?? nil
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(url, forKey: .url)
+        try container.encode(name, forKey: .name)
+        try container.encode(notificationsEnabled, forKey: .notificationsEnabled)
+        try container.encode(disabledComponentNames.sorted(), forKey: .disabledComponentNames)
     }
 }

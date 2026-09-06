@@ -24,6 +24,8 @@ struct StatusMenuHandlers {
     var onToggleNotifications: (UUID) -> Void
     var onOpen: (URL) -> Void
     var onRefresh: () -> Void
+    var onRevealConfig: () -> Void
+    var onReloadConfig: () -> Void
     var onToggleLaunchAtLogin: () -> Void
     var onAbout: () -> Void
     var onQuit: () -> Void
@@ -60,6 +62,10 @@ final class MenuBuilder {
         menu.addItem(.separator())
         menu.addItem(actionItem("Add Status Page…", identifier: "add-page", action: handlers.onAdd))
         menu.addItem(actionItem("Refresh", identifier: "refresh", action: handlers.onRefresh))
+        menu.addItem(
+            actionItem("Reveal Config File", identifier: "reveal-config", action: handlers.onRevealConfig)
+        )
+        menu.addItem(actionItem("Reload Config", identifier: "reload-config", action: handlers.onReloadConfig))
 
         let login = actionItem(
             "Launch at Login",

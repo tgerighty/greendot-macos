@@ -78,6 +78,8 @@ final class MenuBuilderTests: XCTestCase {
                 onToggleNotifications: { _ in },
                 onOpen: { _ in },
                 onRefresh: {},
+                onRevealConfig: {},
+                onReloadConfig: {},
                 onToggleLaunchAtLogin: {},
                 onAbout: { aboutCount += 1 },
                 onQuit: {}
@@ -111,6 +113,8 @@ final class MenuBuilderTests: XCTestCase {
                 onToggleNotifications: { _ in },
                 onOpen: { opened.append($0) },
                 onRefresh: {},
+                onRevealConfig: {},
+                onReloadConfig: {},
                 onToggleLaunchAtLogin: {},
                 onAbout: {},
                 onQuit: {}
@@ -141,6 +145,8 @@ final class MenuBuilderTests: XCTestCase {
                 onToggleNotifications: { _ in },
                 onOpen: { opened.append($0) },
                 onRefresh: {},
+                onRevealConfig: {},
+                onReloadConfig: {},
                 onToggleLaunchAtLogin: {},
                 onAbout: {},
                 onQuit: {}
@@ -168,20 +174,6 @@ final class MenuBuilderTests: XCTestCase {
 
     private static func state(page: WatchedPage) -> StatusMenuState {
         state(pages: [page])
-    }
-
-    private static func handlers(onOpen: @escaping (URL) -> Void) -> StatusMenuHandlers {
-        StatusMenuHandlers(
-            onAdd: {},
-            onEdit: { _ in },
-            onRemove: { _ in },
-            onToggleNotifications: { _ in },
-            onOpen: onOpen,
-            onRefresh: {},
-            onToggleLaunchAtLogin: {},
-            onAbout: {},
-            onQuit: {}
-        )
     }
 
     private static func invoke(_ item: NSMenuItem?) {
@@ -275,5 +267,58 @@ final class MenuBuilderTests: XCTestCase {
                 isUnreachable: false
             )
         )
+    }
+}
+
+/// Kept out of the class body to stay inside the SwiftLint `type_body_length` limit.
+extension MenuBuilderTests {
+    private static func handlers(onOpen: @escaping (URL) -> Void) -> StatusMenuHandlers {
+        StatusMenuHandlers(
+            onAdd: {},
+            onEdit: { _ in },
+            onRemove: { _ in },
+            onToggleNotifications: { _ in },
+            onOpen: onOpen,
+            onRefresh: {},
+            onRevealConfig: {},
+            onReloadConfig: {},
+            onToggleLaunchAtLogin: {},
+            onAbout: {},
+            onQuit: {}
+        )
+    }
+
+    func testRevealAndReloadConfigFollowRefresh() throws {
+        let menu = Self.menu(page: Self.nestedPage(), onOpen: { _ in })
+        let titles = menu.items.map(\.title)
+        let refresh = try XCTUnwrap(titles.firstIndex(of: "Refresh"), titles.joined(separator: " | "))
+        XCTAssertEqual(titles[refresh + 1], "Reveal Config File")
+        XCTAssertEqual(titles[refresh + 2], "Reload Config")
+        XCTAssertEqual(menu.items[refresh + 1].identifier?.rawValue, "reveal-config")
+        XCTAssertEqual(menu.items[refresh + 2].identifier?.rawValue, "reload-config")
+    }
+
+    func testRevealAndReloadConfigInvokeCallbacks() {
+        var revealCount = 0
+        var reloadCount = 0
+        let menu = MenuBuilder(
+            handlers: StatusMenuHandlers(
+                onAdd: {},
+                onEdit: { _ in },
+                onRemove: { _ in },
+                onToggleNotifications: { _ in },
+                onOpen: { _ in },
+                onRefresh: {},
+                onRevealConfig: { revealCount += 1 },
+                onReloadConfig: { reloadCount += 1 },
+                onToggleLaunchAtLogin: {},
+                onAbout: {},
+                onQuit: {}
+            )
+        ).build(for: Self.state(pages: []))
+        Self.invoke(menu.item(withTitle: "Reveal Config File"))
+        Self.invoke(menu.item(withTitle: "Reload Config"))
+        XCTAssertEqual(revealCount, 1)
+        XCTAssertEqual(reloadCount, 1)
     }
 }

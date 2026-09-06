@@ -29,6 +29,8 @@ final class EmptyComponentMenuTests: XCTestCase {
                 onToggleNotifications: { _ in },
                 onOpen: { opened.append($0) },
                 onRefresh: {},
+                onRevealConfig: {},
+                onReloadConfig: {},
                 onToggleLaunchAtLogin: {},
                 onAbout: {},
                 onQuit: {}

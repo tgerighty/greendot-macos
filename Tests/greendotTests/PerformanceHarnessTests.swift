@@ -16,6 +16,8 @@ final class PerformanceHarnessTests: XCTestCase {
         onToggleNotifications: { _ in },
         onOpen: { _ in },
         onRefresh: {},
+        onRevealConfig: {},
+        onReloadConfig: {},
         onToggleLaunchAtLogin: {},
         onAbout: {},
         onQuit: {}

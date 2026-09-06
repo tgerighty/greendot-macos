@@ -233,9 +233,17 @@ final class ProbeAndMonitorTests: XCTestCase {
 
     func testPageStoreLoadUnsupportedVersionThrows() throws {
         try assertLoadThrows(
-            Data(#"{"version":99,"pages":[],"didSetLaunchAtLogin":false}"#.utf8),
+            Data(#"{"version":3,"pages":[],"didSetLaunchAtLogin":false}"#.utf8),
             StoreError.corrupt
         )
+    }
+
+    func testPageStoreLoadAcceptsCurrentVersion() throws {
+        let dir = try writeConfig(Data(#"{"version":2,"pollSeconds":60,"pages":[]}"#.utf8))
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let config = try PageStore(directory: dir).load()
+        XCTAssertTrue(config.pages.isEmpty)
+        XCTAssertEqual(config.version, 2)
     }
 
     func testMonitorLoadThrowsOnCorruptStoreAndLeavesPagesEmpty() throws {

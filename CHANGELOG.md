@@ -2,8 +2,25 @@
 
 ## [Unreleased]
 
+### Added
+
+- Reveal Config File and Reload Config in the status menu. Reveal Config File shows `config.json` in the Finder. Reload Config reads the file again, rebuilds the menu, restarts the poll timer, and polls once. A file that greendot cannot read shows an alert, keeps the pages on screen, and stops polling and menu changes until a reload succeeds, so nothing writes the old settings over the file you are fixing. Reveal Config File creates `config.json` first if it does not exist.
+- `state.json` holds the cached poll results and the launch-at-login flag. `config.json` holds only your settings, so you can copy it to another machine or send it to a colleague. greendot reads a version 1 file and splits it on the next save.
+- `pollSeconds` in `config.json` sets the time between polls. The default is 60 seconds. `GREENDOT_POLL_SECONDS` still overrides the file.
+
 ### Changed
 
+- A cached poll result in `state.json` is used only when its URL matches the page URL in `config.json`. A hand-edited URL starts with no cached status.
+- A save that cannot write `state.json` restores the previous `config.json`, so a settings change the app did not accept never stays on disk.
+- greendot sets mode `0600` on `config.json` and `state.json` each time it loads them, so a file copied in with a wider mode is protected at once.
+- A `state.json` that exists but cannot be read no longer counts as a first launch, so greendot does not turn Launch at Login back on.
+- Reload Config cancels a first-run OpenAI seed that is still probing, so the seed cannot append OpenAI to a config you just loaded.
+- Reload Config closes an open Add or Edit panel first, so a save that is still probing cannot write over the config you just loaded.
+- Reload Config reconciles notifications with the new file. It clears the notification of a page that the file removes, mutes, makes green, or gives a new URL, and it updates the colour or name of a page that changes but stays unhealthy.
+- A version 2 `config.json` that still carries version 1 `snapshot` or `didSetLaunchAtLogin` fields ignores them, even when they have the wrong type. Machine-local data comes from `state.json` only.
+- greendot does not write over a `config.json` that changed on disk since it last read or wrote the file. It shows an alert instead. Click Reload Config to use the new file.
+- A hand-edited `config.json` loads. greendot gives a page without an `id` a new one, and gives a repeated `id` a new one. It rewrites the file only when it changed an `id`.
+- `config.json` is pretty-printed with sorted keys and plain slashes. `disabledComponentNames` is written as a sorted array. The same settings always produce the same bytes, so the file diffs cleanly.
 - Nested component checkbox refreshes now calculate subtree states in one pass.
   Release benchmark, 160-level tree and 20 clicks: 360.462 ms before, 6.781 ms
   after (five-run median).
@@ -43,6 +60,12 @@
 
 ### Fixed
 
+- An RSS description with characters that change length when lowercased (for example `İ`) no longer reads the status token from the wrong position or crashes.
+- RSS items that put severity in `<category>` or in the description (for example
+  https://status.x.ai) now set the colour. An active `outage` is red. A
+  `disruption` is yellow. `Status: RESOLVED` in the description stays
+  operational. Unrecognized category tags are ignored, so a region or product
+  name does not turn the bar yellow.
 - Red, yellow, and grey status-change toasts stay on screen until you click them. macOS UserNotifications banners always time out; those colours now use an app-owned panel. Green toasts still clear after 6 seconds.
 - A watched RSS or HTML URL keeps its query string after save, so later polls use the same feed.
 - An HTML page that advertises `feed.xml` as a relative link uses the pasted directory URL, not a slash-stripped host root.
