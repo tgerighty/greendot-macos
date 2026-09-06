@@ -65,50 +65,35 @@ enum StatusMapping {
         }
     }
 
+    private static let rssTokens: [String: (severity: Severity, text: String)] = {
+        let green = (severity: Severity.green, text: Severity.green.displayName)
+        let yellow = (severity: Severity.yellow, text: Severity.yellow.displayName)
+        let red = (severity: Severity.red, text: Severity.red.displayName)
+        let maintenance = (severity: Severity.yellow, text: "Maintenance")
+        return [
+            "available": green, "operational": green, "up": green, "none": green, "resolved": green,
+            "servicedegradation": yellow, "degraded": yellow, "degraded_performance": yellow,
+            "partial_outage": yellow, "minor": yellow, "disruption": yellow,
+            "maintenance": maintenance, "undermaintenance": maintenance,
+            "serviceinterruption": red, "full_outage": red, "major_outage": red, "majoroutage": red,
+            "critical": red, "major": red, "down": red, "outage": red
+        ]
+    }()
+
     static func rss(_ raw: String?, missing: Severity = .green) -> Severity {
         guard let raw, !raw.isEmpty else { return missing }
-        return rssKnownSeverity(raw) ?? .yellow
+        return rssTokens[raw.lowercased()]?.severity ?? .yellow
     }
 
     static func rssKnownToken(_ raw: String) -> String? {
         let token = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !token.isEmpty, rssKnownSeverity(token) != nil else { return nil }
+        guard !token.isEmpty, rssTokens[token.lowercased()] != nil else { return nil }
         return token
     }
 
-    private static func rssKnownSeverity(_ raw: String) -> Severity? {
-        switch raw.lowercased() {
-        case "available", "operational", "up", "none", "resolved":
-            return .green
-        case "servicedegradation", "degraded", "degraded_performance", "partial_outage",
-             "maintenance", "undermaintenance", "minor", "disruption":
-            return .yellow
-        case "serviceinterruption", "full_outage", "major_outage", "majoroutage",
-             "critical", "major", "down", "outage":
-            return .red
-        default:
-            return nil
-        }
-    }
-
     static func rssText(_ raw: String?, missing: Severity = .green) -> String {
-        guard let raw, !raw.isEmpty else {
-            return missing == .green ? "Operational" : missing.displayName
-        }
-        switch raw.lowercased() {
-        case "available", "operational", "up", "none", "resolved":
-            return "Operational"
-        case "servicedegradation", "degraded", "degraded_performance", "partial_outage", "minor",
-             "disruption":
-            return "Degraded"
-        case "maintenance", "undermaintenance":
-            return "Maintenance"
-        case "serviceinterruption", "full_outage", "major_outage", "majoroutage",
-             "critical", "major", "down", "outage":
-            return "Major outage"
-        default:
-            return raw
-        }
+        guard let raw, !raw.isEmpty else { return missing.displayName }
+        return rssTokens[raw.lowercased()]?.text ?? raw
     }
 
     static func instatusPage(_ status: String, incidentImpacts: [String]) -> Severity {
