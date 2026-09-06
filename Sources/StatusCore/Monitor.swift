@@ -11,7 +11,12 @@ public final class Monitor: @unchecked Sendable {
     var pageInputRevisions: [UUID: UInt64] = [:]
     var latestPollIdentity: UInt64 = 0
     /// True while the lost network toast is on screen. Survives a config reload, so the toast can be cleared.
-    var showingNetworkLoss = false
+    var networkLossFlag = false
+
+    /// The app clears a stale network toast when a poll lands and this is false.
+    public var showingNetworkLoss: Bool {
+        withStateLock { networkLossFlag }
+    }
     public var onLaunchAtLoginEnable: (() -> Void)?
 
     public convenience init(store: PageStore, client: HTTPClient) {

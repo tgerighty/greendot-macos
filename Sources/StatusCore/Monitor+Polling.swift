@@ -116,7 +116,7 @@ extension Monitor {
                 }
             }
             config = merge.config
-            showingNetworkLoss = merge.showingNetworkLoss
+            networkLossFlag = merge.showingNetworkLoss
         }
         return merge.toasts
     }
@@ -152,7 +152,7 @@ extension Monitor {
                 toasts.append(toast)
             }
         }
-        var showingLost = withStateLock { showingNetworkLoss }
+        var showingLost = withStateLock { networkLossFlag }
         let merged = NetworkToast.apply(toasts, pages: next.pages, showingLost: &showingLost)
         return WatchedPagePollMerge(
             config: next,

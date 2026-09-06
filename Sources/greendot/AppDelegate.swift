@@ -310,6 +310,17 @@ extension AppDelegate {
         }
     }
 
+    /// The network toast stands in for every page, so its arrival clears the page panels it replaces.
+    /// A poll that is no longer offline clears a network toast whose recovery never reached the screen.
+    @MainActor
+    private func reconcileNetworkToast(_ monitor: Monitor, toasts: [Toast]) {
+        if toasts.contains(NetworkToast.lost) {
+            monitor.pages.forEach { toastDelivery.clear(pageID: $0.id) }
+        } else if !monitor.showingNetworkLoss {
+            toastDelivery.clear(pageID: NetworkToast.pageID)
+        }
+    }
+
     func pollAndRefresh() async {
         guard let monitor else { return }
         await pollAndRefresh(monitor)
@@ -339,6 +350,7 @@ extension AppDelegate {
                 }
             } else {
                 self.pollRefreshState.presentedError = false
+                self.reconcileNetworkToast(monitor, toasts: outcome.toasts)
                 outcome.toasts.forEach { self.toastDelivery.deliver($0) }
             }
             self.rebuild()
