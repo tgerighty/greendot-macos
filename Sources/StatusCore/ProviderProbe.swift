@@ -69,20 +69,9 @@ public enum ProviderProbe {
     }
 
     static func probeOrder(preferring prefer: StatusProvider?) -> [StatusProvider] {
-        switch prefer {
-        case .none, .statuspage:
-            return [.statuspage, .instatus, .flashduty, .statuspal, .aws, .rss]
-        case .instatus:
-            return [.instatus, .statuspage, .flashduty, .statuspal, .aws, .rss]
-        case .flashduty:
-            return [.flashduty, .statuspage, .instatus, .statuspal, .aws, .rss]
-        case .statuspal:
-            return [.statuspal, .statuspage, .instatus, .flashduty, .aws, .rss]
-        case .aws:
-            return [.aws, .statuspage, .instatus, .flashduty, .statuspal, .rss]
-        case .rss:
-            return [.rss, .statuspage, .instatus, .flashduty, .statuspal, .aws]
-        }
+        let order: [StatusProvider] = [.statuspage, .instatus, .flashduty, .statuspal, .aws, .rss]
+        guard let prefer, prefer != .statuspage else { return order }
+        return [prefer] + order.filter { $0 != prefer }
     }
 
     public static func normalizedBase(_ url: URL) -> URL {
