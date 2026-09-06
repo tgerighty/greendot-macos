@@ -31,6 +31,16 @@ final class NetworkToastTests: XCTestCase {
         )
     }
 
+    func testPartialRecoveryStillReportsAPageThatIsDown() {
+        let previous = [page("A", .grey), page("B", .grey)]
+        let current = [page("A", .green), page("B", .grey)]
+
+        XCTAssertEqual(
+            NetworkToast.apply([toast(current[0], .green)], previous: previous, current: current),
+            [NetworkToast.regained, toast(current[1], .grey)]
+        )
+    }
+
     func testSingleUnreachablePageKeepsItsOwnToast() {
         let previous = [page("A", .green)]
         let current = [page("A", .grey)]
