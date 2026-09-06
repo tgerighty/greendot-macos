@@ -60,7 +60,7 @@ public enum ProviderProbe {
             case .statuspal:
                 if let hit = try await probeStatuspal(context: context, flags: &flags) { return hit }
             case .aws:
-                if let hit = flags.record(.miss) { return hit }
+                continue
             case .rss:
                 if let hit = try await probeRSS(context: context, flags: &flags) { return hit }
             }
@@ -158,9 +158,8 @@ public enum ProviderProbe {
         case .flashduty:
             endpoint = context.base.appendingPathComponent("api/widget/v1/summary.json")
             parse = { try FlashdutyParser.parse(data: $0, sourceURL: context.base) }
-        case .statuspal, .rss:
-            return .miss
-        case .aws:
+        case .statuspal, .rss, .aws:
+            // unreachable: routed elsewhere
             return .miss
         }
         return try await attempt(
