@@ -151,7 +151,11 @@ extension Monitor {
                 toasts.append(toast)
             }
         }
-        return WatchedPagePollMerge(config: next, acceptedIDs: acceptedIDs, toasts: toasts)
+        return WatchedPagePollMerge(
+            config: next,
+            acceptedIDs: acceptedIDs,
+            toasts: NetworkToast.apply(toasts, previous: currentConfig.pages, current: next.pages)
+        )
     }
 
     private func pollToast(

@@ -12,6 +12,7 @@ On first launch it adds [OpenAI Status](https://status.openai.com/) so you can s
 - The menu-bar icon uses the worst real status (red > yellow > green).
 - A fetch failure is grey. If any page is grey, the icon flashes grey for one second every 30 seconds.
 - Optional per-page notifications when overall status changes, including recovery.
+- One network notification when every page goes unreachable at once, and one when they come back.
 - Launch at login is on by default.
 
 v1 parsers: Atlassian Statuspage, Statuspal, Instatus, Flashduty, AWS Health, RSS 2.0, and Atom. Paste https://health.aws.amazon.com/health/status or https://status.aws.amazon.com/ for one page named AWS. HTML scrape of status (not feed discovery) is next.

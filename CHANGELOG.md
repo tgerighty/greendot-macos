@@ -10,6 +10,7 @@
 
 ### Changed
 
+- When two or more pages are watched and all of them become unreachable in one poll, greendot shows one notification: "Greendot has no network connectivity". It does not show one grey notification for each page. When the pages come back, greendot shows one notification: "Greendot has regained network connectivity". It does not show one green notification for each page. A page that comes back red or yellow still gets its own notification.
 - A cached poll result in `state.json` is used only when its URL matches the page URL in `config.json`. A hand-edited URL starts with no cached status.
 - A save that cannot write `state.json` restores the previous `config.json`, so a settings change the app did not accept never stays on disk.
 - greendot sets mode `0600` on `config.json` and `state.json` each time it loads them, so a file copied in with a wider mode is protected at once.
