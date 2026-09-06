@@ -13,7 +13,7 @@ extension ProviderProbe {
             try Task.checkCancellation()
             flags.recordHTTP(status: located.status)
             guard located.status == 200 else { return nil }
-            guard RedirectPolicy.allows(URLRequest(url: located.url), from: context.pageURL) else {
+            guard RedirectPolicy.allows(located.url, from: context.pageURL) else {
                 return nil
             }
             if looksLikeFeed(located.data),
@@ -116,7 +116,7 @@ extension ProviderProbe {
     }
 
     static func isAllowedFeedURL(_ url: URL, relativeTo base: URL) -> Bool {
-        RedirectPolicy.allows(URLRequest(url: url), from: base)
+        RedirectPolicy.allows(url, from: base)
     }
 
     static func relationTokens(_ rel: String) -> [String] {
@@ -143,7 +143,7 @@ private extension ProviderProbe {
             let located = try await context.client.getLocated(feedURL)
             try Task.checkCancellation()
             flags.recordHTTP(status: located.status)
-            guard RedirectPolicy.allows(URLRequest(url: located.url), from: feedURL) else {
+            guard RedirectPolicy.allows(located.url, from: feedURL) else {
                 return nil
             }
             guard located.status == 200, looksLikeFeed(located.data) else { return nil }

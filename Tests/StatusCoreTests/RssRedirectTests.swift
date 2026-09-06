@@ -39,31 +39,31 @@ final class RssRedirectTests: XCTestCase {
         let from = URL(string: "https://status.example.com/old")!
         XCTAssertTrue(
             RedirectPolicy.allows(
-                URLRequest(url: URL(string: "https://status.example.com/status/")!),
+                URL(string: "https://status.example.com/status/")!,
                 from: from
             )
         )
         XCTAssertFalse(
             RedirectPolicy.allows(
-                URLRequest(url: URL(string: "https://evil.example/status/")!),
+                URL(string: "https://evil.example/status/")!,
                 from: from
             )
         )
         XCTAssertFalse(
             RedirectPolicy.allows(
-                URLRequest(url: URL(string: "http://status.example.com/old")!),
+                URL(string: "http://status.example.com/old")!,
                 from: from
             )
         )
         XCTAssertFalse(
             RedirectPolicy.allows(
-                URLRequest(url: URL(string: "https://status.example.com:8443/old")!),
+                URL(string: "https://status.example.com:8443/old")!,
                 from: from
             )
         )
         XCTAssertTrue(
             RedirectPolicy.allows(
-                URLRequest(url: URL(string: "https://status.example.com/old")!),
+                URL(string: "https://status.example.com/old")!,
                 from: URL(string: "http://status.example.com/old")!
             )
         )
