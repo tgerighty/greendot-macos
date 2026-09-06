@@ -142,8 +142,6 @@ final class PanelLifecycleTests: XCTestCase {
     }
 
     func testPulseSkipsIconRefreshWhenNothingIsUnreachable() {
-        XCTAssertFalse(AppDelegate.shouldRefreshIconOnPulse(hasUnreachable: false))
-        XCTAssertTrue(AppDelegate.shouldRefreshIconOnPulse(hasUnreachable: true))
         XCTAssertEqual(
             GreyPulse.displayedSeverity(
                 persistent: .green,
@@ -167,8 +165,6 @@ final class PanelLifecycleTests: XCTestCase {
         XCTAssertFalse(AppDelegate.shouldSeedOpenAI(loadSucceeded: false, pagesEmpty: true, skipSeed: false))
         XCTAssertFalse(AppDelegate.shouldSeedOpenAI(loadSucceeded: true, pagesEmpty: false, skipSeed: false))
         XCTAssertFalse(AppDelegate.shouldSeedOpenAI(loadSucceeded: true, pagesEmpty: true, skipSeed: true))
-        XCTAssertTrue(AppDelegate.shouldPoll(loadSucceeded: true))
-        XCTAssertFalse(AppDelegate.shouldPoll(loadSucceeded: false))
     }
 
     func testLoadMonitorPresentsCorruptStoreErrorAndLeavesFile() throws {

@@ -61,27 +61,11 @@ public enum AwsParser {
     }
 
     private static func utf8JSONBytes(_ data: Data) -> Data {
-        guard let text = utf16JSONString(data), let utf8 = text.data(using: .utf8) else {
+        guard let encoding = UTF16Sniff.encoding(of: data, asciiLead: 0x5B),
+              let text = String(data: data, encoding: encoding),
+              let utf8 = text.data(using: .utf8) else {
             return data
         }
         return utf8
-    }
-
-    private static func utf16JSONString(_ data: Data) -> String? {
-        guard data.count >= 2 else { return nil }
-        let bytes = [UInt8](data.prefix(2))
-        let encoding: String.Encoding
-        if bytes[0] == 0xFE, bytes[1] == 0xFF {
-            encoding = .utf16
-        } else if bytes[0] == 0xFF, bytes[1] == 0xFE {
-            encoding = .utf16
-        } else if bytes[0] == 0, bytes[1] == 0x5B {
-            encoding = .utf16BigEndian
-        } else if bytes[0] == 0x5B, bytes[1] == 0 {
-            encoding = .utf16LittleEndian
-        } else {
-            return nil
-        }
-        return String(data: data, encoding: encoding)
     }
 }

@@ -64,12 +64,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         startupTask = Task {
             await self.maybeSeedOpenAI(monitor: monitor, loadSucceeded: loadSucceeded)
-            if Self.shouldPoll(loadSucceeded: loadSucceeded) {
+            if loadSucceeded {
                 await self.pollAndRefresh()
             }
         }
 
-        if Self.shouldPoll(loadSucceeded: loadSucceeded) {
+        if loadSucceeded {
             restartPollTimer(interval: Self.pollInterval(
                 from: ProcessInfo.processInfo.environment["GREENDOT_POLL_SECONDS"],
                 configured: monitor.pollSeconds
@@ -79,7 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor [weak self] in
                 guard let self, let monitor = self.monitor else { return }
                 let hasUnreachable = monitor.pages.contains { $0.snapshot?.isUnreachable == true }
-                guard Self.shouldRefreshIconOnPulse(hasUnreachable: hasUnreachable) else { return }
+                guard hasUnreachable else { return }
                 self.rebuild()
             }
         }
@@ -99,25 +99,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadSucceeded && pagesEmpty && !skipSeed
     }
 
-    nonisolated static func shouldPoll(loadSucceeded: Bool) -> Bool {
-        loadSucceeded
-    }
-
     nonisolated static func pollInterval(from rawValue: String?, configured: TimeInterval) -> TimeInterval {
         if let rawValue, let interval = Double(rawValue), interval.isFinite, interval > 0 {
             return interval
         }
         return AppConfig.validPollSeconds(configured)
-    }
-
-    /// Pulse flashes grey while a page is unreachable.
-    /// Skip icon refreshes when all pages are reachable.
-    nonisolated static func shouldRefreshIconOnPulse(hasUnreachable: Bool) -> Bool {
-        hasUnreachable
-    }
-
-    static func showAbout() {
-        AboutPanel.show()
     }
 
     func maybeSeedOpenAI(monitor: Monitor, loadSucceeded: Bool, skipSeed: Bool? = nil) async {
@@ -178,7 +164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 LaunchAtLogin.toggle()
                 self?.rebuild()
             },
-            onAbout: { AppDelegate.showAbout() },
+            onAbout: { AboutPanel.show() },
             onQuit: { NSApp.terminate(nil) }
         )
     }

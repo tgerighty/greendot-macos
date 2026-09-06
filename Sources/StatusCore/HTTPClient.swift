@@ -13,8 +13,8 @@ public struct HTTPGet: Sendable {
 }
 
 enum RedirectPolicy {
-    static func allows(_ request: URLRequest, from original: URL?) -> Bool {
-        guard let original, let next = request.url else { return false }
+    static func allows(_ url: URL?, from original: URL?) -> Bool {
+        guard let original, let next = url else { return false }
         guard let fromOrigin = origin(original), let toOrigin = origin(next) else { return false }
         if fromOrigin == toOrigin { return true }
         return fromOrigin.host == toOrigin.host
@@ -53,11 +53,9 @@ extension HTTPClient {
 
 public struct URLSessionHTTPClient: HTTPClient {
     private let session: URLSession
-    private let redirectDelegate: SameOriginRedirectDelegate?
 
     public init(session: URLSession) {
         let delegate = SameOriginRedirectDelegate()
-        self.redirectDelegate = delegate
         self.session = URLSession(
             configuration: session.configuration,
             delegate: delegate,
@@ -67,15 +65,12 @@ public struct URLSessionHTTPClient: HTTPClient {
 
     public init() {
         let delegate = SameOriginRedirectDelegate()
-        self.redirectDelegate = delegate
         self.session = URLSession(
             configuration: .ephemeral,
             delegate: delegate,
             delegateQueue: nil
         )
     }
-
-    var enforcesSameOriginRedirects: Bool { redirectDelegate != nil }
 
     public func get(_ url: URL) async throws -> (Data, Int) {
         let hit = try await getLocated(url)
@@ -86,7 +81,7 @@ public struct URLSessionHTTPClient: HTTPClient {
         let (data, response) = try await session.data(from: url)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         let final = response.url ?? url
-        if RedirectPolicy.allows(URLRequest(url: final), from: url) {
+        if RedirectPolicy.allows(final, from: url) {
             return HTTPGet(data: data, status: status, url: final)
         }
         return HTTPGet(data: Data(), status: 0, url: url)
@@ -102,7 +97,7 @@ final class SameOriginRedirectDelegate: NSObject, URLSessionTaskDelegate, @unche
         completionHandler: @escaping (URLRequest?) -> Void
     ) {
         let allowed = RedirectPolicy.allows(
-            newRequest,
+            newRequest.url,
             from: response.url ?? task.originalRequest?.url
         )
         completionHandler(allowed ? newRequest : nil)

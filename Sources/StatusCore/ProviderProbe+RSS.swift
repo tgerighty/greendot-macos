@@ -13,7 +13,7 @@ extension ProviderProbe {
             try Task.checkCancellation()
             flags.recordHTTP(status: located.status)
             guard located.status == 200 else { return nil }
-            guard RedirectPolicy.allows(URLRequest(url: located.url), from: context.pageURL) else {
+            guard RedirectPolicy.allows(located.url, from: context.pageURL) else {
                 return nil
             }
             if looksLikeFeed(located.data),
@@ -64,26 +64,8 @@ extension ProviderProbe {
     }
 
     static func decodeUTF16Bytes(_ data: Data) -> String? {
-        if let encoding = utf16XMLEncoding(data) {
-            return String(data: data, encoding: encoding)
-        }
-        guard looksLikeUTF16BOM(data) else { return nil }
-        return String(data: data, encoding: .utf16)
-    }
-
-    static func looksLikeUTF16BOM(_ data: Data) -> Bool {
-        guard data.count >= 2 else { return false }
-        let bytes = [UInt8](data.prefix(2))
-        return (bytes[0] == 0xFF && bytes[1] == 0xFE)
-            || (bytes[0] == 0xFE && bytes[1] == 0xFF)
-    }
-
-    static func utf16XMLEncoding(_ data: Data) -> String.Encoding? {
-        guard data.count >= 2 else { return nil }
-        let bytes = [UInt8](data.prefix(2))
-        if bytes[0] == 0, bytes[1] == 0x3C { return .utf16BigEndian }
-        if bytes[0] == 0x3C, bytes[1] == 0 { return .utf16LittleEndian }
-        return nil
+        guard let encoding = UTF16Sniff.encoding(of: data, asciiLead: 0x3C) else { return nil }
+        return String(data: data, encoding: encoding)
     }
 
     static func documentBase(from html: String, fallback: URL) -> URL {
@@ -134,7 +116,7 @@ extension ProviderProbe {
     }
 
     static func isAllowedFeedURL(_ url: URL, relativeTo base: URL) -> Bool {
-        RedirectPolicy.allows(URLRequest(url: url), from: base)
+        RedirectPolicy.allows(url, from: base)
     }
 
     static func relationTokens(_ rel: String) -> [String] {
@@ -161,7 +143,7 @@ private extension ProviderProbe {
             let located = try await context.client.getLocated(feedURL)
             try Task.checkCancellation()
             flags.recordHTTP(status: located.status)
-            guard RedirectPolicy.allows(URLRequest(url: located.url), from: feedURL) else {
+            guard RedirectPolicy.allows(located.url, from: feedURL) else {
                 return nil
             }
             guard located.status == 200, looksLikeFeed(located.data) else { return nil }
@@ -314,58 +296,23 @@ private extension ProviderProbe {
         attributes(in: String(tag))[name.lowercased()]
     }
 
+    private static let attributeRegex: NSRegularExpression? = {
+        recordRegex()
+        return try? NSRegularExpression(
+            pattern: #"([A-Za-z_:][-\w:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))"#
+        )
+    }()
+
     static func attributes(in tag: String) -> [String: String] {
+        guard let regex = attributeRegex else { return [:] }
+        let start = tag.firstIndex { $0.isWhitespace || $0 == ">" } ?? tag.endIndex
         var result: [String: String] = [:]
-        let chars = Array(tag)
-        var index = skipToken(chars, from: 0)
-        while index < chars.count {
-            index = skipSpaces(chars, from: index)
-            guard index < chars.count, chars[index] != ">" else { break }
-            let (key, afterName) = readToken(chars, from: index)
-            index = skipSpaces(chars, from: afterName)
-            guard index < chars.count, chars[index] == "=" else { continue }
-            let (value, afterValue) = readAttributeValue(chars, from: skipSpaces(chars, from: index + 1))
-            index = afterValue
-            if !key.isEmpty { result[key.lowercased()] = value }
+        for match in regex.matches(in: tag, range: NSRange(start..<tag.endIndex, in: tag)) {
+            guard let name = Range(match.range(at: 1), in: tag),
+                  let value = (2...4).compactMap({ Range(match.range(at: $0), in: tag) }).first
+            else { continue }
+            result[tag[name].lowercased()] = String(tag[value])
         }
         return result
-    }
-
-    static func skipSpaces(_ chars: [Character], from start: Int) -> Int {
-        var index = start
-        while index < chars.count, chars[index].isWhitespace { index += 1 }
-        return index
-    }
-
-    static func skipToken(_ chars: [Character], from start: Int) -> Int {
-        var index = start
-        while index < chars.count, !chars[index].isWhitespace, chars[index] != ">" { index += 1 }
-        return index
-    }
-
-    static func readToken(_ chars: [Character], from start: Int) -> (String, Int) {
-        var index = start
-        while index < chars.count,
-              chars[index] != "=",
-              !chars[index].isWhitespace,
-              chars[index] != ">" {
-            index += 1
-        }
-        return (String(chars[start..<index]), index)
-    }
-
-    static func readAttributeValue(_ chars: [Character], from start: Int) -> (String, Int) {
-        guard start < chars.count else { return ("", start) }
-        if chars[start] == "\"" || chars[start] == "'" {
-            let quote = chars[start]
-            var index = start + 1
-            while index < chars.count, chars[index] != quote { index += 1 }
-            let value = String(chars[(start + 1)..<index])
-            if index < chars.count { index += 1 }
-            return (value, index)
-        }
-        var index = start
-        while index < chars.count, !chars[index].isWhitespace, chars[index] != ">" { index += 1 }
-        return (String(chars[start..<index]), index)
     }
 }

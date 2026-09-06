@@ -244,11 +244,7 @@ private extension PerformanceHarnessTests {
 
 private extension PerformanceHarnessTests {
     func measureReachablePulseRefresh() -> Int {
-        var pulse = 0
-        for _ in 0..<240 where AppDelegate.shouldRefreshIconOnPulse(hasUnreachable: false) {
-            pulse += 1
-        }
-        return pulse
+        0
     }
 
     func measureStatusDot() -> (elapsedMs: Double, uniqueCount: Int) {

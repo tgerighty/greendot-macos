@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 public enum ProbeError: Error, Equatable, LocalizedError {
     case unsupported
@@ -16,12 +17,12 @@ public enum ProbeError: Error, Equatable, LocalizedError {
 }
 
 public enum ProviderProbe {
-    static var parseCount: Int { parseBox.current }
-    static var regexCompileCount: Int { regexBox.current }
+    static var parseCount: Int { parseBox.withLock { $0 } }
+    static var regexCompileCount: Int { regexBox.withLock { $0 } }
 
     static func resetCounts() {
-        parseBox.reset()
-        regexBox.reset()
+        parseBox.withLock { $0 = 0 }
+        regexBox.withLock { $0 = 0 }
     }
 
     public static func probe(
@@ -59,7 +60,7 @@ public enum ProviderProbe {
             case .statuspal:
                 if let hit = try await probeStatuspal(context: context, flags: &flags) { return hit }
             case .aws:
-                if let hit = flags.record(.miss) { return hit }
+                continue
             case .rss:
                 if let hit = try await probeRSS(context: context, flags: &flags) { return hit }
             }
@@ -68,20 +69,9 @@ public enum ProviderProbe {
     }
 
     static func probeOrder(preferring prefer: StatusProvider?) -> [StatusProvider] {
-        switch prefer {
-        case .none, .statuspage:
-            return [.statuspage, .instatus, .flashduty, .statuspal, .aws, .rss]
-        case .instatus:
-            return [.instatus, .statuspage, .flashduty, .statuspal, .aws, .rss]
-        case .flashduty:
-            return [.flashduty, .statuspage, .instatus, .statuspal, .aws, .rss]
-        case .statuspal:
-            return [.statuspal, .statuspage, .instatus, .flashduty, .aws, .rss]
-        case .aws:
-            return [.aws, .statuspage, .instatus, .flashduty, .statuspal, .rss]
-        case .rss:
-            return [.rss, .statuspage, .instatus, .flashduty, .statuspal, .aws]
-        }
+        let order: [StatusProvider] = [.statuspage, .instatus, .flashduty, .statuspal, .aws, .rss]
+        guard let prefer, prefer != .statuspage else { return order }
+        return [prefer] + order.filter { $0 != prefer }
     }
 
     public static func normalizedBase(_ url: URL) -> URL {
@@ -168,9 +158,8 @@ public enum ProviderProbe {
         case .flashduty:
             endpoint = context.base.appendingPathComponent("api/widget/v1/summary.json")
             parse = { try FlashdutyParser.parse(data: $0, sourceURL: context.base) }
-        case .statuspal, .rss:
-            return .miss
-        case .aws:
+        case .statuspal, .rss, .aws:
+            // unreachable: routed elsewhere
             return .miss
         }
         return try await attempt(
@@ -201,7 +190,7 @@ public enum ProviderProbe {
                 return .hit(ProbeHit(snapshot: previousSnapshot, body: data))
             }
             do {
-                parseBox.increment()
+                parseBox.withLock { $0 += 1 }
                 return .hit(ProbeHit(snapshot: try parse(data), body: data))
             } catch {
                 return .miss
@@ -261,7 +250,7 @@ public enum ProviderProbe {
     }
 
     private static let statuspalRegex: NSRegularExpression? = {
-        regexBox.increment()
+        regexBox.withLock { $0 += 1 }
         return try? NSRegularExpression(
             pattern: "statuspal\\.(?:io|eu)/api/v2/status_pages/([A-Za-z0-9_-]+)",
             options: [.caseInsensitive]
@@ -284,38 +273,15 @@ struct ProbeHit: Sendable {
     let body: Data
 }
 
-private final class CountBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var value = 0
-
-    func increment() {
-        lock.lock()
-        value += 1
-        lock.unlock()
-    }
-
-    func reset() {
-        lock.lock()
-        value = 0
-        lock.unlock()
-    }
-
-    var current: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return value
-    }
-}
-
-private let parseBox = CountBox()
-private let regexBox = CountBox()
+private let parseBox = OSAllocatedUnfairLock(initialState: 0)
+private let regexBox = OSAllocatedUnfairLock(initialState: 0)
 
 extension ProviderProbe {
     static func recordParse() {
-        parseBox.increment()
+        parseBox.withLock { $0 += 1 }
     }
 
     static func recordRegex() {
-        regexBox.increment()
+        regexBox.withLock { $0 += 1 }
     }
 }

@@ -41,13 +41,7 @@ public enum StatuspalParser {
         }
         let type = service["current_incident_type"] as? String
         let severity = StatusMapping.statuspal(type)
-        let text: String
-        switch severity {
-        case .green: text = "Operational"
-        case .yellow: text = type == "scheduled" ? "Maintenance" : "Degraded"
-        case .red: text = "Major outage"
-        case .grey: text = "Unreachable"
-        }
+        let text = type == "scheduled" ? "Maintenance" : severity.displayName
         let nested = (service["children"] as? [[String: Any]] ?? []).compactMap(node)
         return ComponentStatus(
             name: name,

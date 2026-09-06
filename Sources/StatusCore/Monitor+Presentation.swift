@@ -1,10 +1,6 @@
 import Foundation
 
 extension Monitor {
-    public func barSeverity() -> Severity {
-        withStateLock { Aggregator.fromSeverities(config.pages.map(\.displaySeverity)) }
-    }
-
     public func displayedSeverity(at now: Date) -> Severity {
         let persistent: Severity
         let hasUnreachable: Bool

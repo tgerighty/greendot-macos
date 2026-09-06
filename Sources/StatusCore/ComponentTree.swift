@@ -54,10 +54,7 @@ public enum ComponentTree {
 
     private static func moreSevere(_ current: Severity?, _ candidate: Severity) -> Severity {
         guard let current else { return candidate }
-        if current == .red || candidate == .red { return .red }
-        if current == .yellow || candidate == .yellow { return .yellow }
-        if current == .green || candidate == .green { return .green }
-        return .grey
+        return Aggregator.fromSeverities([current, candidate])
     }
 
     private static func append(_ item: ComponentStatus, to result: inout [ComponentStatus]) {

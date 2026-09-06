@@ -88,17 +88,6 @@ public struct PageSnapshot: Codable, Equatable, Sendable {
     }
 }
 
-extension Aggregator {
-    /// Bar colour: red > yellow > green. Grey wins only when no real status exists.
-    public static func barSeverity(from snapshots: [PageSnapshot]) -> Severity {
-        fromSeverities(snapshots.map(\.overall))
-    }
-
-    public static func severity(from components: [ComponentStatus]) -> Severity {
-        fromSeverities(components.map(\.severity))
-    }
-}
-
 public struct WatchedPage: Equatable, Sendable, Identifiable {
     public var id: UUID
     public var url: URL

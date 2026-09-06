@@ -266,7 +266,7 @@ final class ComponentToggleTests: XCTestCase {
                 name: "OpenAI",
                 url: pageURL,
                 provider: .statuspage,
-                overall: unreachable ? .grey : Aggregator.severity(from: components),
+                overall: unreachable ? .grey : Aggregator.fromSeverities(components.map(\.severity)),
                 components: components,
                 incidents: [],
                 isUnreachable: unreachable
