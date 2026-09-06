@@ -220,11 +220,6 @@ final class RssRedirectTests: XCTestCase {
         XCTAssertEqual(snap.provider, .rss)
         XCTAssertEqual(snap.name, "Secret Feed")
     }
-
-    func testInjectedURLSessionEnforcesSameOriginRedirects() {
-        let client = URLSessionHTTPClient(session: URLSession(configuration: .ephemeral))
-        XCTAssertTrue(client.enforcesSameOriginRedirects)
-    }
 }
 
 private struct LocatedHTTPClient: HTTPClient {

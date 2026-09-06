@@ -53,11 +53,9 @@ extension HTTPClient {
 
 public struct URLSessionHTTPClient: HTTPClient {
     private let session: URLSession
-    private let redirectDelegate: SameOriginRedirectDelegate?
 
     public init(session: URLSession) {
         let delegate = SameOriginRedirectDelegate()
-        self.redirectDelegate = delegate
         self.session = URLSession(
             configuration: session.configuration,
             delegate: delegate,
@@ -67,15 +65,12 @@ public struct URLSessionHTTPClient: HTTPClient {
 
     public init() {
         let delegate = SameOriginRedirectDelegate()
-        self.redirectDelegate = delegate
         self.session = URLSession(
             configuration: .ephemeral,
             delegate: delegate,
             delegateQueue: nil
         )
     }
-
-    var enforcesSameOriginRedirects: Bool { redirectDelegate != nil }
 
     public func get(_ url: URL) async throws -> (Data, Int) {
         let hit = try await getLocated(url)
