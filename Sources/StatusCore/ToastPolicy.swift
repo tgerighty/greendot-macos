@@ -72,7 +72,7 @@ public enum NetworkToast {
             guard !allUnreachable(pages) else { return [] }
             showingLost = false
             // The lost toast stood in for every page, so a page that is still not green needs its own toast now.
-            return [regained] + pages.filter { $0.notificationsEnabled && $0.displaySeverity != .green }.map {
+            let stillNotGreen = pages.filter { $0.notificationsEnabled && $0.displaySeverity != .green }.map {
                 Toast(
                     pageID: $0.id,
                     pageName: $0.name,
@@ -80,6 +80,10 @@ public enum NetworkToast {
                     severity: $0.displaySeverity
                 )
             }
+            // Announce a recovery only when a page answered. Withdrawing the claim because the pages
+            // no longer support it is not a recovery, and the app clears the toast on the same poll.
+            guard pages.contains(where: { $0.snapshot?.isUnreachable == false }) else { return stillNotGreen }
+            return [regained] + stillNotGreen
         }
         guard allUnreachable(pages), pages.contains(where: \.notificationsEnabled) else { return toasts }
         showingLost = true

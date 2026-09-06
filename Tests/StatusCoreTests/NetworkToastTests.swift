@@ -54,22 +54,40 @@ final class NetworkToastTests: XCTestCase {
         XCTAssertFalse(showingLost)
     }
 
-    /// One page cannot claim a network outage, so the claim must be withdrawn rather than left up.
-    func testLostToastClearsWhenTooFewPagesAreLeftToClaimAnOutage() {
+    /// One page cannot claim a network outage, so the claim is withdrawn. Nothing answered, so it
+    /// must be withdrawn quietly rather than by announcing a recovery that did not happen.
+    func testTooFewPagesWithdrawsTheClaimWithoutClaimingRecovery() {
         let current = [page("A", .grey)]
         var showingLost = true
 
         XCTAssertEqual(
             NetworkToast.apply([], pages: current, showingLost: &showingLost),
-            [NetworkToast.regained, toast(current[0], .grey)]
+            [toast(current[0], .grey)]
         )
         XCTAssertFalse(showingLost)
     }
 
-    func testLostToastClearsWhenEveryPageIsRemoved() {
+    func testRemovingEveryPageWithdrawsTheClaimWithoutClaimingRecovery() {
         var showingLost = true
 
-        XCTAssertEqual(NetworkToast.apply([], pages: [], showingLost: &showingLost), [NetworkToast.regained])
+        XCTAssertEqual(NetworkToast.apply([], pages: [], showingLost: &showingLost), [])
+        XCTAssertFalse(showingLost)
+    }
+
+    /// A page that has never been polled has unknown reachability, which is not a recovery.
+    func testAPageWithNoResultYetDoesNotClaimRecovery() {
+        let unpolled = WatchedPage(url: URL(string: "https://c.example")!, name: "C")
+        var showingLost = true
+
+        XCTAssertEqual(
+            NetworkToast.apply([], pages: [page("A", .grey), unpolled], showingLost: &showingLost),
+            [toast(page("A", .grey), .grey), Toast(
+                pageID: unpolled.id,
+                pageName: "C",
+                body: "Unreachable",
+                severity: .grey
+            )]
+        )
         XCTAssertFalse(showingLost)
     }
 
