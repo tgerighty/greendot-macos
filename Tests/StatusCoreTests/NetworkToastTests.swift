@@ -54,6 +54,25 @@ final class NetworkToastTests: XCTestCase {
         XCTAssertFalse(showingLost)
     }
 
+    /// One page cannot claim a network outage, so the claim must be withdrawn rather than left up.
+    func testLostToastClearsWhenTooFewPagesAreLeftToClaimAnOutage() {
+        let current = [page("A", .grey)]
+        var showingLost = true
+
+        XCTAssertEqual(
+            NetworkToast.apply([], pages: current, showingLost: &showingLost),
+            [NetworkToast.regained, toast(current[0], .grey)]
+        )
+        XCTAssertFalse(showingLost)
+    }
+
+    func testLostToastClearsWhenEveryPageIsRemoved() {
+        var showingLost = true
+
+        XCTAssertEqual(NetworkToast.apply([], pages: [], showingLost: &showingLost), [NetworkToast.regained])
+        XCTAssertFalse(showingLost)
+    }
+
     func testRecoveryClearsTheLostToastEvenWhenEveryPageIsMuted() {
         let current = [page("A", .green, muted: true), page("B", .green, muted: true)]
         var showingLost = true

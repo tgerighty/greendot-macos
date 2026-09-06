@@ -67,8 +67,9 @@ public enum NetworkToast {
     /// during the outage would strand the lost toast on screen with nothing left to clear it.
     public static func apply(_ toasts: [Toast], pages: [WatchedPage], showingLost: inout Bool) -> [Toast] {
         if showingLost {
-            // Stay quiet until a page answers again. A muted page still has to clear the toast.
-            guard pages.contains(where: { $0.snapshot?.isUnreachable == false }) else { return [] }
+            // The claim stands only while the pages still support it. Withdraw it as soon as they
+            // do not, including when too few are left to claim an outage at all.
+            guard !allUnreachable(pages) else { return [] }
             showingLost = false
             // The lost toast stood in for every page, so a page that is still not green needs its own toast now.
             return [regained] + pages.filter { $0.notificationsEnabled && $0.displaySeverity != .green }.map {
