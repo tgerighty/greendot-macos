@@ -64,26 +64,8 @@ extension ProviderProbe {
     }
 
     static func decodeUTF16Bytes(_ data: Data) -> String? {
-        if let encoding = utf16XMLEncoding(data) {
-            return String(data: data, encoding: encoding)
-        }
-        guard looksLikeUTF16BOM(data) else { return nil }
-        return String(data: data, encoding: .utf16)
-    }
-
-    static func looksLikeUTF16BOM(_ data: Data) -> Bool {
-        guard data.count >= 2 else { return false }
-        let bytes = [UInt8](data.prefix(2))
-        return (bytes[0] == 0xFF && bytes[1] == 0xFE)
-            || (bytes[0] == 0xFE && bytes[1] == 0xFF)
-    }
-
-    static func utf16XMLEncoding(_ data: Data) -> String.Encoding? {
-        guard data.count >= 2 else { return nil }
-        let bytes = [UInt8](data.prefix(2))
-        if bytes[0] == 0, bytes[1] == 0x3C { return .utf16BigEndian }
-        if bytes[0] == 0x3C, bytes[1] == 0 { return .utf16LittleEndian }
-        return nil
+        guard let encoding = UTF16Sniff.encoding(of: data, asciiLead: 0x3C) else { return nil }
+        return String(data: data, encoding: encoding)
     }
 
     static func documentBase(from html: String, fallback: URL) -> URL {

@@ -38,16 +38,7 @@ public enum RssParser {
     private static let atomNamespace = "http://www.w3.org/2005/Atom"
 
     private static func utf16XMLString(_ data: Data) -> String? {
-        guard data.count >= 2 else { return nil }
-        let bytes = [UInt8](data.prefix(2))
-        let encoding: String.Encoding
-        if bytes[0] == 0, bytes[1] == 0x3C {
-            encoding = .utf16BigEndian
-        } else if bytes[0] == 0x3C, bytes[1] == 0 {
-            encoding = .utf16LittleEndian
-        } else {
-            return nil
-        }
+        guard let encoding = UTF16Sniff.encoding(of: data, asciiLead: 0x3C) else { return nil }
         return String(data: data, encoding: encoding)
     }
 
