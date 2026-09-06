@@ -204,14 +204,14 @@ final class ProbeAndMonitorTests: XCTestCase {
         ])
         let monitor = Monitor(store: PageStore(directory: dir), client: okClient)
         try await monitor.add(url: URL(string: "https://www.githubstatus.com")!, name: nil)
-        XCTAssertEqual(monitor.barSeverity(), .green)
+        XCTAssertEqual(monitor.displayedSeverity(at: Date()), .green)
 
         let down = MapHTTPClient()
         let retry = Monitor(store: PageStore(directory: dir), client: down)
         try retry.load()
         let toasts = try await retry.pollAll()
         XCTAssertEqual(retry.pages[0].snapshot?.overall, .grey)
-        XCTAssertEqual(retry.barSeverity(), .grey)
+        XCTAssertEqual(retry.displayedSeverity(at: Date()), .grey)
         XCTAssertEqual(toasts.count, 1)
         XCTAssertEqual(toasts[0].body, "Unreachable")
     }

@@ -48,7 +48,7 @@ final class PollPerformanceTests: XCTestCase {
         XCTAssertEqual(monitor.pages.map { $0.snapshot?.provider }, [.statuspage, .statuspage, .statuspage])
         XCTAssertEqual(monitor.pages.map(\.displaySeverity), [.yellow, .yellow, .yellow])
         XCTAssertEqual(toasts.map(\.body), ["Degraded", "Degraded", "Degraded"])
-        XCTAssertEqual(monitor.barSeverity(), .yellow)
+        XCTAssertEqual(monitor.displayedSeverity(at: Date()), .yellow)
         XCTAssertGreaterThanOrEqual(probe.peakInFlight, 3)
     }
 
@@ -76,7 +76,7 @@ final class PollPerformanceTests: XCTestCase {
         XCTAssertEqual(monitor.pages.map { $0.snapshot?.incidents.first?.title }, ["API slow", "API", nil])
         XCTAssertEqual(toasts.map(\.pageName), ["GitHub", "Instatus"])
         XCTAssertEqual(toasts.map(\.body), ["Degraded", "Major outage"])
-        XCTAssertEqual(monitor.barSeverity(), .red)
+        XCTAssertEqual(monitor.displayedSeverity(at: Date()), .red)
 
         XCTAssertEqual(urls.filter { $0.contains("www.githubstatus.com") }, [
             "https://www.githubstatus.com/api/v2/summary.json"
@@ -201,7 +201,7 @@ final class PollPerformanceTests: XCTestCase {
         let toasts = try await monitor.pollAll()
         XCTAssertEqual(monitor.pages[0].snapshot?.isUnreachable, true)
         XCTAssertEqual(monitor.pages[0].displaySeverity, .grey)
-        XCTAssertEqual(monitor.barSeverity(), .grey)
+        XCTAssertEqual(monitor.displayedSeverity(at: Date()), .grey)
         XCTAssertEqual(toasts.map(\.body), ["Unreachable"])
     }
 
