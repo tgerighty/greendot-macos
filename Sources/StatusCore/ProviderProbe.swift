@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 public enum ProbeError: Error, Equatable, LocalizedError {
     case unsupported
@@ -16,12 +17,12 @@ public enum ProbeError: Error, Equatable, LocalizedError {
 }
 
 public enum ProviderProbe {
-    static var parseCount: Int { parseBox.current }
-    static var regexCompileCount: Int { regexBox.current }
+    static var parseCount: Int { parseBox.withLock { $0 } }
+    static var regexCompileCount: Int { regexBox.withLock { $0 } }
 
     static func resetCounts() {
-        parseBox.reset()
-        regexBox.reset()
+        parseBox.withLock { $0 = 0 }
+        regexBox.withLock { $0 = 0 }
     }
 
     public static func probe(
@@ -201,7 +202,7 @@ public enum ProviderProbe {
                 return .hit(ProbeHit(snapshot: previousSnapshot, body: data))
             }
             do {
-                parseBox.increment()
+                parseBox.withLock { $0 += 1 }
                 return .hit(ProbeHit(snapshot: try parse(data), body: data))
             } catch {
                 return .miss
@@ -261,7 +262,7 @@ public enum ProviderProbe {
     }
 
     private static let statuspalRegex: NSRegularExpression? = {
-        regexBox.increment()
+        regexBox.withLock { $0 += 1 }
         return try? NSRegularExpression(
             pattern: "statuspal\\.(?:io|eu)/api/v2/status_pages/([A-Za-z0-9_-]+)",
             options: [.caseInsensitive]
@@ -284,38 +285,15 @@ struct ProbeHit: Sendable {
     let body: Data
 }
 
-private final class CountBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var value = 0
-
-    func increment() {
-        lock.lock()
-        value += 1
-        lock.unlock()
-    }
-
-    func reset() {
-        lock.lock()
-        value = 0
-        lock.unlock()
-    }
-
-    var current: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return value
-    }
-}
-
-private let parseBox = CountBox()
-private let regexBox = CountBox()
+private let parseBox = OSAllocatedUnfairLock(initialState: 0)
+private let regexBox = OSAllocatedUnfairLock(initialState: 0)
 
 extension ProviderProbe {
     static func recordParse() {
-        parseBox.increment()
+        parseBox.withLock { $0 += 1 }
     }
 
     static func recordRegex() {
-        regexBox.increment()
+        regexBox.withLock { $0 += 1 }
     }
 }
