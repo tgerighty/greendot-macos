@@ -265,7 +265,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 extension AppDelegate {
     @MainActor
     func refreshToast(pageID: UUID, monitor: Monitor? = nil) {
-        let pages = (monitor ?? self.monitor)?.pages ?? []
+        let monitor = monitor ?? self.monitor
+        // The network toast stands in for every page. Putting a page toast back beside it would
+        // undo the collapse, and no later poll of the same outage takes that toast down again.
+        guard monitor?.showingNetworkLoss != true else {
+            toastDelivery.clear(pageID: pageID)
+            return
+        }
+        let pages = monitor?.pages ?? []
         guard let page = pages.first(where: { $0.id == pageID }) else {
             toastDelivery.clear(pageID: pageID)
             return

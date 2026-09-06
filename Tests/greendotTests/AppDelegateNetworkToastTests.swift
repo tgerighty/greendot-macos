@@ -61,6 +61,28 @@ final class AppDelegateNetworkToastTests: XCTestCase {
         )
     }
 
+    /// A reload or an edit refreshes a page notification. While the network notification stands in
+    /// for every page, putting a page notification back would undo the collapse for the rest of the
+    /// outage, because no later poll takes it down again.
+    func testRefreshingAPageDuringAnOutageDoesNotPutItsNotificationBack() async throws {
+        let seed = try seededMonitor()
+        let (monitor, client) = (seed.monitor, seed.client)
+        defer { try? FileManager.default.removeItem(at: seed.directory) }
+        let delivery = InMemoryToastDelivery()
+        let delegate = AppDelegate(toastDelivery: delivery)
+
+        client.offlineHosts = ["a.example", "b.example"]
+        await delegate.pollAndRefresh(monitor)
+        XCTAssertEqual(delivery.toasts.last, NetworkToast.lost)
+        let deliveredBefore = delivery.toasts.count
+        let pageID = monitor.pages[0].id
+
+        delegate.refreshToast(pageID: pageID, monitor: monitor)
+
+        XCTAssertEqual(delivery.toasts.count, deliveredBefore, "no page notification while the network one stands in")
+        XCTAssertTrue(delivery.clearedPageIDs.contains(pageID))
+    }
+
     private struct Seed {
         let monitor: Monitor
         let client: HostOutageHTTPClient

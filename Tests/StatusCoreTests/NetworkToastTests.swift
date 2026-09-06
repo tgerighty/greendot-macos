@@ -41,6 +41,7 @@ final class NetworkToastTests: XCTestCase {
             NetworkToast.apply([toast(current[0], .green)], pages: current, showingLost: &showingLost),
             [NetworkToast.regained, toast(current[1], .grey)]
         )
+        XCTAssertFalse(showingLost)
     }
 
     func testRemovingAPageStillLetsTheLostToastClearOnRecovery() {
@@ -114,6 +115,7 @@ final class NetworkToastTests: XCTestCase {
         var showingLost = false
 
         XCTAssertEqual(NetworkToast.apply(pageToasts, pages: current, showingLost: &showingLost), pageToasts)
+        XCTAssertFalse(showingLost)
     }
 
     func testStayingOfflineEmitsNothing() {
