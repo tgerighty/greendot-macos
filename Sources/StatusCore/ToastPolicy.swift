@@ -63,20 +63,26 @@ public enum NetworkToast {
         severity: .green
     )
 
-    public static func apply(_ toasts: [Toast], previous: [WatchedPage], current: [WatchedPage]) -> [Toast] {
-        let wasOffline = allUnreachable(previous)
-        let isOffline = allUnreachable(current)
-        guard wasOffline != isOffline, current.contains(where: \.notificationsEnabled) else { return toasts }
-        if isOffline { return [lost] }
-        // The lost toast stood in for every page, so a page that is still not green needs its own toast now.
-        return [regained] + current.filter { $0.notificationsEnabled && $0.displaySeverity != .green }.map {
-            Toast(
-                pageID: $0.id,
-                pageName: $0.name,
-                body: $0.displaySeverity.displayName,
-                severity: $0.displaySeverity
-            )
+    /// `showingLost` carries the network state across polls. Without it a page removed or added
+    /// during the outage would strand the lost toast on screen with nothing left to clear it.
+    public static func apply(_ toasts: [Toast], pages: [WatchedPage], showingLost: inout Bool) -> [Toast] {
+        if showingLost {
+            // Stay quiet until a page answers again. A muted page still has to clear the toast.
+            guard pages.contains(where: { $0.snapshot?.isUnreachable == false }) else { return [] }
+            showingLost = false
+            // The lost toast stood in for every page, so a page that is still not green needs its own toast now.
+            return [regained] + pages.filter { $0.notificationsEnabled && $0.displaySeverity != .green }.map {
+                Toast(
+                    pageID: $0.id,
+                    pageName: $0.name,
+                    body: $0.displaySeverity.displayName,
+                    severity: $0.displaySeverity
+                )
+            }
         }
+        guard allUnreachable(pages), pages.contains(where: \.notificationsEnabled) else { return toasts }
+        showingLost = true
+        return [lost]
     }
 
     /// One page down cannot tell a site outage from a network outage, so two or more are required.

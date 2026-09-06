@@ -13,62 +13,86 @@ final class NetworkToastTests: XCTestCase {
     """.utf8)
 
     func testAllPagesUnreachableCollapsesToOneLostToast() {
-        let previous = [page("A", .green), page("B", .green)]
         let current = [page("A", .grey), page("B", .grey)]
         let pageToasts = [toast(current[0], .grey), toast(current[1], .grey)]
+        var showingLost = false
 
-        XCTAssertEqual(NetworkToast.apply(pageToasts, previous: previous, current: current), [NetworkToast.lost])
+        XCTAssertEqual(NetworkToast.apply(pageToasts, pages: current, showingLost: &showingLost), [NetworkToast.lost])
+        XCTAssertTrue(showingLost)
     }
 
     func testRecoveryReplacesGreenToastsAndKeepsOthers() {
-        let previous = [page("A", .grey), page("B", .grey)]
         let current = [page("A", .green), page("B", .red)]
         let pageToasts = [toast(current[0], .green), toast(current[1], .red)]
+        var showingLost = true
 
         XCTAssertEqual(
-            NetworkToast.apply(pageToasts, previous: previous, current: current),
+            NetworkToast.apply(pageToasts, pages: current, showingLost: &showingLost),
             [NetworkToast.regained, pageToasts[1]]
         )
+        XCTAssertFalse(showingLost)
     }
 
     func testPartialRecoveryStillReportsAPageThatIsDown() {
-        let previous = [page("A", .grey), page("B", .grey)]
         let current = [page("A", .green), page("B", .grey)]
+        var showingLost = true
 
         XCTAssertEqual(
-            NetworkToast.apply([toast(current[0], .green)], previous: previous, current: current),
+            NetworkToast.apply([toast(current[0], .green)], pages: current, showingLost: &showingLost),
             [NetworkToast.regained, toast(current[1], .grey)]
         )
     }
 
+    func testRemovingAPageStillLetsTheLostToastClearOnRecovery() {
+        let current = [page("A", .green)]
+        var showingLost = true
+
+        XCTAssertEqual(
+            NetworkToast.apply([toast(current[0], .green)], pages: current, showingLost: &showingLost),
+            [NetworkToast.regained]
+        )
+        XCTAssertFalse(showingLost)
+    }
+
+    func testRecoveryClearsTheLostToastEvenWhenEveryPageIsMuted() {
+        let current = [page("A", .green, muted: true), page("B", .green, muted: true)]
+        var showingLost = true
+
+        XCTAssertEqual(NetworkToast.apply([], pages: current, showingLost: &showingLost), [NetworkToast.regained])
+        XCTAssertFalse(showingLost)
+    }
+
     func testSingleUnreachablePageKeepsItsOwnToast() {
-        let previous = [page("A", .green)]
         let current = [page("A", .grey)]
         let pageToasts = [toast(current[0], .grey)]
+        var showingLost = false
 
-        XCTAssertEqual(NetworkToast.apply(pageToasts, previous: previous, current: current), pageToasts)
+        XCTAssertEqual(NetworkToast.apply(pageToasts, pages: current, showingLost: &showingLost), pageToasts)
+        XCTAssertFalse(showingLost)
     }
 
     func testPartialOutageKeepsPageToasts() {
-        let previous = [page("A", .green), page("B", .green)]
         let current = [page("A", .grey), page("B", .green)]
         let pageToasts = [toast(current[0], .grey)]
+        var showingLost = false
 
-        XCTAssertEqual(NetworkToast.apply(pageToasts, previous: previous, current: current), pageToasts)
+        XCTAssertEqual(NetworkToast.apply(pageToasts, pages: current, showingLost: &showingLost), pageToasts)
     }
 
     func testStayingOfflineEmitsNothing() {
-        let previous = [page("A", .grey), page("B", .grey)]
         let current = [page("A", .grey), page("B", .grey)]
+        var showingLost = true
 
-        XCTAssertEqual(NetworkToast.apply([], previous: previous, current: current), [])
+        XCTAssertEqual(NetworkToast.apply([], pages: current, showingLost: &showingLost), [])
+        XCTAssertTrue(showingLost)
     }
 
     func testAllPagesMutedSuppressesNetworkToast() {
-        let previous = [page("A", .green, muted: true), page("B", .green, muted: true)]
         let current = [page("A", .grey, muted: true), page("B", .grey, muted: true)]
+        var showingLost = false
 
-        XCTAssertEqual(NetworkToast.apply([], previous: previous, current: current), [])
+        XCTAssertEqual(NetworkToast.apply([], pages: current, showingLost: &showingLost), [])
+        XCTAssertFalse(showingLost)
     }
 
     func testLostWaitsForClickAndRegainedClearsIt() {
@@ -91,17 +115,19 @@ final class NetworkToastTests: XCTestCase {
         ]
         try store.save(config)
 
-        let offline = Monitor(store: store, client: MapHTTPClient())
-        try offline.load()
-        let lost = try await offline.pollAll()
+        let client = SwitchableHTTPClient(online: MapHTTPClient(byPath: ["/api/v2/summary.json": (greenJSON, 200)]))
+        let monitor = Monitor(store: store, client: client)
+        try monitor.load()
+
+        client.isOnline = false
+        let lost = try await monitor.pollAll()
         XCTAssertEqual(lost, [NetworkToast.lost])
 
-        let online = Monitor(
-            store: store,
-            client: MapHTTPClient(byPath: ["/api/v2/summary.json": (greenJSON, 200)])
-        )
-        try online.load()
-        let regained = try await online.pollAll()
+        let stillLost = try await monitor.pollAll()
+        XCTAssertEqual(stillLost, [])
+
+        client.isOnline = true
+        let regained = try await monitor.pollAll()
         XCTAssertEqual(regained, [NetworkToast.regained])
     }
 
@@ -126,5 +152,34 @@ final class NetworkToastTests: XCTestCase {
 
     private func toast(_ page: WatchedPage, _ severity: Severity) -> Toast {
         Toast(pageID: page.id, pageName: page.name, body: severity.displayName, severity: severity)
+    }
+}
+
+/// Answers normally while online and fails every request while offline.
+final class SwitchableHTTPClient: HTTPClient, @unchecked Sendable {
+    private let online: any HTTPClient
+    private let lock = NSLock()
+    private var storedIsOnline = true
+
+    init(online: any HTTPClient) {
+        self.online = online
+    }
+
+    var isOnline: Bool {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return storedIsOnline
+        }
+        set {
+            lock.lock()
+            storedIsOnline = newValue
+            lock.unlock()
+        }
+    }
+
+    func get(_ url: URL) async throws -> (Data, Int) {
+        guard isOnline else { throw URLError(.notConnectedToInternet) }
+        return try await online.get(url)
     }
 }
