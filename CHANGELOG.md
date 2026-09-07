@@ -4,6 +4,7 @@
 
 ### Added
 
+- [Settings files](docs/settings-files.md) documents `config.json` and `state.json` in full: where they are, each key in each file, what greendot does with a file that is not complete, how to copy your settings to another Mac, and the upgrade from the single-file format.
 - Reveal Config File and Reload Config in the status menu. Reveal Config File shows `config.json` in the Finder. Reload Config reads the file again, rebuilds the menu, restarts the poll timer, and polls once. A file that greendot cannot read shows an alert, keeps the pages on screen, and stops polling and menu changes until a reload succeeds, so nothing writes the old settings over the file you are fixing. Reveal Config File creates `config.json` first if it does not exist.
 - `state.json` holds the cached poll results and the launch-at-login flag. `config.json` holds only your settings, so you can copy it to another machine or send it to a colleague. greendot reads a version 1 file and splits it on the next save.
 - `pollSeconds` in `config.json` sets the time between polls. The default is 60 seconds. `GREENDOT_POLL_SECONDS` still overrides the file.
