@@ -83,6 +83,9 @@ valid JSON, or a file with a `version` above 2 is refused. See
 This file is the cache for one Mac. Do not copy it to another Mac. You do not
 need to read it or edit it. It is listed here so that you know what it holds.
 
+The example below is shortened. A real file holds one entry for each page, and a
+page can hold many components.
+
 ```json
 {
   "didSetLaunchAtLogin" : true,
