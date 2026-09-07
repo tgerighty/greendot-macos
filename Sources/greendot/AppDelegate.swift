@@ -265,7 +265,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 extension AppDelegate {
     @MainActor
     func refreshToast(pageID: UUID, monitor: Monitor? = nil) {
-        let pages = (monitor ?? self.monitor)?.pages ?? []
+        let monitor = monitor ?? self.monitor
+        // The network toast stands in for every page. Putting a page toast back beside it would
+        // undo the collapse, and no later poll of the same outage takes that toast down again.
+        guard monitor?.showingNetworkLoss != true else {
+            toastDelivery.clear(pageID: pageID)
+            return
+        }
+        let pages = monitor?.pages ?? []
         guard let page = pages.first(where: { $0.id == pageID }) else {
             toastDelivery.clear(pageID: pageID)
             return
@@ -310,6 +317,17 @@ extension AppDelegate {
         }
     }
 
+    /// The network toast stands in for every page, so its arrival clears the page panels it replaces.
+    /// A poll that is no longer offline clears a network toast whose recovery never reached the screen.
+    @MainActor
+    private func reconcileNetworkToast(_ monitor: Monitor, toasts: [Toast]) {
+        if toasts.contains(NetworkToast.lost) {
+            monitor.pages.forEach { toastDelivery.clear(pageID: $0.id) }
+        } else if !monitor.showingNetworkLoss {
+            toastDelivery.clear(pageID: NetworkToast.pageID)
+        }
+    }
+
     func pollAndRefresh() async {
         guard let monitor else { return }
         await pollAndRefresh(monitor)
@@ -339,6 +357,7 @@ extension AppDelegate {
                 }
             } else {
                 self.pollRefreshState.presentedError = false
+                self.reconcileNetworkToast(monitor, toasts: outcome.toasts)
                 outcome.toasts.forEach { self.toastDelivery.deliver($0) }
             }
             self.rebuild()

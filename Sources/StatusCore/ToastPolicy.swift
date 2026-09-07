@@ -43,3 +43,55 @@ public enum ToastPolicy {
         return snapshot.overall.displayName
     }
 }
+
+/// Collapses a poll where every page goes grey at once into one network toast,
+/// and a poll that brings them back into one recovery toast.
+public enum NetworkToast {
+    public static let pageID = UUID(uuidString: "6E657477-6F72-6B00-0000-000000000000")!
+
+    public static let lost = Toast(
+        pageID: pageID,
+        pageName: "Network",
+        body: "Greendot has no network connectivity",
+        severity: .grey
+    )
+
+    public static let regained = Toast(
+        pageID: pageID,
+        pageName: "Network",
+        body: "Greendot has regained network connectivity",
+        severity: .green
+    )
+
+    /// `showingLost` carries the network state across polls. Without it a page removed or added
+    /// during the outage would strand the lost toast on screen with nothing left to clear it.
+    public static func apply(_ toasts: [Toast], pages: [WatchedPage], showingLost: inout Bool) -> [Toast] {
+        if showingLost {
+            // The claim stands only while the pages still support it. Withdraw it as soon as they
+            // do not, including when too few are left to claim an outage at all.
+            guard !allUnreachable(pages) else { return [] }
+            showingLost = false
+            // The lost toast stood in for every page, so a page that is still not green needs its own toast now.
+            let stillNotGreen = pages.filter { $0.notificationsEnabled && $0.displaySeverity != .green }.map {
+                Toast(
+                    pageID: $0.id,
+                    pageName: $0.name,
+                    body: $0.displaySeverity.displayName,
+                    severity: $0.displaySeverity
+                )
+            }
+            // Announce a recovery only when a page answered. Withdrawing the claim because the pages
+            // no longer support it is not a recovery, and the app clears the toast on the same poll.
+            guard pages.contains(where: { $0.snapshot?.isUnreachable == false }) else { return stillNotGreen }
+            return [regained] + stillNotGreen
+        }
+        guard allUnreachable(pages), pages.contains(where: \.notificationsEnabled) else { return toasts }
+        showingLost = true
+        return [lost]
+    }
+
+    /// One page down cannot tell a site outage from a network outage, so two or more are required.
+    private static func allUnreachable(_ pages: [WatchedPage]) -> Bool {
+        pages.count > 1 && pages.allSatisfy { $0.snapshot?.isUnreachable == true }
+    }
+}
