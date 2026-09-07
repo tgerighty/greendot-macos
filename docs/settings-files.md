@@ -74,8 +74,13 @@ greendot accepts a file that is not complete:
 - A missing `notificationsEnabled` is read as `true`. A missing
   `disabledComponentNames` is read as an empty list.
 
-A page must have a `url` and a `name`. A file without them, a file that is not
-valid JSON, or a file with a `version` above 2 is refused. See
+`pollSeconds` is the only key that accepts the wrong JSON type. greendot refuses
+the file when a different key holds the wrong type, for example
+`"notificationsEnabled": "yes"`, `"version": "2"`, `"pages": {}`, or an `id` that
+is not a string.
+
+greendot also refuses a file that is not valid JSON, a file with a `version`
+above 2, and a file with a page that has no `url` or no `name`. See
 [When greendot cannot read the file](#when-greendot-cannot-read-the-file).
 
 ## state.json
@@ -84,7 +89,8 @@ This file is the cache for one Mac. Do not copy it to another Mac. You do not
 need to read it or edit it. It is listed here so that you know what it holds.
 
 The example below is shortened. A real file holds one entry for each page, and a
-page can hold many components.
+page can hold many components. The empty arrays are written on one line here.
+greendot writes an empty array across two lines.
 
 ```json
 {
@@ -168,9 +174,13 @@ cached results and its login-item flag do not change.
 
 ### A URL can hold a token
 
-A feed URL can hold a token, for example `?token=abc123`. greendot keeps the URL
-as you typed it. Read the URLs in `config.json` before you send the file to
-another person.
+A feed URL can hold a token, for example `?token=abc123`. greendot keeps the
+query, and the token with it. Read the URLs in `config.json` before you send the
+file to another person.
+
+When you add or edit a page, greendot adds `https://` to a URL that has no
+scheme, and removes a fragment, which is the part after a `#`. It makes no other
+change. A URL that you write into `config.json` by hand is used as you wrote it.
 
 ## The poll interval
 
