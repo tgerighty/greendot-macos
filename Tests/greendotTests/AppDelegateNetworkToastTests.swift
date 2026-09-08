@@ -27,7 +27,8 @@ final class AppDelegateNetworkToastTests: XCTestCase {
 
         client.offlineHosts = ["a.example"]
         await delegate.pollAndRefresh(monitor)
-        XCTAssertEqual(delivery.toasts.map(\.pageID), [ids[0]])
+        await delegate.pollAndRefresh(monitor)
+        XCTAssertEqual(delivery.toasts.map(\.pageID), [ids[0]], "the grey toast lands on the second poll")
 
         client.offlineHosts = ["a.example", "b.example"]
         await delegate.pollAndRefresh(monitor)
@@ -103,37 +104,5 @@ final class AppDelegateNetworkToastTests: XCTestCase {
         let monitor = Monitor(store: store, client: client)
         try monitor.load()
         return Seed(monitor: monitor, client: client, directory: directory)
-    }
-}
-
-/// Fails every request to a host in `offlineHosts` and answers the rest with a green page.
-final class HostOutageHTTPClient: HTTPClient, @unchecked Sendable {
-    private let greenJSON: Data
-    private let lock = NSLock()
-    private var storedOfflineHosts: Set<String> = []
-
-    init(greenJSON: Data) {
-        self.greenJSON = greenJSON
-    }
-
-    var offlineHosts: Set<String> {
-        get {
-            lock.lock()
-            defer { lock.unlock() }
-            return storedOfflineHosts
-        }
-        set {
-            lock.lock()
-            storedOfflineHosts = newValue
-            lock.unlock()
-        }
-    }
-
-    func get(_ url: URL) async throws -> (Data, Int) {
-        guard let host = url.host, !offlineHosts.contains(host) else {
-            throw URLError(.notConnectedToInternet)
-        }
-        guard url.path == "/api/v2/summary.json" else { return (Data(), 404) }
-        return (greenJSON, 200)
     }
 }

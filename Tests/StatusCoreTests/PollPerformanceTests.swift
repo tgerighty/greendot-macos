@@ -192,17 +192,19 @@ final class PollPerformanceTests: XCTestCase {
         XCTAssertEqual(monitor.pages[0].displaySeverity, .yellow)
     }
 
-    func testPollAllUnreachablePageStaysGreyAndToasts() async throws {
+    func testPollAllUnreachablePageStaysGreyAndToastsOnTheSecondPoll() async throws {
         let (monitor, dir) = try seededMonitor(
             client: MapHTTPClient(),
             pages: [BenchmarkFixtures.greenPage(host: "offline.example", name: "Down", provider: .statuspage)]
         )
         defer { try? FileManager.default.removeItem(at: dir) }
-        let toasts = try await monitor.pollAll()
+        let firstToasts = try await monitor.pollAll()
         XCTAssertEqual(monitor.pages[0].snapshot?.isUnreachable, true)
         XCTAssertEqual(monitor.pages[0].displaySeverity, .grey)
         XCTAssertEqual(monitor.displayedSeverity(at: Date()), .grey)
-        XCTAssertEqual(toasts.map(\.body), ["Unreachable"])
+        XCTAssertEqual(firstToasts, [], "a page that has just gone unreachable waits one poll")
+        let secondToasts = try await monitor.pollAll()
+        XCTAssertEqual(secondToasts.map(\.body), ["Unreachable"])
     }
 
     private func inode(_ url: URL) throws -> NSNumber {

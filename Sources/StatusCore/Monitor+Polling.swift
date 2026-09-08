@@ -117,6 +117,7 @@ extension Monitor {
             }
             config = merge.config
             networkLossFlag = merge.showingNetworkLoss
+            pendingUnreachable = merge.pendingUnreachable
         }
         return merge.toasts
     }
@@ -132,6 +133,7 @@ extension Monitor {
         var next = currentConfig
         var acceptedIDs: Set<UUID> = []
         var toasts: [Toast] = []
+        var pending = withStateLock { pendingUnreachable }
         for index in next.pages.indices {
             let id = next.pages[index].id
             guard expectedByID[id] != nil,
@@ -147,30 +149,52 @@ extension Monitor {
                 from: previous,
                 to: result.snapshot,
                 currentPage: next.pages[index],
-                previousDisplay: previousDisplay
+                previousDisplay: previousDisplay,
+                pending: &pending
             ) {
                 toasts.append(toast)
             }
         }
         var showingLost = withStateLock { networkLossFlag }
-        let merged = NetworkToast.apply(toasts, pages: next.pages, showingLost: &showingLost)
+        let merged = NetworkToast.apply(toasts, pages: next.pages, showingLost: &showingLost, pending: &pending)
         return WatchedPagePollMerge(
             config: next,
             acceptedIDs: acceptedIDs,
             toasts: merged,
-            showingNetworkLoss: showingLost
+            showingNetworkLoss: showingLost,
+            pendingUnreachable: pending
         )
     }
 
+    /// A page that has just gone unreachable waits one poll for its grey toast. A network drop that
+    /// lands while a poll is in flight reaches the pages over two polls, and the grey toasts of the
+    /// first poll would stand beside the network toast of the second. A page that is still
+    /// unreachable on the next poll gets its toast then.
     private func pollToast(
         from previous: PageSnapshot?,
         to current: PageSnapshot,
         currentPage: WatchedPage,
-        previousDisplay: Severity
+        previousDisplay: Severity,
+        pending: inout Set<UUID>
     ) -> Toast? {
+        if current.isUnreachable {
+            guard let previous else { return nil }
+            if !previous.isUnreachable {
+                pending.insert(currentPage.id)
+                return nil
+            }
+            guard pending.remove(currentPage.id) != nil, currentPage.notificationsEnabled else { return nil }
+            return Toast(
+                pageID: currentPage.id,
+                pageName: currentPage.name,
+                body: Severity.grey.displayName,
+                severity: .grey
+            )
+        }
+        let wasPending = pending.remove(currentPage.id) != nil
         guard let previous,
               previousDisplay != currentPage.displaySeverity else { return nil }
-        return ToastPolicy.toast(
+        let toast = ToastPolicy.toast(
             previous: {
                 var copy = previous
                 copy.overall = previousDisplay
@@ -186,6 +210,9 @@ extension Monitor {
             pageName: currentPage.name,
             pageID: currentPage.id
         )
+        // No grey toast was shown, so a return to green has nothing to report.
+        if wasPending, toast?.severity == .green { return nil }
+        return toast
     }
 
     private func expectedPagesByID(_ pages: [WatchedPage]) -> [UUID: WatchedPage]? {

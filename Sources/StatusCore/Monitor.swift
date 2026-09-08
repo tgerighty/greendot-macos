@@ -12,6 +12,8 @@ public final class Monitor: @unchecked Sendable {
     var latestPollIdentity: UInt64 = 0
     /// True while the lost network toast is on screen. Survives a config reload, so the toast can be cleared.
     var networkLossFlag = false
+    /// Pages that went unreachable on the last poll and have not had a grey toast yet.
+    var pendingUnreachable: Set<UUID> = []
 
     /// The app clears a stale network toast when a poll lands and this is false.
     public var showingNetworkLoss: Bool {

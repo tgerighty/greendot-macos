@@ -209,11 +209,12 @@ final class ProbeAndMonitorTests: XCTestCase {
         let down = MapHTTPClient()
         let retry = Monitor(store: PageStore(directory: dir), client: down)
         try retry.load()
-        let toasts = try await retry.pollAll()
+        let firstToasts = try await retry.pollAll()
         XCTAssertEqual(retry.pages[0].snapshot?.overall, .grey)
         XCTAssertEqual(retry.displayedSeverity(at: Date()), .grey)
-        XCTAssertEqual(toasts.count, 1)
-        XCTAssertEqual(toasts[0].body, "Unreachable")
+        XCTAssertEqual(firstToasts, [], "a page that has just gone unreachable waits one poll")
+        let secondToasts = try await retry.pollAll()
+        XCTAssertEqual(secondToasts.map(\.body), ["Unreachable"])
     }
 
     func testPageStoreLoadMissingFileReturnsEmptyConfigAndDoesNotWrite() throws {

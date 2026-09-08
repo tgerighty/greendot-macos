@@ -17,7 +17,7 @@ final class NetworkToastTests: XCTestCase {
         let pageToasts = [toast(current[0], .grey), toast(current[1], .grey)]
         var showingLost = false
 
-        XCTAssertEqual(NetworkToast.apply(pageToasts, pages: current, showingLost: &showingLost), [NetworkToast.lost])
+        XCTAssertEqual(apply(pageToasts, pages: current, showingLost: &showingLost), [NetworkToast.lost])
         XCTAssertTrue(showingLost)
     }
 
@@ -27,21 +27,27 @@ final class NetworkToastTests: XCTestCase {
         var showingLost = true
 
         XCTAssertEqual(
-            NetworkToast.apply(pageToasts, pages: current, showingLost: &showingLost),
+            apply(pageToasts, pages: current, showingLost: &showingLost),
             [NetworkToast.regained, pageToasts[1]]
         )
         XCTAssertFalse(showingLost)
     }
 
-    func testPartialRecoveryStillReportsAPageThatIsDown() {
+    /// A page still unreachable on the poll that brings the network back is usually only late.
+    /// It waits one poll for its own toast, as a page that has just gone unreachable does.
+    func testPartialRecoveryDefersThePageThatIsStillUnreachable() {
         let current = [page("A", .green), page("B", .grey)]
         var showingLost = true
+        var pending: Set<UUID> = []
 
         XCTAssertEqual(
-            NetworkToast.apply([toast(current[0], .green)], pages: current, showingLost: &showingLost),
-            [NetworkToast.regained, toast(current[1], .grey)]
+            NetworkToast.apply(
+                [toast(current[0], .green)], pages: current, showingLost: &showingLost, pending: &pending
+            ),
+            [NetworkToast.regained]
         )
         XCTAssertFalse(showingLost)
+        XCTAssertEqual(pending, [current[1].id])
     }
 
     func testRemovingAPageStillLetsTheLostToastClearOnRecovery() {
@@ -49,7 +55,7 @@ final class NetworkToastTests: XCTestCase {
         var showingLost = true
 
         XCTAssertEqual(
-            NetworkToast.apply([toast(current[0], .green)], pages: current, showingLost: &showingLost),
+            apply([toast(current[0], .green)], pages: current, showingLost: &showingLost),
             [NetworkToast.regained]
         )
         XCTAssertFalse(showingLost)
@@ -62,7 +68,7 @@ final class NetworkToastTests: XCTestCase {
         var showingLost = true
 
         XCTAssertEqual(
-            NetworkToast.apply([], pages: current, showingLost: &showingLost),
+            apply([], pages: current, showingLost: &showingLost),
             [toast(current[0], .grey)]
         )
         XCTAssertFalse(showingLost)
@@ -71,7 +77,7 @@ final class NetworkToastTests: XCTestCase {
     func testRemovingEveryPageWithdrawsTheClaimWithoutClaimingRecovery() {
         var showingLost = true
 
-        XCTAssertEqual(NetworkToast.apply([], pages: [], showingLost: &showingLost), [])
+        XCTAssertEqual(apply([], pages: [], showingLost: &showingLost), [])
         XCTAssertFalse(showingLost)
     }
 
@@ -81,7 +87,7 @@ final class NetworkToastTests: XCTestCase {
         var showingLost = true
 
         XCTAssertEqual(
-            NetworkToast.apply([], pages: [page("A", .grey), unpolled], showingLost: &showingLost),
+            apply([], pages: [page("A", .grey), unpolled], showingLost: &showingLost),
             [toast(page("A", .grey), .grey), Toast(
                 pageID: unpolled.id,
                 pageName: "C",
@@ -96,7 +102,7 @@ final class NetworkToastTests: XCTestCase {
         let current = [page("A", .green, muted: true), page("B", .green, muted: true)]
         var showingLost = true
 
-        XCTAssertEqual(NetworkToast.apply([], pages: current, showingLost: &showingLost), [NetworkToast.regained])
+        XCTAssertEqual(apply([], pages: current, showingLost: &showingLost), [NetworkToast.regained])
         XCTAssertFalse(showingLost)
     }
 
@@ -105,7 +111,7 @@ final class NetworkToastTests: XCTestCase {
         let pageToasts = [toast(current[0], .grey)]
         var showingLost = false
 
-        XCTAssertEqual(NetworkToast.apply(pageToasts, pages: current, showingLost: &showingLost), pageToasts)
+        XCTAssertEqual(apply(pageToasts, pages: current, showingLost: &showingLost), pageToasts)
         XCTAssertFalse(showingLost)
     }
 
@@ -114,7 +120,7 @@ final class NetworkToastTests: XCTestCase {
         let pageToasts = [toast(current[0], .grey)]
         var showingLost = false
 
-        XCTAssertEqual(NetworkToast.apply(pageToasts, pages: current, showingLost: &showingLost), pageToasts)
+        XCTAssertEqual(apply(pageToasts, pages: current, showingLost: &showingLost), pageToasts)
         XCTAssertFalse(showingLost)
     }
 
@@ -122,7 +128,7 @@ final class NetworkToastTests: XCTestCase {
         let current = [page("A", .grey), page("B", .grey)]
         var showingLost = true
 
-        XCTAssertEqual(NetworkToast.apply([], pages: current, showingLost: &showingLost), [])
+        XCTAssertEqual(apply([], pages: current, showingLost: &showingLost), [])
         XCTAssertTrue(showingLost)
     }
 
@@ -130,7 +136,7 @@ final class NetworkToastTests: XCTestCase {
         let current = [page("A", .grey, muted: true), page("B", .grey, muted: true)]
         var showingLost = false
 
-        XCTAssertEqual(NetworkToast.apply([], pages: current, showingLost: &showingLost), [])
+        XCTAssertEqual(apply([], pages: current, showingLost: &showingLost), [])
         XCTAssertFalse(showingLost)
     }
 
@@ -168,6 +174,117 @@ final class NetworkToastTests: XCTestCase {
         client.isOnline = true
         let regained = try await monitor.pollAll()
         XCTAssertEqual(regained, [NetworkToast.regained])
+    }
+
+    /// A network drop reaches the pages over more than one poll when it lands while a poll is in
+    /// flight. The pages that fail first must not each get a grey toast that the network toast
+    /// of the next poll then stands beside.
+    func testADropThatSpansTwoPollsStillCollapsesToOneLostToast() async throws {
+        let seed = try seededMonitor()
+        defer { try? FileManager.default.removeItem(at: seed.directory) }
+        let (monitor, client) = (seed.monitor, seed.client)
+
+        client.offlineHosts = ["b.example", "c.example"]
+        let firstPoll = try await monitor.pollAll()
+        XCTAssertEqual(firstPoll, [], "pages that have just gone unreachable wait one poll")
+
+        client.offlineHosts = ["a.example", "b.example", "c.example"]
+        let secondPoll = try await monitor.pollAll()
+        XCTAssertEqual(secondPoll, [NetworkToast.lost])
+    }
+
+    func testARecoveryThatSpansTwoPollsGivesNoPageToasts() async throws {
+        let seed = try seededMonitor()
+        defer { try? FileManager.default.removeItem(at: seed.directory) }
+        let (monitor, client) = (seed.monitor, seed.client)
+
+        client.offlineHosts = ["a.example", "b.example", "c.example"]
+        try await assertPoll(monitor, gives: [NetworkToast.lost])
+
+        client.offlineHosts = ["b.example", "c.example"]
+        try await assertPoll(monitor, gives: [NetworkToast.regained])
+
+        client.offlineHosts = []
+        try await assertPoll(monitor, gives: [])
+    }
+
+    func testAPageThatStaysUnreachableAfterARecoveryGetsItsToastOnTheNextPoll() async throws {
+        let seed = try seededMonitor()
+        defer { try? FileManager.default.removeItem(at: seed.directory) }
+        let (monitor, client) = (seed.monitor, seed.client)
+
+        client.offlineHosts = ["a.example", "b.example", "c.example"]
+        try await assertPoll(monitor, gives: [NetworkToast.lost])
+
+        client.offlineHosts = ["b.example"]
+        try await assertPoll(monitor, gives: [NetworkToast.regained])
+
+        let nextPoll = try await monitor.pollAll()
+        XCTAssertEqual(nextPoll, [greyToast(for: monitor.pages[1])])
+    }
+
+    func testAPageUnreachableForOnePollGetsNoToast() async throws {
+        let seed = try seededMonitor()
+        defer { try? FileManager.default.removeItem(at: seed.directory) }
+        let (monitor, client) = (seed.monitor, seed.client)
+
+        client.offlineHosts = ["b.example"]
+        try await assertPoll(monitor, gives: [])
+
+        client.offlineHosts = []
+        try await assertPoll(monitor, gives: [], "no grey toast was shown, so there is no recovery to report")
+    }
+
+    func testAPageThatStaysUnreachableGetsItsToastOnTheSecondPollAndAGreenOneWhenItReturns() async throws {
+        let seed = try seededMonitor()
+        defer { try? FileManager.default.removeItem(at: seed.directory) }
+        let (monitor, client) = (seed.monitor, seed.client)
+        let pageB = monitor.pages[1]
+
+        client.offlineHosts = ["b.example"]
+        try await assertPoll(monitor, gives: [])
+        try await assertPoll(monitor, gives: [greyToast(for: pageB)])
+
+        client.offlineHosts = []
+        try await assertPoll(monitor, gives: [toast(pageB, .green)])
+    }
+
+    private struct Seed {
+        let monitor: Monitor
+        let client: HostOutageHTTPClient
+        let directory: URL
+    }
+
+    private func seededMonitor() throws -> Seed {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = PageStore(directory: directory)
+        var config = AppConfig()
+        config.pages = ["a", "b", "c"].map {
+            BenchmarkFixtures.greenPage(host: "\($0).example", name: $0.uppercased(), provider: .statuspage)
+        }
+        try store.save(config)
+        let client = HostOutageHTTPClient(greenJSON: greenJSON)
+        let monitor = Monitor(store: store, client: client)
+        try monitor.load()
+        return Seed(monitor: monitor, client: client, directory: directory)
+    }
+
+    private func assertPoll(
+        _ monitor: Monitor, gives expected: [Toast], _ message: String = "",
+        file: StaticString = #filePath, line: UInt = #line
+    ) async throws {
+        let toasts = try await monitor.pollAll()
+        XCTAssertEqual(toasts, expected, message, file: file, line: line)
+    }
+
+    private func greyToast(for page: WatchedPage) -> Toast {
+        Toast(pageID: page.id, pageName: page.name, body: "Unreachable", severity: .grey)
+    }
+
+    private func apply(_ toasts: [Toast], pages: [WatchedPage], showingLost: inout Bool) -> [Toast] {
+        var pending: Set<UUID> = []
+        return NetworkToast.apply(toasts, pages: pages, showingLost: &showingLost, pending: &pending)
     }
 
     private func page(_ name: String, _ severity: Severity, muted: Bool = false) -> WatchedPage {

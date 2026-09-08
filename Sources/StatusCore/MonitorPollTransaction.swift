@@ -18,4 +18,5 @@ struct WatchedPagePollMerge {
     let acceptedIDs: Set<UUID>
     let toasts: [Toast]
     let showingNetworkLoss: Bool
+    let pendingUnreachable: Set<UUID>
 }
