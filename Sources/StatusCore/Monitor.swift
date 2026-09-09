@@ -5,6 +5,8 @@ public final class Monitor: @unchecked Sendable {
     let store: PageStore
     let client: HTTPClient
     let reachability: (any NetworkReachability)?
+    /// Caps a mixed-poll confirmation so a slow probe cannot stall the poll.
+    let confirmationTimeout: TimeInterval
     let stateLock = NSLock()
     let transitionLock: any NSLocking
     var config: AppConfig
@@ -25,21 +27,30 @@ public final class Monitor: @unchecked Sendable {
     public convenience init(
         store: PageStore,
         client: HTTPClient,
-        reachability: (any NetworkReachability)? = nil
+        reachability: (any NetworkReachability)? = nil,
+        confirmationTimeout: TimeInterval = 3
     ) {
-        self.init(store: store, client: client, transitionLock: NSLock(), reachability: reachability)
+        self.init(
+            store: store,
+            client: client,
+            transitionLock: NSLock(),
+            reachability: reachability,
+            confirmationTimeout: confirmationTimeout
+        )
     }
 
     init(
         store: PageStore,
         client: HTTPClient,
         transitionLock: any NSLocking,
-        reachability: (any NetworkReachability)? = nil
+        reachability: (any NetworkReachability)? = nil,
+        confirmationTimeout: TimeInterval = 3
     ) {
         self.store = store
         self.client = client
         self.transitionLock = transitionLock
         self.reachability = reachability
+        self.confirmationTimeout = confirmationTimeout
         self.config = AppConfig()
     }
 

@@ -12,7 +12,7 @@ On first launch it adds [OpenAI Status](https://status.openai.com/) so you can s
 - The menu-bar icon uses the worst real status (red > yellow > green).
 - A fetch failure is grey. If any page is grey, the icon flashes grey for one second every 30 seconds.
 - Optional per-page notifications when overall status changes, including recovery.
-- One network notification when every page goes unreachable, and one when they come back. A page that goes unreachable waits one poll for its own grey notification, so a network drop that reaches the pages over two polls still gives one notification.
+- One network notification when the Mac loses its network, and one when it comes back. greendot asks the system for the network state and also confirms a poll that finds only some pages unreachable, so a drop that reaches the pages over two polls still gives one notification.
 - Launch at login is on by default.
 
 v1 parsers: Atlassian Statuspage, Statuspal, Instatus, Flashduty, AWS Health, RSS 2.0, and Atom. Paste https://health.aws.amazon.com/health/status or https://status.aws.amazon.com/ for one page named AWS. HTML scrape of status (not feed discovery) is next.

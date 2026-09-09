@@ -10,7 +10,8 @@ extension Monitor {
             // toast can fire on this poll, including when only one page is watched.
             pollResults = unreachablePollResults(for: pollStart.pages)
         } else {
-            pollResults = try await fetchPollResults(pages: pollStart.pages, bodies: pollStart.bodies)
+            let fetched = try await fetchPollResults(pages: pollStart.pages, bodies: pollStart.bodies)
+            pollResults = try await confirmedPollResults(fetched, pages: pollStart.pages)
         }
         try Task.checkCancellation()
         return try applyPollResults(pollResults, start: pollStart)
@@ -36,7 +37,7 @@ extension Monitor {
         }
     }
 
-    private func unreachablePollResults(for pages: [WatchedPage]) -> [UUID: WatchedPagePollResult] {
+    func unreachablePollResults(for pages: [WatchedPage]) -> [UUID: WatchedPagePollResult] {
         var collected: [UUID: WatchedPagePollResult] = [:]
         for page in pages {
             collected[page.id] = WatchedPagePollResult(
