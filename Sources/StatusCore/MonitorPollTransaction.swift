@@ -11,6 +11,8 @@ struct WatchedPagePollStart {
     let bodies: [UUID: Data]
     let inputRevisions: [UUID: UInt64]
     let identity: UInt64
+    /// Captured at the start of the poll so a path change mid-request cannot rewrite the merge.
+    let systemOffline: Bool
 }
 
 struct WatchedPagePollMerge {
@@ -18,5 +20,4 @@ struct WatchedPagePollMerge {
     let acceptedIDs: Set<UUID>
     let toasts: [Toast]
     let showingNetworkLoss: Bool
-    let pendingUnreachable: Set<UUID>
 }

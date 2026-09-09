@@ -65,14 +65,18 @@ public enum NetworkToast {
 
     /// `showingLost` carries the network state across polls. Without it a page removed or added
     /// during the outage would strand the lost toast on screen with nothing left to clear it.
-    /// `pending` holds the pages that wait one poll for their grey toast.
+    /// `systemOffline` is true when the system itself reports no route. One page is then enough
+    /// to claim an outage, because a site outage is no longer an alternative.
     public static func apply(
-        _ toasts: [Toast], pages: [WatchedPage], showingLost: inout Bool, pending: inout Set<UUID>
+        _ toasts: [Toast],
+        pages: [WatchedPage],
+        showingLost: inout Bool,
+        systemOffline: Bool = false
     ) -> [Toast] {
         if showingLost {
             // The claim stands only while the pages still support it. Withdraw it as soon as they
             // do not, including when too few are left to claim an outage at all.
-            guard !allUnreachable(pages) else { return [] }
+            guard !allUnreachable(pages, systemOffline: systemOffline) else { return [] }
             showingLost = false
             // The lost toast stood in for every page, so a page that is still not green needs its own toast now.
             let stillNotGreen = pages.filter { $0.notificationsEnabled && $0.displaySeverity != .green }
@@ -81,16 +85,10 @@ public enum NetworkToast {
             guard pages.contains(where: { $0.snapshot?.isUnreachable == false }) else {
                 return stillNotGreen.map(pageToast)
             }
-            // A page still unreachable on the poll that brings the network back is usually only late.
-            // It waits one poll, as a page that has just gone unreachable does.
-            let (late, down) = (
-                stillNotGreen.filter { $0.snapshot?.isUnreachable == true },
-                stillNotGreen.filter { $0.snapshot?.isUnreachable != true }
-            )
-            pending.formUnion(late.map(\.id))
-            return [regained] + down.map(pageToast)
+            return [regained] + stillNotGreen.map(pageToast)
         }
-        guard allUnreachable(pages), pages.contains(where: \.notificationsEnabled) else { return toasts }
+        guard allUnreachable(pages, systemOffline: systemOffline),
+              pages.contains(where: \.notificationsEnabled) else { return toasts }
         showingLost = true
         return [lost]
     }
@@ -104,8 +102,11 @@ public enum NetworkToast {
         )
     }
 
-    /// One page down cannot tell a site outage from a network outage, so two or more are required.
-    private static func allUnreachable(_ pages: [WatchedPage]) -> Bool {
-        pages.count > 1 && pages.allSatisfy { $0.snapshot?.isUnreachable == true }
+    /// One page down cannot tell a site outage from a network outage, so two or more are required
+    /// unless the system has already said there is no route.
+    private static func allUnreachable(_ pages: [WatchedPage], systemOffline: Bool) -> Bool {
+        guard !pages.isEmpty else { return false }
+        guard pages.allSatisfy({ $0.snapshot?.isUnreachable == true }) else { return false }
+        return systemOffline || pages.count > 1
     }
 }

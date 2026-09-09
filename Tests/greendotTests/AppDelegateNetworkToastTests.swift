@@ -27,8 +27,7 @@ final class AppDelegateNetworkToastTests: XCTestCase {
 
         client.offlineHosts = ["a.example"]
         await delegate.pollAndRefresh(monitor)
-        await delegate.pollAndRefresh(monitor)
-        XCTAssertEqual(delivery.toasts.map(\.pageID), [ids[0]], "the grey toast lands on the second poll")
+        XCTAssertEqual(delivery.toasts.map(\.pageID), [ids[0]])
 
         client.offlineHosts = ["a.example", "b.example"]
         await delegate.pollAndRefresh(monitor)
@@ -84,6 +83,64 @@ final class AppDelegateNetworkToastTests: XCTestCase {
         XCTAssertTrue(delivery.clearedPageIDs.contains(pageID))
     }
 
+    func testGoingOfflinePollsImmediatelyAndShowsTheLostToast() async throws {
+        let reachability = FakeNetworkReachability()
+        let client = RecordingHTTPClient(HostOutageHTTPClient(greenJSON: greenJSON))
+        let (monitor, directory) = try loadedMonitor(client: client, reachability: reachability)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let delivery = InMemoryToastDelivery()
+        let delegate = AppDelegate(toastDelivery: delivery)
+        delegate.monitor = monitor
+        delegate.observeNetworkReachability(reachability)
+
+        reachability.isOnline = false
+        await waitUntil { delivery.toasts.last == NetworkToast.lost }
+
+        XCTAssertEqual(delivery.toasts, [NetworkToast.lost])
+        XCTAssertEqual(client.requested, [])
+        XCTAssertTrue(monitor.showingNetworkLoss)
+    }
+
+    func testComingBackOnlinePollsImmediatelyAndShowsTheRegainedToast() async throws {
+        let reachability = FakeNetworkReachability()
+        let client = HostOutageHTTPClient(greenJSON: greenJSON)
+        let (monitor, directory) = try loadedMonitor(client: client, reachability: reachability)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let delivery = InMemoryToastDelivery()
+        let delegate = AppDelegate(toastDelivery: delivery)
+        delegate.monitor = monitor
+        delegate.observeNetworkReachability(reachability)
+
+        reachability.isOnline = false
+        await waitUntil { delivery.toasts.last == NetworkToast.lost }
+
+        reachability.isOnline = true
+        await waitUntil { delivery.toasts.last == NetworkToast.regained }
+
+        XCTAssertEqual(delivery.toasts, [NetworkToast.lost, NetworkToast.regained])
+        XCTAssertFalse(monitor.showingNetworkLoss)
+    }
+
+    func testAPathChangeDoesNotPollWhenConfigLoadFailed() async throws {
+        let reachability = FakeNetworkReachability()
+        let (monitor, directory) = try loadedMonitor(
+            client: FailIfCalledHTTPClient(),
+            reachability: reachability
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let delivery = InMemoryToastDelivery()
+        let delegate = AppDelegate(toastDelivery: delivery)
+        delegate.monitor = monitor
+        delegate.configLoadFailed = true
+        delegate.observeNetworkReachability(reachability)
+
+        reachability.isOnline = false
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(delivery.toasts, [])
+        XCTAssertFalse(monitor.showingNetworkLoss)
+    }
+
     private struct Seed {
         let monitor: Monitor
         let client: HostOutageHTTPClient
@@ -91,6 +148,15 @@ final class AppDelegateNetworkToastTests: XCTestCase {
     }
 
     private func seededMonitor() throws -> Seed {
+        let client = HostOutageHTTPClient(greenJSON: greenJSON)
+        let (monitor, directory) = try loadedMonitor(client: client, reachability: nil)
+        return Seed(monitor: monitor, client: client, directory: directory)
+    }
+
+    private func loadedMonitor(
+        client: HTTPClient,
+        reachability: (any NetworkReachability)?
+    ) throws -> (Monitor, URL) {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let store = PageStore(directory: directory)
@@ -100,9 +166,27 @@ final class AppDelegateNetworkToastTests: XCTestCase {
             BenchmarkFixtures.greenPage(host: "b.example", name: "B", provider: .statuspage)
         ]
         try store.save(config)
-        let client = HostOutageHTTPClient(greenJSON: greenJSON)
-        let monitor = Monitor(store: store, client: client)
+        let monitor = Monitor(store: store, client: client, reachability: reachability)
         try monitor.load()
-        return Seed(monitor: monitor, client: client, directory: directory)
+        return (monitor, directory)
+    }
+
+    private func waitUntil(
+        _ condition: () -> Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        for _ in 0..<100 {
+            if condition() { return }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTFail("condition was still false", file: file, line: line)
+    }
+}
+
+private struct FailIfCalledHTTPClient: HTTPClient {
+    func get(_ url: URL) async throws -> (Data, Int) {
+        XCTFail("HTTP was called while the system is offline")
+        throw URLError(.notConnectedToInternet)
     }
 }
