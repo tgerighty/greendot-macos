@@ -99,6 +99,32 @@ final class PollConfirmationTests: XCTestCase {
         XCTAssertEqual(monitor.pages[1].snapshot?.isUnreachable, true)
     }
 
+    /// The confirmation probe runs outside the task group of the poll. A cancelled poll must still
+    /// end at once, and it must report the cancellation rather than a result.
+    func testCancellingAPollDuringConfirmationThrows() async throws {
+        let client = HostOutageHTTPClient(greenJSON: greenJSON)
+        let (monitor, directory) = try seededMonitor(client: client, confirmationTimeout: 30)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        _ = try await monitor.pollAll()
+        client.offlineHosts = ["b.example"]
+        client.hangWhenHostCountExceeds = ["a.example": 2]
+
+        let poll = Task { try await monitor.pollAll() }
+        while client.requestCount(for: "a.example") < 3 {
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+        poll.cancel()
+
+        do {
+            _ = try await poll.value
+            XCTFail("expected CancellationError")
+        } catch is CancellationError {
+        } catch {
+            XCTFail("expected CancellationError, got \(error)")
+        }
+    }
+
     func testConfirmationReprobesTheFirstReachablePageInWatchOrder() async throws {
         let client = HostOutageHTTPClient(greenJSON: greenJSON)
         let (monitor, directory) = try seededMonitor(

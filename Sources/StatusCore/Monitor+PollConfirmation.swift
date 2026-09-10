@@ -42,13 +42,33 @@ extension Monitor {
         return reachable && unreachable && freshlyUnreachable
     }
 
+    /// The timeout is a hard cap. A task group waits for its children, so a client that ignores
+    /// cancellation could hold the poll past the cap. The probe therefore runs outside the group
+    /// and reports through a stream. The poll can drop it, because the probe only reads a page and
+    /// returns a Bool. It changes no monitor state.
     private func confirmationStillReachable(
         _ page: WatchedPage,
         result: WatchedPagePollResult
     ) async throws -> Bool {
+        let (answers, answer) = AsyncStream<Bool>.makeStream()
+        let probe = Task {
+            defer { answer.finish() }
+            answer.yield(try await self.probeConfirmation(page, result: result))
+        }
+        defer { probe.cancel() }
+        return try await firstAnswer(from: answers)
+    }
+
+    private func firstAnswer(from answers: AsyncStream<Bool>) async throws -> Bool {
         try await withThrowingTaskGroup(of: Bool.self) { group in
             group.addTask {
-                try await self.probeConfirmation(page, result: result)
+                var results = answers.makeAsyncIterator()
+                guard let reached = await results.next() else {
+                    // No answer means the probe threw or this poll is cancelled.
+                    try Task.checkCancellation()
+                    return true
+                }
+                return reached
             }
             group.addTask {
                 // Giving up keeps the mixed results. A slow probe must not invent an outage.
@@ -57,9 +77,6 @@ extension Monitor {
             }
             let reached = try await group.next() ?? true
             group.cancelAll()
-            while await group.nextResult() != nil {
-                if Task.isCancelled { throw CancellationError() }
-            }
             return reached
         }
     }

@@ -50,7 +50,8 @@ public final class HostOutageHTTPClient: HTTPClient, @unchecked Sendable {
     }
 
     /// Lets a test stall a later request to a host that already answered, so the confirmation
-    /// timeout can be exercised without stalling the poll itself.
+    /// timeout can be exercised without stalling the poll itself. The stall ignores cancellation,
+    /// like a client that does a blocking read, so the timeout must hold on its own.
     public var hangWhenHostCountExceeds: [String: Int] {
         get {
             lock.lock()
@@ -73,13 +74,23 @@ public final class HostOutageHTTPClient: HTTPClient, @unchecked Sendable {
     public func get(_ url: URL) async throws -> (Data, Int) {
         let (shouldHang, shouldFail) = beginRequest(host: url.host)
         if shouldHang {
-            try await Task.sleep(nanoseconds: 60_000_000_000)
+            await stall()
         }
         if shouldFail {
             throw URLError(.notConnectedToInternet)
         }
         guard url.path == "/api/v2/summary.json" else { return (Data(), 404) }
         return (greenJSON, 200)
+    }
+
+    /// `Task.sleep` would end as soon as the caller gives up. This wait does not, so a caller that
+    /// only cancels the request cannot meet its own deadline.
+    private func stall() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+                continuation.resume()
+            }
+        }
     }
 
     private func beginRequest(host: String?) -> (hang: Bool, fail: Bool) {
