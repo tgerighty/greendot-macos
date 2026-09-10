@@ -4,12 +4,24 @@ extension Monitor {
     public func pollAll() async throws -> [Toast] {
         try Task.checkCancellation()
         let pollStart = startPoll()
-        let pages = pollStart.pages
-        let bodies = pollStart.bodies
-        let pollIdentity = pollStart.identity
-        let pollResults: [UUID: WatchedPagePollResult] = try await withThrowingTaskGroup(
-            of: WatchedPagePollResult.self
-        ) { group in
+        let pollResults: [UUID: WatchedPagePollResult]
+        if pollStart.systemOffline {
+            // HTTP cannot succeed without a route. Mark every page unreachable here so the lost
+            // toast can fire on this poll, including when only one page is watched.
+            pollResults = unreachablePollResults(for: pollStart.pages)
+        } else {
+            let fetched = try await fetchPollResults(pages: pollStart.pages, bodies: pollStart.bodies)
+            pollResults = try await confirmedPollResults(fetched, pages: pollStart.pages)
+        }
+        try Task.checkCancellation()
+        return try applyPollResults(pollResults, start: pollStart)
+    }
+
+    private func fetchPollResults(
+        pages: [WatchedPage],
+        bodies: [UUID: Data]
+    ) async throws -> [UUID: WatchedPagePollResult] {
+        try await withThrowingTaskGroup(of: WatchedPagePollResult.self) { group in
             for page in pages {
                 let client = self.client
                 let previousBody = bodies[page.id]
@@ -23,10 +35,30 @@ extension Monitor {
             }
             return collected
         }
+    }
 
-        try Task.checkCancellation()
-        return try applyPollResults(
-            pollResults, for: pollIdentity, expectedPages: pages, expectedInputRevisions: pollStart.inputRevisions
+    func unreachablePollResults(for pages: [WatchedPage]) -> [UUID: WatchedPagePollResult] {
+        var collected: [UUID: WatchedPagePollResult] = [:]
+        for page in pages {
+            collected[page.id] = WatchedPagePollResult(
+                pageID: page.id,
+                snapshot: unreachableSnapshot(for: page),
+                body: nil
+            )
+        }
+        return collected
+    }
+
+    /// A failed probe and a system-offline poll must produce the same snapshot, so the merge path stays one.
+    private func unreachableSnapshot(for page: WatchedPage) -> PageSnapshot {
+        PageSnapshot(
+            name: page.name,
+            url: page.url,
+            provider: page.snapshot?.provider ?? .statuspage,
+            overall: .grey,
+            components: page.snapshot?.components ?? [],
+            incidents: [],
+            isUnreachable: true
         )
     }
 
@@ -52,18 +84,9 @@ extension Monitor {
             if error is CancellationError || Task.isCancelled {
                 throw CancellationError()
             }
-            let snapshot = PageSnapshot(
-                name: page.name,
-                url: page.url,
-                provider: page.snapshot?.provider ?? .statuspage,
-                overall: .grey,
-                components: page.snapshot?.components ?? [],
-                incidents: [],
-                isUnreachable: true
-            )
             return WatchedPagePollResult(
                 pageID: page.id,
-                snapshot: snapshot,
+                snapshot: unreachableSnapshot(for: page),
                 body: nil
             )
         }
@@ -79,16 +102,15 @@ extension Monitor {
                 pages: config.pages,
                 bodies: lastBodies,
                 inputRevisions: pageInputRevisions,
-                identity: latestPollIdentity
+                identity: latestPollIdentity,
+                systemOffline: reachability?.isOnline == false
             )
         }
     }
 
     private func applyPollResults(
         _ pollResults: [UUID: WatchedPagePollResult],
-        for pollIdentity: UInt64,
-        expectedPages: [WatchedPage],
-        expectedInputRevisions: [UUID: UInt64]
+        start: WatchedPagePollStart
     ) throws -> [Toast] {
         transitionLock.lock()
         defer { transitionLock.unlock() }
@@ -97,13 +119,12 @@ extension Monitor {
         let (currentConfig, currentPollIdentity, currentInputRevisions) = withStateLock {
             (config, latestPollIdentity, pageInputRevisions)
         }
-        guard pollIdentity == currentPollIdentity else { return [] }
+        guard start.identity == currentPollIdentity else { return [] }
 
         guard let merge = mergePollResults(
             currentConfig: currentConfig,
             pollResults: pollResults,
-            expectedPages: expectedPages,
-            expectedInputRevisions: expectedInputRevisions,
+            start: start,
             currentInputRevisions: currentInputRevisions
         ) else { return [] }
         if merge.config != currentConfig {
@@ -124,18 +145,17 @@ extension Monitor {
     private func mergePollResults(
         currentConfig: AppConfig,
         pollResults: [UUID: WatchedPagePollResult],
-        expectedPages: [WatchedPage],
-        expectedInputRevisions: [UUID: UInt64],
+        start: WatchedPagePollStart,
         currentInputRevisions: [UUID: UInt64]
     ) -> WatchedPagePollMerge? {
-        guard let expectedByID = expectedPagesByID(expectedPages) else { return nil }
+        guard let expectedByID = expectedPagesByID(start.pages) else { return nil }
         var next = currentConfig
         var acceptedIDs: Set<UUID> = []
         var toasts: [Toast] = []
         for index in next.pages.indices {
             let id = next.pages[index].id
             guard expectedByID[id] != nil,
-                  let expectedInputRevision = expectedInputRevisions[id],
+                  let expectedInputRevision = start.inputRevisions[id],
                   currentInputRevisions[id] == expectedInputRevision,
                   let result = pollResults[id] else { continue }
             acceptedIDs.insert(id)
@@ -153,7 +173,9 @@ extension Monitor {
             }
         }
         var showingLost = withStateLock { networkLossFlag }
-        let merged = NetworkToast.apply(toasts, pages: next.pages, showingLost: &showingLost)
+        let merged = NetworkToast.apply(
+            toasts, pages: next.pages, showingLost: &showingLost, systemOffline: start.systemOffline
+        )
         return WatchedPagePollMerge(
             config: next,
             acceptedIDs: acceptedIDs,

@@ -11,6 +11,14 @@ final class NetworkToastTests: XCTestCase {
       "incidents": []
     }
     """.utf8)
+    private let yellowJSON = Data("""
+    {
+      "page": {"name": "A", "url": "https://a.example"},
+      "status": {"indicator": "minor"},
+      "components": [{"name": "API", "status": "degraded_performance", "group": false}],
+      "incidents": []
+    }
+    """.utf8)
 
     func testAllPagesUnreachableCollapsesToOneLostToast() {
         let current = [page("A", .grey), page("B", .grey)]
@@ -28,7 +36,7 @@ final class NetworkToastTests: XCTestCase {
 
         XCTAssertEqual(
             NetworkToast.apply(pageToasts, pages: current, showingLost: &showingLost),
-            [NetworkToast.regained, pageToasts[1]]
+            [NetworkToast.regained, toast(current[1], .red, silent: true)]
         )
         XCTAssertFalse(showingLost)
     }
@@ -39,7 +47,7 @@ final class NetworkToastTests: XCTestCase {
 
         XCTAssertEqual(
             NetworkToast.apply([toast(current[0], .green)], pages: current, showingLost: &showingLost),
-            [NetworkToast.regained, toast(current[1], .grey)]
+            [NetworkToast.regained, toast(current[1], .grey, silent: true)]
         )
         XCTAssertFalse(showingLost)
     }
@@ -63,7 +71,7 @@ final class NetworkToastTests: XCTestCase {
 
         XCTAssertEqual(
             NetworkToast.apply([], pages: current, showingLost: &showingLost),
-            [toast(current[0], .grey)]
+            [toast(current[0], .grey, silent: true)]
         )
         XCTAssertFalse(showingLost)
     }
@@ -82,11 +90,12 @@ final class NetworkToastTests: XCTestCase {
 
         XCTAssertEqual(
             NetworkToast.apply([], pages: [page("A", .grey), unpolled], showingLost: &showingLost),
-            [toast(page("A", .grey), .grey), Toast(
+            [toast(page("A", .grey), .grey, silent: true), Toast(
                 pageID: unpolled.id,
                 pageName: "C",
                 body: "Unreachable",
-                severity: .grey
+                severity: .grey,
+                silent: true
             )]
         )
         XCTAssertFalse(showingLost)
@@ -142,6 +151,31 @@ final class NetworkToastTests: XCTestCase {
         XCTAssertEqual(NetworkToast.lost.pageID, NetworkToast.regained.pageID)
     }
 
+    /// The system already said there is no route, so one unmuted page is enough to claim an outage.
+    func testSystemOfflineCollapsesEvenASingleUnreachablePage() {
+        let current = [page("A", .grey)]
+        var showingLost = false
+
+        XCTAssertEqual(
+            NetworkToast.apply(
+                [toast(current[0], .grey)], pages: current, showingLost: &showingLost, systemOffline: true
+            ),
+            [NetworkToast.lost]
+        )
+        XCTAssertTrue(showingLost)
+    }
+
+    func testSystemOfflineStayingOfflineEmitsNothingForASinglePage() {
+        let current = [page("A", .grey)]
+        var showingLost = true
+
+        XCTAssertEqual(
+            NetworkToast.apply([], pages: current, showingLost: &showingLost, systemOffline: true),
+            []
+        )
+        XCTAssertTrue(showingLost)
+    }
+
     func testPollAllReportsNetworkLossAndRecovery() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -170,6 +204,36 @@ final class NetworkToastTests: XCTestCase {
         XCTAssertEqual(regained, [NetworkToast.regained])
     }
 
+    /// The reported bug. A page that wobbles out of reach and back must not announce the same
+    /// colour a second time, because its unhealthy spell never ended.
+    func testAPageThatWobblesOutOfReachAnnouncesItsColourOnce() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let store = PageStore(directory: dir)
+        var config = AppConfig()
+        config.pages = [BenchmarkFixtures.greenPage(host: "a.example", name: "A", provider: .statuspage)]
+        try store.save(config)
+
+        let client = SwitchableHTTPClient(online: MapHTTPClient(byPath: ["/api/v2/summary.json": (yellowJSON, 200)]))
+        let monitor = Monitor(store: store, client: client)
+        try monitor.load()
+
+        let first = try await monitor.pollAll()
+        XCTAssertEqual(first.map(\.severity), [.yellow])
+        XCTAssertEqual(first.map(\.silent), [false], "the first yellow announces itself")
+
+        client.isOnline = false
+        let unreachable = try await monitor.pollAll()
+        XCTAssertEqual(unreachable.map(\.severity), [.grey])
+        XCTAssertEqual(unreachable.map(\.silent), [true], "a page that was already unhealthy stays quiet")
+
+        client.isOnline = true
+        let back = try await monitor.pollAll()
+        XCTAssertEqual(back.map(\.severity), [.yellow])
+        XCTAssertEqual(back.map(\.silent), [true], "the same yellow must not announce itself again")
+    }
+
     private func page(_ name: String, _ severity: Severity, muted: Bool = false) -> WatchedPage {
         let url = URL(string: "https://\(name).example")!
         return WatchedPage(
@@ -189,8 +253,14 @@ final class NetworkToastTests: XCTestCase {
         )
     }
 
-    private func toast(_ page: WatchedPage, _ severity: Severity) -> Toast {
-        Toast(pageID: page.id, pageName: page.name, body: severity.displayName, severity: severity)
+    private func toast(_ page: WatchedPage, _ severity: Severity, silent: Bool = false) -> Toast {
+        Toast(
+            pageID: page.id,
+            pageName: page.name,
+            body: severity.displayName,
+            severity: severity,
+            silent: silent
+        )
     }
 }
 

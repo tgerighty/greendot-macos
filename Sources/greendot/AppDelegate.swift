@@ -37,18 +37,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppEditMenu.install()
 
         let store = PageStore(directory: PageStore.defaultDirectory)
-        let client: HTTPClient
-        if let fixture = ProcessInfo.processInfo.environment["GREENDOT_FIXTURE_DIR"], !fixture.isEmpty {
-            client = DirectoryHTTPClient(root: URL(fileURLWithPath: fixture, isDirectory: true))
-        } else {
-            client = URLSessionHTTPClient()
-        }
-        let monitor = Monitor(store: store, client: client)
+        let reachability = PathNetworkReachability()
+        let monitor = Monitor(store: store, client: Self.makeHTTPClient(), reachability: reachability)
         self.store = store
         monitor.onLaunchAtLoginEnable = { LaunchAtLogin.enable() }
         let loadSucceeded = loadMonitor(monitor)
         configLoadFailed = !loadSucceeded
         self.monitor = monitor
+        observeNetworkReachability(reachability)
 
         toastDelivery.start()
 
@@ -263,6 +259,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 extension AppDelegate {
+    private static func makeHTTPClient() -> HTTPClient {
+        if let fixture = ProcessInfo.processInfo.environment["GREENDOT_FIXTURE_DIR"], !fixture.isEmpty {
+            return DirectoryHTTPClient(root: URL(fileURLWithPath: fixture, isDirectory: true))
+        }
+        return URLSessionHTTPClient()
+    }
+
+    /// Path updates arrive on a background queue. Hop to the main actor before touching app state.
+    func observeNetworkReachability(_ reachability: any NetworkReachability) {
+        reachability.onChange = { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, !self.configLoadFailed else { return }
+                await self.pollAndRefresh()
+            }
+        }
+        reachability.start()
+    }
+
     @MainActor
     func refreshToast(pageID: UUID, monitor: Monitor? = nil) {
         let monitor = monitor ?? self.monitor

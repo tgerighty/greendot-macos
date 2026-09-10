@@ -4,6 +4,8 @@ import StatusCore
 @MainActor
 protocol PersistentToastPresenter: AnyObject {
     func present(_ toast: Toast)
+    /// Recolours the panel of a page that is already unhealthy. Silent, and never opens a panel.
+    func update(_ toast: Toast)
     func clear(pageID: UUID)
 }
 
@@ -20,22 +22,17 @@ final class PanelPersistentToastPresenter: PersistentToastPresenter {
     }
 
     func present(_ toast: Toast) {
-        if items.contains(where: { $0.pageID == toast.pageID }) {
-            items.filter { $0.pageID == toast.pageID }.forEach { removeWindow($0.window) }
-            show(toast, play: true)
-            return
-        }
-        if let index = pending.firstIndex(where: { $0.pageID == toast.pageID }) {
-            pending[index] = toast
-            playSound()
-            return
-        }
+        if replaceToast(toast, play: true) { return }
         while items.count >= maxVisiblePanels() {
             let oldest = items[0]
             pending.append(oldest.toast)
             removeWindow(oldest.window)
         }
         show(toast, play: true)
+    }
+
+    func update(_ toast: Toast) {
+        _ = replaceToast(toast, play: false)
     }
 
     func clear(pageID: UUID) {
@@ -91,6 +88,26 @@ private extension PanelPersistentToastPresenter {
             self.dismiss(window)
         }
         return window
+    }
+
+    /// Rewrites the panel of a page that already holds one, in place so the stack does not reorder.
+    /// Reports whether the page had a panel or a queued slot to rewrite.
+    func replaceToast(_ toast: Toast, play: Bool) -> Bool {
+        if let index = items.firstIndex(where: { $0.pageID == toast.pageID }) {
+            let window = makeWindow(for: toast)
+            items[index].window.close()
+            items[index] = Item(window: window, toast: toast)
+            layoutWindows()
+            window.orderFrontRegardless()
+            if play { playSound() }
+            return true
+        }
+        if let index = pending.firstIndex(where: { $0.pageID == toast.pageID }) {
+            pending[index] = toast
+            if play { playSound() }
+            return true
+        }
+        return false
     }
 
     func show(_ toast: Toast, play: Bool) {

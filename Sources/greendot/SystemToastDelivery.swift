@@ -114,7 +114,11 @@ final class SystemToastDelivery: ToastDelivery {
     func deliver(_ toast: Toast) {
         cancelAutoDismiss(for: toast.pageID)
         guard let seconds = toast.autoDismissSeconds else {
-            persistentPresenter().present(toast)
+            if toast.silent {
+                persistent?.update(toast)
+            } else {
+                persistentPresenter().present(toast)
+            }
             return
         }
         clear(pageID: toast.pageID)
