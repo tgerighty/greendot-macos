@@ -2,6 +2,10 @@ import Foundation
 
 public final class Monitor: @unchecked Sendable {
 
+    public static let defaultConfirmationTimeout: TimeInterval = 3
+    /// The probe is an HTTP request. A longer wait than this holds up the poll for no gain.
+    public static let maxConfirmationTimeout: TimeInterval = 60
+
     let store: PageStore
     let client: HTTPClient
     let reachability: (any NetworkReachability)?
@@ -28,7 +32,7 @@ public final class Monitor: @unchecked Sendable {
         store: PageStore,
         client: HTTPClient,
         reachability: (any NetworkReachability)? = nil,
-        confirmationTimeout: TimeInterval = 3
+        confirmationTimeout: TimeInterval = defaultConfirmationTimeout
     ) {
         self.init(
             store: store,
@@ -44,14 +48,22 @@ public final class Monitor: @unchecked Sendable {
         client: HTTPClient,
         transitionLock: any NSLocking,
         reachability: (any NetworkReachability)? = nil,
-        confirmationTimeout: TimeInterval = 3
+        confirmationTimeout: TimeInterval = defaultConfirmationTimeout
     ) {
         self.store = store
         self.client = client
         self.transitionLock = transitionLock
         self.reachability = reachability
-        self.confirmationTimeout = confirmationTimeout
+        self.confirmationTimeout = Monitor.validConfirmationTimeout(confirmationTimeout)
         self.config = AppConfig()
+    }
+
+    /// The poll turns this timeout into nanoseconds, which traps on a negative, a NaN, or a value
+    /// too large for UInt64. A caller can give any TimeInterval, so make it safe here.
+    /// Non-finite or zero and below becomes the default. A larger value becomes the maximum.
+    static func validConfirmationTimeout(_ value: TimeInterval) -> TimeInterval {
+        guard value.isFinite, value > 0 else { return defaultConfirmationTimeout }
+        return min(value, maxConfirmationTimeout)
     }
 
     public var pages: [WatchedPage] {

@@ -115,6 +115,42 @@ final class PollConfirmationTests: XCTestCase {
         XCTAssertFalse(monitor.showingNetworkLoss)
     }
 
+    /// A public caller can pass any TimeInterval. The confirmation sleep converts the timeout to
+    /// UInt64, which traps on a negative, a NaN, or a value too large for UInt64. Monitor must
+    /// make the stored timeout safe.
+    func testInvalidConfirmationTimeoutBecomesASafeValue() throws {
+        let cases: [(given: TimeInterval, stored: TimeInterval)] = [
+            (-1, Monitor.defaultConfirmationTimeout),
+            (0, Monitor.defaultConfirmationTimeout),
+            (.nan, Monitor.defaultConfirmationTimeout),
+            (.infinity, Monitor.defaultConfirmationTimeout),
+            (.greatestFiniteMagnitude, Monitor.maxConfirmationTimeout),
+            (1e18, Monitor.maxConfirmationTimeout),
+            (0.05, 0.05)
+        ]
+        for testCase in cases {
+            let client = HostOutageHTTPClient(greenJSON: greenJSON)
+            let (monitor, directory) = try seededMonitor(client: client, confirmationTimeout: testCase.given)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            XCTAssertEqual(monitor.confirmationTimeout, testCase.stored, "timeout \(testCase.given)")
+        }
+    }
+
+    /// A poll that confirms a mixed result runs the timeout sleep. A bad timeout must not trap it.
+    func testPollWithInvalidConfirmationTimeoutStillCompletes() async throws {
+        for timeout in [-1, TimeInterval.nan, .greatestFiniteMagnitude] {
+            let client = HostOutageHTTPClient(greenJSON: greenJSON)
+            let (monitor, directory) = try seededMonitor(client: client, confirmationTimeout: timeout)
+            defer { try? FileManager.default.removeItem(at: directory) }
+
+            client.offlineHosts = ["b.example"]
+            let toasts = try await monitor.pollAll()
+
+            XCTAssertEqual(toasts.map(\.pageName), ["B"], "timeout \(timeout)")
+            XCTAssertEqual(client.requestCount(for: "a.example"), 2, "timeout \(timeout)")
+        }
+    }
+
     private func seededMonitor(
         client: HTTPClient,
         hosts: [String] = ["a.example", "b.example"],
