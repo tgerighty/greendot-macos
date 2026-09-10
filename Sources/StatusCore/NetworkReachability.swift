@@ -7,15 +7,18 @@ public protocol NetworkReachability: AnyObject, Sendable {
     var isOnline: Bool { get }
     /// Called on every change of `isOnline`, with the new value.
     var onChange: (@Sendable (Bool) -> Void)? { get set }
+    /// Starts the path updates. A second call does nothing.
     func start()
+    /// Stops the path updates for good. The object cannot monitor again, and a later `start()` does nothing.
     func stop()
 }
 
 public final class PathNetworkReachability: NetworkReachability, @unchecked Sendable {
-    private let monitor = NWPathMonitor()
+    let monitor = NWPathMonitor()
     private let queue = DispatchQueue(label: "greendot.reachability")
     private let lock = NSLock()
     private var started = false
+    private var stopped = false
     private var storedOnline = true
     private var storedOnChange: (@Sendable (Bool) -> Void)?
 
@@ -42,17 +45,21 @@ public final class PathNetworkReachability: NetworkReachability, @unchecked Send
 
     public func start() {
         lock.lock()
-        let alreadyStarted = started
+        let canStart = !started && !stopped
         started = true
         lock.unlock()
-        guard !alreadyStarted else { return }
+        guard canStart else { return }
         monitor.pathUpdateHandler = { [weak self] path in
             self?.updateOnline(path.status != .unsatisfied)
         }
         monitor.start(queue: queue)
     }
 
+    /// `NWPathMonitor` cannot start again after `cancel()`, so this class records the stop and refuses a later start.
     public func stop() {
+        lock.lock()
+        stopped = true
+        lock.unlock()
         monitor.cancel()
     }
 

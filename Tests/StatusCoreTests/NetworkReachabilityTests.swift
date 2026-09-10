@@ -20,6 +20,15 @@ final class NetworkReachabilityTests: XCTestCase {
         reachability.stop()
     }
 
+    /// A cancelled `NWPathMonitor` must not start again, so `stop()` must block every later `start()`.
+    func testStopIsTerminalSoALaterStartDoesNotMonitorAgain() {
+        let reachability = PathNetworkReachability()
+        reachability.stop()
+        reachability.start()
+        XCTAssertNil(reachability.monitor.pathUpdateHandler)
+        XCTAssertTrue(reachability.isOnline)
+    }
+
     func testIsSystemOnlineFollowsReachabilityAndDefaultsToTrue() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
