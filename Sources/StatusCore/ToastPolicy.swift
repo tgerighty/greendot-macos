@@ -5,12 +5,16 @@ public struct Toast: Equatable, Sendable {
     public var pageName: String
     public var body: String
     public var severity: Severity
+    /// True when the page was already unhealthy. An open panel takes the new colour, and a page
+    /// the user has already cleared stays cleared. One unhealthy spell announces itself once.
+    public var silent: Bool
 
-    public init(pageID: UUID, pageName: String, body: String, severity: Severity) {
+    public init(pageID: UUID, pageName: String, body: String, severity: Severity, silent: Bool = false) {
         self.pageID = pageID
         self.pageName = pageName
         self.body = body
         self.severity = severity
+        self.silent = silent
     }
 
     /// Seconds before the toast clears itself. `nil` means the user must click it away.
@@ -34,7 +38,8 @@ public enum ToastPolicy {
             pageID: pageID,
             pageName: pageName,
             body: Self.body(for: current),
-            severity: current.overall
+            severity: current.overall,
+            silent: previous.overall != .green && current.overall != .green
         )
     }
 
@@ -93,12 +98,14 @@ public enum NetworkToast {
         return [lost]
     }
 
+    /// The page was unhealthy under the lost toast and still is, so its spell never ended.
     private static func pageToast(_ page: WatchedPage) -> Toast {
         Toast(
             pageID: page.id,
             pageName: page.name,
             body: page.displaySeverity.displayName,
-            severity: page.displaySeverity
+            severity: page.displaySeverity,
+            silent: true
         )
     }
 

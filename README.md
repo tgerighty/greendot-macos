@@ -11,7 +11,7 @@ On first launch it adds [OpenAI Status](https://status.openai.com/) so you can s
 - The app polls every 60 seconds.
 - The menu-bar icon uses the worst real status (red > yellow > green).
 - A fetch failure is grey. If any page is grey, the icon flashes grey for one second every 30 seconds.
-- Optional per-page notifications when overall status changes, including recovery.
+- Optional per-page notifications. A page gives one notification when it stops being green, and one when it becomes green again. While the page stays unhealthy, a change of colour rewrites the notification without a sound.
 - One network notification when the Mac loses its network, and one when it comes back. greendot asks the system for the network state and also confirms a poll that finds only some pages unreachable, so a drop that reaches the pages over two polls still gives one notification.
 - Launch at login is on by default.
 

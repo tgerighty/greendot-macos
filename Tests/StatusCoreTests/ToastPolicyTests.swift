@@ -51,6 +51,56 @@ final class ToastPolicyTests: XCTestCase {
         XCTAssertEqual(toast?.body, "Operational")
     }
 
+    func testLeavingGreenAnnouncesItself() {
+        for severity in [Severity.yellow, .red, .grey] {
+            XCTAssertEqual(
+                ToastPolicy.toast(
+                    previous: snap(.green),
+                    current: snap(severity),
+                    notificationsEnabled: true,
+                    pageName: "GitHub",
+                    pageID: githubID
+                )?.silent,
+                false,
+                "the first \(severity.rawValue) of an episode must announce itself"
+            )
+        }
+    }
+
+    func testAnUnhealthyPageChangingColourStaysQuiet() {
+        let unhealthy: [Severity] = [.yellow, .red, .grey]
+        for previous in unhealthy {
+            for current in unhealthy where current != previous {
+                XCTAssertEqual(
+                    ToastPolicy.toast(
+                        previous: snap(previous),
+                        current: snap(current),
+                        notificationsEnabled: true,
+                        pageName: "GitHub",
+                        pageID: githubID
+                    )?.silent,
+                    true,
+                    "\(previous.rawValue) to \(current.rawValue) must not announce itself again"
+                )
+            }
+        }
+    }
+
+    func testRecoveryToGreenAnnouncesItself() {
+        for severity in [Severity.yellow, .red, .grey] {
+            XCTAssertEqual(
+                ToastPolicy.toast(
+                    previous: snap(severity),
+                    current: snap(.green),
+                    notificationsEnabled: true,
+                    pageName: "GitHub",
+                    pageID: githubID
+                )?.silent,
+                false
+            )
+        }
+    }
+
     func testNoToastWhenColourUnchanged() {
         XCTAssertNil(ToastPolicy.toast(
             previous: snap(.yellow),
