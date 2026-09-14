@@ -133,9 +133,9 @@ a cached result only when its `url` is the same as the `url` of the page in
 `config.json`. A URL that you change by hand starts with no cached result.
 
 A `severity` is `green`, `yellow`, `red`, or `grey`. A `provider` is
-`statuspage`, `statuspal`, `instatus`, `flashduty`, `aws`, or `rss`. A `grey`
-severity with `isUnreachable` set to `true` is a page that greendot could not
-read.
+`statuspage`, `statuspal`, `instatus`, `flashduty`, `aws`, `icinga`, `okta`, or
+`rss`. A `grey` severity with `isUnreachable` set to `true` is a page that
+greendot could not read.
 
 ## Edit config.json by hand
 

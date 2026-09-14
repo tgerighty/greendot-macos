@@ -65,6 +65,38 @@ enum StatusMapping {
         }
     }
 
+    static func icingaHost(_ state: Int?, downtime: Bool) -> (severity: Severity, text: String) {
+        if downtime { return (.yellow, "Maintenance") }
+        switch state {
+        case 0: return (.green, "Operational")
+        case 1: return (.red, "Major outage")
+        case 2: return (.yellow, "Unreachable")
+        default: return (.yellow, "Degraded")
+        }
+    }
+
+    static func oktaCategory(_ raw: String?) -> (severity: Severity, text: String) {
+        switch (raw ?? "").lowercased() {
+        case "service degradation", "performance issue", "minor service disruption":
+            return (.yellow, "Degraded")
+        case "service disruption", "feature disruption", "major service disruption":
+            return (.red, "Major outage")
+        default:
+            return (.yellow, "Degraded")
+        }
+    }
+
+    static func icingaService(_ state: Int?, downtime: Bool) -> (severity: Severity, text: String) {
+        if downtime { return (.yellow, "Maintenance") }
+        switch state {
+        case 0: return (.green, "Operational")
+        case 1: return (.yellow, "Degraded")
+        case 2: return (.red, "Major outage")
+        case 3: return (.yellow, "Unknown")
+        default: return (.yellow, "Degraded")
+        }
+    }
+
     private static let rssTokens: [String: (severity: Severity, text: String)] = {
         let green = (severity: Severity.green, text: Severity.green.displayName)
         let yellow = (severity: Severity.yellow, text: Severity.yellow.displayName)

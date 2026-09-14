@@ -50,6 +50,8 @@
 
 ### Added
 
+- Icinga 2 API pages. Paste `https://user:password@host:5665/v1`. Hosts are groups. Each host has a Host check and its services as children. A 401 or 403 is an auth error. Clicks strip the username and password so the browser does not see them.
+- Okta Trust at https://status.okta.com/. Active incidents are groups. Impacted cells are children. Planned outages are yellow. Empty is green.
 - AWS Health status pages. Paste https://health.aws.amazon.com/health/status or https://status.aws.amazon.com/. One page named AWS. Current events are groups. Impacted services are children. Empty is green. RSS on status.aws.amazon.com with no status is yellow.
 - RSS 2.0 and Atom feeds. Paste a feed URL, HTML that advertises a feed, or https://status.cloud.microsoft/. Items are components. A `<status>` tag sets colour; a missing tag is operational. The Microsoft landing page is one watched page with Microsoft 365, Power Platform, and Azure as groups.
 - Flashduty status pages (for example https://status.deepseek.com). The app reads `{page}/api/widget/v1/summary.json`. The bar uses overall status. Active incidents and in-progress maintenance appear in the menu. Component lists stay empty because that feed has no component tree.

@@ -48,4 +48,17 @@ final class URLOpenerTests: XCTestCase {
         URLOpener.open(url, logPath: nil, workspace: { workspaceCalls.append($0) })
         XCTAssertEqual(workspaceCalls, [url])
     }
+
+    func testStripsUserinfoBeforeOpenAndLog() {
+        let log = FileManager.default.temporaryDirectory
+            .appendingPathComponent("opened-\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: log) }
+        var workspaceCalls: [URL] = []
+        let url = URL(string: "https://user:secret@icinga.example:5665/v1")!
+        URLOpener.open(url, logPath: nil, workspace: { workspaceCalls.append($0) })
+        URLOpener.open(url, logPath: log.path, workspace: { workspaceCalls.append($0) })
+        XCTAssertEqual(workspaceCalls, [URL(string: "https://icinga.example:5665/v1")!])
+        let body = (try? String(contentsOf: log, encoding: .utf8)) ?? ""
+        XCTAssertEqual(body, "https://icinga.example:5665/v1\n")
+    }
 }

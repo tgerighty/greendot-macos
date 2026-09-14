@@ -15,7 +15,7 @@ On first launch it adds [OpenAI Status](https://status.openai.com/) so you can s
 - One network notification when the Mac loses its network, and one when it comes back. greendot asks the system for the network state and also confirms a poll that finds only some pages unreachable, so a drop that reaches the pages over two polls still gives one notification.
 - Launch at login is on by default.
 
-v1 parsers: Atlassian Statuspage, Statuspal, Instatus, Flashduty, AWS Health, RSS 2.0, and Atom. Paste https://health.aws.amazon.com/health/status or https://status.aws.amazon.com/ for one page named AWS. HTML scrape of status (not feed discovery) is next.
+v1 parsers: Atlassian Statuspage, Statuspal, Instatus, Flashduty, AWS Health, Icinga 2 API, Okta Trust, RSS 2.0, and Atom. Paste https://health.aws.amazon.com/health/status or https://status.aws.amazon.com/ for one page named AWS. Paste https://status.okta.com/ for Okta. Paste an Icinga 2 API URL as `https://user:password@host:5665/v1` (the password is the API key). HTML scrape of status (not feed discovery) is next.
 
 ## Build
 
@@ -56,8 +56,9 @@ launch-at-login setting.
 `GREENDOT_POLL_SECONDS` to override the file. Set `GREENDOT_CONFIG_DIR` to use
 another directory.
 
-A feed URL can hold a token, for example `?token=abc123`. Read the URLs in
-`config.json` before you send the file to another person.
+A feed URL can hold a token, for example `?token=abc123`. An Icinga URL can hold
+a username and password. Read the URLs in `config.json` before you send the file
+to another person.
 
 See [Settings files](docs/settings-files.md) for each key in both files, the
 rules for a file that is not complete, and the upgrade in full.
