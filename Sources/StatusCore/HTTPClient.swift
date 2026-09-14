@@ -78,10 +78,14 @@ public struct URLSessionHTTPClient: HTTPClient {
     }
 
     public func getLocated(_ url: URL) async throws -> HTTPGet {
-        let (data, response) = try await session.data(from: url)
+        var request = URLRequest(url: HTTPAuth.requestURL(url))
+        for (field, value) in HTTPAuth.headers(for: url) {
+            request.setValue(value, forHTTPHeaderField: field)
+        }
+        let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        let final = response.url ?? url
-        if RedirectPolicy.allows(final, from: url) {
+        let final = response.url ?? HTTPAuth.requestURL(url)
+        if RedirectPolicy.allows(final, from: HTTPAuth.requestURL(url)) {
             return HTTPGet(data: data, status: status, url: final)
         }
         return HTTPGet(data: Data(), status: 0, url: url)
@@ -101,5 +105,21 @@ final class SameOriginRedirectDelegate: NSObject, URLSessionTaskDelegate, @unche
             from: response.url ?? task.originalRequest?.url
         )
         completionHandler(allowed ? newRequest : nil)
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+           let url = task.originalRequest?.url ?? task.currentRequest?.url,
+           TLSTrust.allowsInsecureServerTrust(for: url),
+           let trust = challenge.protectionSpace.serverTrust {
+            completionHandler(.useCredential, URLCredential(trust: trust))
+            return
+        }
+        completionHandler(.performDefaultHandling, nil)
     }
 }

@@ -4,14 +4,17 @@ import os
 public enum ProbeError: Error, Equatable, LocalizedError {
     case unsupported
     case unreachable
+    case unauthorized
 
     public var errorDescription: String? {
         switch self {
         case .unsupported:
             return "This URL is not a known status page format "
-                + "(Statuspage, Statuspal, Instatus, Flashduty, AWS, or RSS/Atom)."
+                + "(Statuspage, Statuspal, Instatus, Flashduty, AWS, Icinga, Okta, or RSS/Atom)."
         case .unreachable:
             return "Could not reach that URL."
+        case .unauthorized:
+            return "That URL requires a username and password in the URL (https://user:password@host/...)."
         }
     }
 }
@@ -51,6 +54,12 @@ public enum ProviderProbe {
         if let hit = try await probeAWSIfLanding(context: context, flags: &flags) {
             return hit
         }
+        if let hit = try await probeIcingaIfAPI(context: context, flags: &flags) {
+            return hit
+        }
+        if let hit = try await probeOktaIfLanding(context: context, flags: &flags) {
+            return hit
+        }
         for provider in probeOrder(preferring: prefer) {
             switch provider {
             case .statuspage, .instatus, .flashduty:
@@ -59,7 +68,7 @@ public enum ProviderProbe {
                 }
             case .statuspal:
                 if let hit = try await probeStatuspal(context: context, flags: &flags) { return hit }
-            case .aws:
+            case .aws, .icinga, .okta:
                 continue
             case .rss:
                 if let hit = try await probeRSS(context: context, flags: &flags) { return hit }
@@ -69,7 +78,7 @@ public enum ProviderProbe {
     }
 
     static func probeOrder(preferring prefer: StatusProvider?) -> [StatusProvider] {
-        let order: [StatusProvider] = [.statuspage, .instatus, .flashduty, .statuspal, .aws, .rss]
+        let order: [StatusProvider] = [.statuspage, .instatus, .flashduty, .statuspal, .aws, .icinga, .okta, .rss]
         guard let prefer, prefer != .statuspage else { return order }
         return [prefer] + order.filter { $0 != prefer }
     }
@@ -158,7 +167,7 @@ public enum ProviderProbe {
         case .flashduty:
             endpoint = context.base.appendingPathComponent("api/widget/v1/summary.json")
             parse = { try FlashdutyParser.parse(data: $0, sourceURL: context.base) }
-        case .statuspal, .rss, .aws:
+        case .statuspal, .rss, .aws, .icinga, .okta:
             // unreachable: routed elsewhere
             return .miss
         }

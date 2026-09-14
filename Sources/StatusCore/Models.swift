@@ -6,6 +6,8 @@ public enum StatusProvider: String, Codable, Equatable, Sendable {
     case instatus
     case flashduty
     case aws
+    case icinga
+    case okta
     case rss
 }
 
