@@ -18,10 +18,12 @@ bench:
 lint:
 	swiftlint lint --strict
 
-GIT_HASH = $(shell git rev-parse --short main)
-MERGE_COUNT = $(shell git rev-list --count --merges --first-parent main)
+GIT_HASH = $(shell git rev-parse --short main 2>/dev/null)
+MERGE_COUNT = $(shell git rev-list --count --merges --first-parent main 2>/dev/null)
 
 app: build
+	@test -n "$(GIT_HASH)" || { echo "ERROR: cannot resolve short hash of main; fetch main before make app" >&2; exit 1; }
+	@test -n "$(MERGE_COUNT)" || { echo "ERROR: cannot count first-parent merges on main; fetch main before make app" >&2; exit 1; }
 	rm -rf "$(APP)"
 	mkdir -p "$(APP)/Contents/MacOS" "$(APP)/Contents/Resources"
 	cp Resources/Info.plist "$(APP)/Contents/Info.plist"
