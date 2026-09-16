@@ -67,12 +67,36 @@ final class StatusioParserTests: XCTestCase {
         XCTAssertEqual(snap.components[0].children[0].severity, .yellow)
     }
 
+    func testPageLevelOutageBeatsHealthyLeaves() throws {
+        let data = Data("""
+        {
+          "result": {
+            "status_overall": {"status": "Service disruption", "status_code": 500},
+            "status": [
+              {
+                "id": "web",
+                "name": "Website",
+                "status": "Operational",
+                "status_code": 100,
+                "containers": []
+              }
+            ]
+          }
+        }
+        """.utf8)
+        let snap = try StatusioParser.parse(data: data, sourceURL: sourceURL)
+        XCTAssertEqual(snap.overall, .red)
+        XCTAssertEqual(snap.components[0].severity, .green)
+    }
+
     func testServiceDisruptionIsRed() throws {
         let data = Data("""
         {
           "result": {
             "status_overall": {"status": "Service disruption", "status_code": 500},
-            "status": [{"id": "api", "name": "API", "status": "Service disruption", "status_code": 500, "containers": []}]
+            "status": [
+              {"id": "api", "name": "API", "status": "Service disruption", "status_code": 500}
+            ]
           }
         }
         """.utf8)

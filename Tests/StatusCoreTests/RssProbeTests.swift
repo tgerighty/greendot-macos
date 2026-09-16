@@ -225,7 +225,9 @@ final class RssProbeTests: XCTestCase {
     func testUnsupportedErrorNamesRSS() {
         XCTAssertEqual(
             ProbeError.unsupported.errorDescription,
-            "This URL is not a known status page format (Statuspage, Statuspal, Instatus, Flashduty, AWS, Icinga, Okta, Salesforce, Status.io, Slack, Heroku, Google, Apple, incident.io, or RSS/Atom)."
+            "This URL is not a known status page format "
+                + "(Statuspage, Statuspal, Instatus, Flashduty, AWS, Icinga, Okta, "
+                + "Salesforce, Status.io, Slack, Heroku, Google, Apple, incident.io, or RSS/Atom)."
         )
     }
 

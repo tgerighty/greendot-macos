@@ -9,9 +9,8 @@ public enum StatusioParser {
         }
         let mapped = StatusMapping.statusio(intValue(overall["status_code"]))
         let components = (result["status"] as? [[String: Any]] ?? []).compactMap(component)
-        let overallSeverity = components.isEmpty
-            ? mapped.severity
-            : ComponentTree.enabledLeafSeverity(in: components, disabledKeys: [])
+        let leaves = ComponentTree.enabledLeafSeverity(in: components, disabledKeys: [])
+        let overallSeverity = Aggregator.fromSeverities([mapped.severity, leaves])
         return PageSnapshot(
             name: sourceURL.host ?? "Status page",
             url: sourceURL,

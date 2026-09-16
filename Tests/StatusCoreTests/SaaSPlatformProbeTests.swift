@@ -21,7 +21,8 @@ final class SaaSPlatformProbeTests: XCTestCase {
         )
         XCTAssertEqual(snap.provider, .statusio)
         XCTAssertEqual(snap.overall, .green)
-        XCTAssertTrue(recording.requested.map(\.absoluteString).contains("https://api.status.io/1.0/status/5b36dc6502d06804c08349f7"))
+        let api = "https://api.status.io/1.0/status/5b36dc6502d06804c08349f7"
+        XCTAssertTrue(recording.requested.map(\.absoluteString).contains(api))
     }
 
     func testSlackLandingFetchesCurrent() async throws {
@@ -82,6 +83,29 @@ final class SaaSPlatformProbeTests: XCTestCase {
         XCTAssertEqual(snap.provider, .apple)
         XCTAssertEqual(snap.name, "Apple")
         XCTAssertEqual(snap.overall, .green)
+    }
+
+    func testIncidentioSkippedOnOtherHosts() async {
+        var inner = MapHTTPClient()
+        inner.byURL["https://example.com"] = (Data("<html>no</html>".utf8), 200)
+        inner.byURL["https://example.com/proxy/status.incident.io"] = (
+            Data("{\"summary\":{\"name\":\"nope\",\"ongoing_incidents\":[]}}".utf8), 200
+        )
+        let recording = RecordingHTTPClient(inner)
+        do {
+            _ = try await ProviderProbe.probe(
+                pageURL: URL(string: "https://example.com")!,
+                client: recording
+            )
+            XCTFail("expected unsupported")
+        } catch {
+            XCTAssertEqual(error as? ProbeError, .unsupported)
+        }
+        XCTAssertFalse(
+            recording.requested.map(\.absoluteString).contains(
+                "https://example.com/proxy/status.incident.io"
+            )
+        )
     }
 
     func testIncidentioProxy() async throws {

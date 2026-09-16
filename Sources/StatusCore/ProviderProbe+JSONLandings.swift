@@ -1,6 +1,37 @@
 import Foundation
 
 extension ProviderProbe {
+    static func probeKnownLandings(
+        context: ProbeContext,
+        flags: inout ProbeFlags
+    ) async throws -> ProbeHit? {
+        if let hit = try await probeAWSIfLanding(context: context, flags: &flags) {
+            return hit
+        }
+        if let hit = try await probeIcingaIfAPI(context: context, flags: &flags) {
+            return hit
+        }
+        if let hit = try await probeOktaIfLanding(context: context, flags: &flags) {
+            return hit
+        }
+        if let hit = try await probeSalesforceIfLanding(context: context, flags: &flags) {
+            return hit
+        }
+        if let hit = try await probeSlackIfLanding(context: context, flags: &flags) {
+            return hit
+        }
+        if let hit = try await probeHerokuIfLanding(context: context, flags: &flags) {
+            return hit
+        }
+        if let hit = try await probeGoogleIfLanding(context: context, flags: &flags) {
+            return hit
+        }
+        if let hit = try await probeAppleIfLanding(context: context, flags: &flags) {
+            return hit
+        }
+        return try await probeStripeIfLanding(context: context, flags: &flags)
+    }
+
     static func probeSlackIfLanding(
         context: ProbeContext,
         flags: inout ProbeFlags
@@ -96,6 +127,10 @@ extension ProviderProbe {
         context: ProbeContext,
         flags: inout ProbeFlags
     ) async throws -> ProbeHit? {
+        let host = context.base.host?.lowercased() ?? ""
+        guard host == "status.incident.io" || host.hasSuffix(".incident.io") else {
+            return nil
+        }
         let jsonURL = context.base.appendingPathComponent("proxy").appendingPathComponent("status.incident.io")
         return try await probeJSON(
             jsonURL,
@@ -136,7 +171,7 @@ extension ProviderProbe {
         if host == "status.cloud.google.com" || host == "status.firebase.google.com" {
             return URL(string: "https://\(host)/incidents.json")
         }
-        if (host == "www.google.com" || host == "google.com"), path.contains("appsstatus") {
+        if host == "www.google.com" || host == "google.com", path.contains("appsstatus") {
             return URL(string: "https://www.google.com/appsstatus/dashboard/incidents.json")
         }
         return nil

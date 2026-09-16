@@ -10,7 +10,8 @@ public enum ProbeError: Error, Equatable, LocalizedError {
         switch self {
         case .unsupported:
             return "This URL is not a known status page format "
-                + "(Statuspage, Statuspal, Instatus, Flashduty, AWS, Icinga, Okta, Salesforce, Status.io, Slack, Heroku, Google, Apple, incident.io, or RSS/Atom)."
+                + "(Statuspage, Statuspal, Instatus, Flashduty, AWS, Icinga, Okta, "
+                + "Salesforce, Status.io, Slack, Heroku, Google, Apple, incident.io, or RSS/Atom)."
         case .unreachable:
             return "Could not reach that URL."
         case .unauthorized:
@@ -34,69 +35,6 @@ public enum ProviderProbe {
         prefer: StatusProvider? = nil
     ) async throws -> PageSnapshot {
         try await probeHit(pageURL: pageURL, client: client, prefer: prefer).snapshot
-    }
-
-    static func probeHit(
-        pageURL: URL,
-        client: HTTPClient,
-        prefer: StatusProvider? = nil,
-        previousBody: Data? = nil,
-        previousSnapshot: PageSnapshot? = nil
-    ) async throws -> ProbeHit {
-        let context = ProbeContext(
-            base: normalizedBase(pageURL),
-            pageURL: pageURL,
-            client: client,
-            previousBody: previousBody,
-            previousSnapshot: previousSnapshot
-        )
-        var flags = ProbeFlags()
-        if let hit = try await probeAWSIfLanding(context: context, flags: &flags) {
-            return hit
-        }
-        if let hit = try await probeIcingaIfAPI(context: context, flags: &flags) {
-            return hit
-        }
-        if let hit = try await probeOktaIfLanding(context: context, flags: &flags) {
-            return hit
-        }
-        if let hit = try await probeSalesforceIfLanding(context: context, flags: &flags) {
-            return hit
-        }
-        if let hit = try await probeSlackIfLanding(context: context, flags: &flags) {
-            return hit
-        }
-        if let hit = try await probeHerokuIfLanding(context: context, flags: &flags) {
-            return hit
-        }
-        if let hit = try await probeGoogleIfLanding(context: context, flags: &flags) {
-            return hit
-        }
-        if let hit = try await probeAppleIfLanding(context: context, flags: &flags) {
-            return hit
-        }
-        if let hit = try await probeStripeIfLanding(context: context, flags: &flags) {
-            return hit
-        }
-        for provider in probeOrder(preferring: prefer) {
-            switch provider {
-            case .statuspage, .instatus, .flashduty:
-                if let hit = flags.record(try await standardAttempt(for: provider, context: context)) {
-                    return hit
-                }
-            case .statuspal:
-                if let hit = try await probeStatuspal(context: context, flags: &flags) { return hit }
-            case .statusio:
-                if let hit = try await probeStatusio(context: context, flags: &flags) { return hit }
-            case .incidentio:
-                if let hit = try await probeIncidentio(context: context, flags: &flags) { return hit }
-            case .aws, .icinga, .okta, .salesforce, .slack, .heroku, .google, .apple:
-                continue
-            case .rss:
-                if let hit = try await probeRSS(context: context, flags: &flags) { return hit }
-            }
-        }
-        throw flags.finalError
     }
 
     static func probeOrder(preferring prefer: StatusProvider?) -> [StatusProvider] {
@@ -176,7 +114,7 @@ public enum ProviderProbe {
         status == 0 || status == 429 || (500...599).contains(status)
     }
 
-    private static func standardAttempt(
+    static func standardAttempt(
         for provider: StatusProvider,
         context: ProbeContext
     ) async throws -> AttemptResult {
@@ -236,7 +174,7 @@ public enum ProviderProbe {
         }
     }
 
-    private static func probeStatuspal(
+    static func probeStatuspal(
         context: ProbeContext,
         flags: inout ProbeFlags
     ) async throws -> ProbeHit? {

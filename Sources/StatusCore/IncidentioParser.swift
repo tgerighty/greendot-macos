@@ -29,7 +29,8 @@ public enum IncidentioParser {
         let name = JSONScalar.nonempty(item["name"] as? String)
             ?? JSONScalar.nonempty(item["title"] as? String)
             ?? id
-        let children = (item["affected_components"] as? [[String: Any]] ?? []).compactMap { component -> ComponentStatus? in
+        let affected = item["affected_components"] as? [[String: Any]] ?? []
+        let children = affected.compactMap { component -> ComponentStatus? in
             let childName = JSONScalar.nonempty(component["name"] as? String)
             guard let childName else { return nil }
             return ComponentStatus(
