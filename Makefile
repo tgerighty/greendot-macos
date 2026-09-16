@@ -18,12 +18,15 @@ bench:
 lint:
 	swiftlint lint --strict
 
-GIT_HASH = $(shell git rev-parse --short HEAD)
+GIT_HASH = $(shell git rev-parse --short main)
+MERGE_COUNT = $(shell git rev-list --count --merges --first-parent main)
 
 app: build
 	rm -rf "$(APP)"
 	mkdir -p "$(APP)/Contents/MacOS" "$(APP)/Contents/Resources"
 	cp Resources/Info.plist "$(APP)/Contents/Info.plist"
+	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(MERGE_COUNT)" "$(APP)/Contents/Info.plist"
+	/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(MERGE_COUNT)" "$(APP)/Contents/Info.plist"
 	/usr/libexec/PlistBuddy -c "Add :GitCommitHash string $(GIT_HASH)" "$(APP)/Contents/Info.plist"
 	cp Resources/AppIcon.icns "$(APP)/Contents/Resources/AppIcon.icns"
 	cp "$(BINDIR)/$(BIN)" "$(APP)/Contents/MacOS/$(BIN)"

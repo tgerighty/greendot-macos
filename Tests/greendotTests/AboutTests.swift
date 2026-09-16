@@ -16,9 +16,23 @@ final class AboutTests: XCTestCase {
         XCTAssertEqual(BuildInfo.gitHash(from: ["GitCommitHash": ""]), "unknown")
     }
 
-    func testAboutOptionsUseGitHashAsBuildVersion() {
-        let options = AboutPanel.options(gitHash: "deadbeefcafebabe")
-        XCTAssertEqual(options[.version] as? String, "deadbeefcafebabe")
+    func testVersionReadsShortVersionStringFromInfoDictionary() {
+        XCTAssertEqual(
+            BuildInfo.version(from: ["CFBundleShortVersionString": "24"]),
+            "24"
+        )
+    }
+
+    func testVersionIsUnknownWhenMissingOrEmpty() {
+        XCTAssertEqual(BuildInfo.version(from: [:]), "unknown")
+        XCTAssertEqual(BuildInfo.version(from: nil), "unknown")
+        XCTAssertEqual(BuildInfo.version(from: ["CFBundleShortVersionString": ""]), "unknown")
+    }
+
+    func testAboutOptionsUseMergeCountAndShortHash() {
+        let options = AboutPanel.options(version: "24", gitHash: "adb7e2c")
+        XCTAssertEqual(options[.applicationVersion] as? String, "24")
+        XCTAssertEqual(options[.version] as? String, "adb7e2c")
     }
 
     func testShortHashUsesFirstSevenCharacters() {
