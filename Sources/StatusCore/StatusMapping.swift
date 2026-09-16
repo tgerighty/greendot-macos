@@ -86,6 +86,67 @@ enum StatusMapping {
         }
     }
 
+    static func salesforce(_ raw: String?) -> (severity: Severity, text: String) {
+        switch (raw ?? "").lowercased() {
+        case "disruption":
+            return (.red, "Major outage")
+        case "maintenance":
+            return (.yellow, "Maintenance")
+        default:
+            return (.yellow, "Degraded")
+        }
+    }
+
+    static func statusio(_ code: Int?) -> (severity: Severity, text: String) {
+        switch code {
+        case 100: return (.green, "Operational")
+        case 200: return (.yellow, "Maintenance")
+        case 300: return (.yellow, "Degraded")
+        case 400: return (.yellow, "Partial outage")
+        case 500: return (.red, "Major outage")
+        default: return (.yellow, "Degraded")
+        }
+    }
+
+    static func heroku(_ raw: String?) -> (severity: Severity, text: String) {
+        switch (raw ?? "").lowercased() {
+        case "green": return (.green, "Operational")
+        case "yellow": return (.yellow, "Degraded")
+        case "red": return (.red, "Major outage")
+        default: return (.yellow, "Degraded")
+        }
+    }
+
+    static func googleSeverity(_ raw: String?) -> (severity: Severity, text: String) {
+        switch (raw ?? "").lowercased() {
+        case "high", "critical": return (.red, "Major outage")
+        case "low", "medium": return (.yellow, "Degraded")
+        default: return (.yellow, "Degraded")
+        }
+    }
+
+    static func appleStatusType(_ raw: String?) -> (severity: Severity, text: String) {
+        switch (raw ?? "").lowercased() {
+        case "outage": return (.red, "Major outage")
+        case "maintenance": return (.yellow, "Maintenance")
+        default: return (.yellow, "Degraded")
+        }
+    }
+
+    static func slackIncidentType(_ raw: String?) -> (severity: Severity, text: String) {
+        switch (raw ?? "").lowercased() {
+        case "outage": return (.red, "Major outage")
+        default: return (.yellow, "Degraded")
+        }
+    }
+
+    static func incidentioImpact(_ raw: String?) -> (severity: Severity, text: String) {
+        switch (raw ?? "").lowercased() {
+        case "major", "critical": return (.red, "Major outage")
+        default: return (.yellow, "Degraded")
+        }
+    }
+
     static func icingaService(_ state: Int?, downtime: Bool) -> (severity: Severity, text: String) {
         if downtime { return (.yellow, "Maintenance") }
         switch state {

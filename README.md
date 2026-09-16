@@ -15,7 +15,7 @@ On first launch it adds [OpenAI Status](https://status.openai.com/) so you can s
 - One network notification when the Mac loses its network, and one when it comes back. greendot asks the system for the network state and also confirms a poll that finds only some pages unreachable, so a drop that reaches the pages over two polls still gives one notification.
 - Launch at login is on by default.
 
-v1 parsers: Atlassian Statuspage, Statuspal, Instatus, Flashduty, AWS Health, Icinga 2 API, Okta Trust, RSS 2.0, and Atom. Paste https://health.aws.amazon.com/health/status or https://status.aws.amazon.com/ for one page named AWS. Paste https://status.okta.com/ for Okta. Paste an Icinga 2 API URL as `https://user:password@host:5665/v1` (the password is the API key). HTML scrape of status (not feed discovery) is next.
+v1 parsers: Atlassian Statuspage, Statuspal, Instatus, Flashduty, Status.io, Slack, Heroku, Google Cloud/Workspace/Firebase, Apple System Status, incident.io, AWS Health, Icinga 2 API, Okta Trust, Salesforce Trust, RSS 2.0, and Atom. Paste https://health.aws.amazon.com/health/status or https://status.aws.amazon.com/ for one page named AWS. Paste https://status.okta.com/ for Okta. Paste https://status.salesforce.com/ for Salesforce. Paste https://status.gitlab.com/ for Status.io. Paste https://slack-status.com/ for Slack. Paste https://status.heroku.com/ for Heroku. Paste https://status.cloud.google.com/ or the Google Workspace status dashboard for Google. Paste https://www.apple.com/support/systemstatus/ for Apple. Paste https://status.stripe.com/ for Stripe. Paste an Icinga 2 API URL as `https://user:password@host:5665/v1` (the password is the API key). HTML scrape of status (not feed discovery) is next.
 
 ## Build
 

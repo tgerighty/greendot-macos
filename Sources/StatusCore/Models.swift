@@ -8,6 +8,13 @@ public enum StatusProvider: String, Codable, Equatable, Sendable {
     case aws
     case icinga
     case okta
+    case salesforce
+    case statusio
+    case slack
+    case heroku
+    case google
+    case apple
+    case incidentio
     case rss
 }
 
