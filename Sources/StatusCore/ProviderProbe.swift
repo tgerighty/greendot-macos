@@ -10,7 +10,7 @@ public enum ProbeError: Error, Equatable, LocalizedError {
         switch self {
         case .unsupported:
             return "This URL is not a known status page format "
-                + "(Statuspage, Statuspal, Instatus, Flashduty, AWS, Icinga, Okta, or RSS/Atom)."
+                + "(Statuspage, Statuspal, Instatus, Flashduty, AWS, Icinga, Okta, Salesforce, or RSS/Atom)."
         case .unreachable:
             return "Could not reach that URL."
         case .unauthorized:
@@ -60,6 +60,9 @@ public enum ProviderProbe {
         if let hit = try await probeOktaIfLanding(context: context, flags: &flags) {
             return hit
         }
+        if let hit = try await probeSalesforceIfLanding(context: context, flags: &flags) {
+            return hit
+        }
         for provider in probeOrder(preferring: prefer) {
             switch provider {
             case .statuspage, .instatus, .flashduty:
@@ -68,7 +71,7 @@ public enum ProviderProbe {
                 }
             case .statuspal:
                 if let hit = try await probeStatuspal(context: context, flags: &flags) { return hit }
-            case .aws, .icinga, .okta:
+            case .aws, .icinga, .okta, .salesforce:
                 continue
             case .rss:
                 if let hit = try await probeRSS(context: context, flags: &flags) { return hit }
@@ -78,7 +81,7 @@ public enum ProviderProbe {
     }
 
     static func probeOrder(preferring prefer: StatusProvider?) -> [StatusProvider] {
-        let order: [StatusProvider] = [.statuspage, .instatus, .flashduty, .statuspal, .aws, .icinga, .okta, .rss]
+        let order: [StatusProvider] = [.statuspage, .instatus, .flashduty, .statuspal, .aws, .icinga, .okta, .salesforce, .rss]
         guard let prefer, prefer != .statuspage else { return order }
         return [prefer] + order.filter { $0 != prefer }
     }
@@ -167,7 +170,7 @@ public enum ProviderProbe {
         case .flashduty:
             endpoint = context.base.appendingPathComponent("api/widget/v1/summary.json")
             parse = { try FlashdutyParser.parse(data: $0, sourceURL: context.base) }
-        case .statuspal, .rss, .aws, .icinga, .okta:
+        case .statuspal, .rss, .aws, .icinga, .okta, .salesforce:
             // unreachable: routed elsewhere
             return .miss
         }

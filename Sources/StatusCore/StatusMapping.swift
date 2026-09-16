@@ -86,6 +86,17 @@ enum StatusMapping {
         }
     }
 
+    static func salesforce(_ raw: String?) -> (severity: Severity, text: String) {
+        switch (raw ?? "").lowercased() {
+        case "disruption":
+            return (.red, "Major outage")
+        case "maintenance":
+            return (.yellow, "Maintenance")
+        default:
+            return (.yellow, "Degraded")
+        }
+    }
+
     static func icingaService(_ state: Int?, downtime: Bool) -> (severity: Severity, text: String) {
         if downtime { return (.yellow, "Maintenance") }
         switch state {

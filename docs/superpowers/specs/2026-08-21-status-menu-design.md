@@ -21,7 +21,7 @@ These decisions are settled. Do not re-open them in v1.
 | Auth | Reachable URL only (VPN/LAN). No SSO. Icinga 2 API uses HTTP Basic from URL userinfo (`https://user:password@host:5665/v1`). |
 | Stack | Native Swift. AppKit `NSStatusItem`. Testable core with no AppKit. |
 | Menu | Bar icon = worst real status. Top level = one row per page. Submenu = components, like the ChatGPT status screenshot. |
-| Providers | Atlassian Statuspage, Statuspal, Instatus, Flashduty, AWS, Icinga 2 API, Okta Trust, RSS 2.0 / Atom. See [2026-09-02-rss-feeds-design.md](2026-09-02-rss-feeds-design.md) and [2026-09-03-aws-status-pages-design.md](2026-09-03-aws-status-pages-design.md). Generic HTML scrape of status is still out of v1. |
+| Providers | Atlassian Statuspage, Statuspal, Instatus, Flashduty, AWS, Icinga 2 API, Okta Trust, Salesforce Trust, RSS 2.0 / Atom. See [2026-09-02-rss-feeds-design.md](2026-09-02-rss-feeds-design.md), [2026-09-03-aws-status-pages-design.md](2026-09-03-aws-status-pages-design.md), and [2026-09-16-salesforce-status-pages-design.md](2026-09-16-salesforce-status-pages-design.md). Generic HTML scrape of status is still out of v1. |
 | Notifications | Per-page toggle. Default on. Toast when that page's overall colour changes, including recovery. |
 | Chrome | Menu bar only. No Dock. No settings window. Launch-at-login default on. About greendot opens the native About panel. Copyright © 2026 Terry Gerighty. All rights reserved. The build number is the short GitHub commit hash. |
 | Poll | 60 seconds, global. |
@@ -70,11 +70,12 @@ Probe order:
 1. AWS Health landing (`https://health.aws.amazon.com/health/status` or `https://status.aws.amazon.com/`). See [2026-09-03-aws-status-pages-design.md](2026-09-03-aws-status-pages-design.md).
 2. Icinga 2 API (`/v1` with port `5665` or a host that contains `icinga`). GET `{base}/objects/hosts` and `{base}/objects/services` with HTTP Basic from the URL.
 3. Okta Trust landing (`https://status.okta.com/`). GET the HTML. Parse embedded `incidents` and `planned-outages` JSON.
-4. `{base}/api/v2/summary.json` — Atlassian Statuspage if the JSON has `status.indicator`.
-5. `{base}/summary.json` — Instatus if the JSON has `page.status`.
-6. `{base}/api/widget/v1/summary.json` — Flashduty if the JSON has `schema_version` and `overall.status`.
-7. Statuspal JSON: `{statuspal-host}/api/v2/status_pages/{subdomain}/summary`. Subdomain comes from `*.statuspal.io` / `*.statuspal.eu`, or from the HTML of `{base}` if it names Statuspal.
-8. RSS 2.0 / Atom. See [2026-09-02-rss-feeds-design.md](2026-09-02-rss-feeds-design.md).
+4. Salesforce Trust landing (`https://status.salesforce.com/`). See [2026-09-16-salesforce-status-pages-design.md](2026-09-16-salesforce-status-pages-design.md).
+5. `{base}/api/v2/summary.json` — Atlassian Statuspage if the JSON has `status.indicator`.
+6. `{base}/summary.json` — Instatus if the JSON has `page.status`.
+7. `{base}/api/widget/v1/summary.json` — Flashduty if the JSON has `schema_version` and `overall.status`.
+8. Statuspal JSON: `{statuspal-host}/api/v2/status_pages/{subdomain}/summary`. Subdomain comes from `*.statuspal.io` / `*.statuspal.eu`, or from the HTML of `{base}` if it names Statuspal.
+9. RSS 2.0 / Atom. See [2026-09-02-rss-feeds-design.md](2026-09-02-rss-feeds-design.md).
 
 If none match, the add panel shows an error. It does not scrape HTML for status except the Okta Trust landing.
 
