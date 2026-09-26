@@ -54,8 +54,10 @@ final class ParserBoundaryTests: XCTestCase {
         let incidentio = Data(#"{"summary":{"ongoing_incidents":{}}}"#.utf8)
         let apple = Data(#"{"services":[{"serviceName":"API","events":{}}]}"#.utf8)
         let heroku = Data(#"{"status":[{"system":"API","status":"green"}],"incidents":{}}"#.utf8)
+        let scheduled = Data(#"{"status":[{"system":"API","status":"green"}],"scheduled":{}}"#.utf8)
         XCTAssertThrowsError(try IncidentioParser.parse(data: incidentio, sourceURL: url))
         XCTAssertThrowsError(try AppleParser.parse(data: apple, sourceURL: url))
         XCTAssertThrowsError(try HerokuParser.parse(data: heroku, sourceURL: url))
+        XCTAssertThrowsError(try HerokuParser.parse(data: scheduled, sourceURL: url))
     }
 }
