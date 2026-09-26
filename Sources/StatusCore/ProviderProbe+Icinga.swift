@@ -35,12 +35,7 @@ extension ProviderProbe {
                 + hosts.data
                 + Data("\n--\n".utf8)
                 + services.data
-            if let previousBody = context.previousBody,
-               let previousSnapshot = context.previousSnapshot,
-               !previousSnapshot.isUnreachable,
-               body == previousBody {
-                return ProbeHit(snapshot: previousSnapshot, body: body)
-            }
+            if let hit = context.cachedHit(for: body) { return hit }
             do {
                 recordParse()
                 let snapshot = try IcingaParser.parse(

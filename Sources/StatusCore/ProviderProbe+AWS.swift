@@ -29,30 +29,13 @@ extension ProviderProbe {
         context: ProbeContext,
         flags: inout ProbeFlags
     ) async throws -> ProbeHit? {
-        do {
-            let (data, status) = try await context.client.get(awsCurrentEventsURL)
-            try Task.checkCancellation()
-            flags.recordHTTP(status: status)
-            let body = Data("HTTP \(status)\n".utf8) + data
-            guard status == 200 else { return nil }
-            if let previousBody = context.previousBody,
-               let previousSnapshot = context.previousSnapshot,
-               !previousSnapshot.isUnreachable,
-               body == previousBody {
-                return ProbeHit(snapshot: previousSnapshot, body: body)
-            }
-            do {
-                recordParse()
-                let snapshot = try AwsParser.parse(data: data, sourceURL: awsClickURL(context.base))
-                return ProbeHit(snapshot: snapshot, body: body)
-            } catch {
-                return nil
-            }
-        } catch {
-            try throwIfCancelled(error)
-            flags.sawNetworkError = true
-            return nil
-        }
+        try await probeJSON(
+            awsCurrentEventsURL,
+            sourceURL: awsClickURL(context.base),
+            context: context,
+            flags: &flags,
+            parse: AwsParser.parse
+        )
     }
 }
 

@@ -82,6 +82,14 @@ public enum ProviderProbe {
         let client: HTTPClient
         let previousBody: Data?
         let previousSnapshot: PageSnapshot?
+
+        func cachedHit(for body: Data) -> ProbeHit? {
+            guard let previousBody,
+                  let previousSnapshot,
+                  !previousSnapshot.isUnreachable,
+                  body == previousBody else { return nil }
+            return ProbeHit(snapshot: previousSnapshot, body: body)
+        }
     }
 
     struct ProbeFlags {

@@ -173,12 +173,7 @@ private extension ProviderProbe {
             }
         }
         let body = hubCacheBody(parts: parts, statuses: statuses)
-        if let previousBody = context.previousBody,
-           let previousSnapshot = context.previousSnapshot,
-           !previousSnapshot.isUnreachable,
-           body == previousBody {
-            return ProbeHit(snapshot: previousSnapshot, body: body)
-        }
+        if let hit = context.cachedHit(for: body) { return hit }
         var groups: [ComponentStatus] = []
         var parsedAny = false
         for (index, feed) in feeds.enumerated() {
@@ -266,12 +261,7 @@ private extension ProviderProbe {
 
     static func feedHit(_ data: Data, sourceURL: URL, context: ProbeContext) -> ProbeHit? {
         let body = feedCacheBody(data, sourceURL: sourceURL)
-        if let previousBody = context.previousBody,
-           let previousSnapshot = context.previousSnapshot,
-           !previousSnapshot.isUnreachable,
-           body == previousBody {
-            return ProbeHit(snapshot: previousSnapshot, body: body)
-        }
+        if let hit = context.cachedHit(for: body) { return hit }
         do {
             recordParse()
             let snapshot = try RssParser.parse(data: data, sourceURL: sourceURL)
