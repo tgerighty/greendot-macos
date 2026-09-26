@@ -30,6 +30,9 @@ public enum HerokuParser {
                 isGroup: true
             )
         }
+        guard json["scheduled"] == nil || json["scheduled"] is [[String: Any]] else {
+            throw ParserError.invalidJSON
+        }
         let inProgress = (json["scheduled"] as? [[String: Any]] ?? []).compactMap { item -> ComponentStatus? in
             guard (item["state"] as? String)?.lowercased() == "in-progress" else { return nil }
             guard let id = JSONScalar.stringID(item["id"]) else { return nil }
