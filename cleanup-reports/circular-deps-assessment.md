@@ -1,102 +1,207 @@
-# Circular Dependency Assessment
+PONYTAIL MODE ACTIVE — level: full
 
-Assessment scope: commit `310032b`, Swift package targets and source/test files under `Sources/` and `Tests/`. The generated UI project, `greendot.app`, `.build`, `.git`, and existing cleanup archives were not used as evidence. This is a read-only dependency assessment.
+# Circular Dependency Analysis Assessment
+
+Scope: `greendot`, circular dependencies only. Baseline: `9320756a8a8bfdacbc4d45aad53ed1591513a12e`, 2026-09-26. Report-only analysis.
 
 ## Executive Summary
 
-The Swift target graph has no import cycle. `swift package describe --type json` reports the following one-way edges: `greendot -> StatusCore`, `TestSupport -> StatusCore`, `StatusCoreTests -> StatusCore + TestSupport`, and `greendotTests -> greendot + StatusCore + TestSupport`. `StatusCore` has no package dependency. `swift build` completed successfully. `swift test` completed with 150 tests passed, one benchmark test skipped, and no failures.
+- Total findings: **4**. Severity: **HIGH=0, MEDIUM=2, LOW=2**. The two LOW entries describe file grouping and recommend KEEP. Evidence: `Sources/StatusCore/HTTPAuth.swift:15`, `Sources/StatusCore/SlackParser.swift:21`, `Sources/StatusCore/Models.swift:132`, `Sources/StatusCore/StateFile.swift:20`.
+- No declared package-target cycle exists. All target dependencies point toward `StatusCore` or toward targets that depend on `StatusCore`. Evidence: `Package.swift:8`, `Package.swift:11`, `Package.swift:16`, `Package.swift:20`, `Package.swift:24`.
+- No BREAKING cycle was established. The structural return edges call a URL predicate or a URL-normalization helper. Neither helper starts another probe. Evidence: `Sources/StatusCore/ProviderProbe+Icinga.swift:4`, `Sources/StatusCore/ProviderProbe.swift:49`.
+- Priority 1: review the transport-to-probe dependency when changing Icinga routing. Preserve its authentication and TLS behavior. Evidence: `Sources/StatusCore/HTTPAuth.swift:15`, `Sources/StatusCore/HTTPAuth.swift:24`, `Sources/StatusCore/HTTPClient.swift:118`.
+- Priority 2: remove parser-to-probe references through one shared URL helper if independent parser reuse becomes necessary. Evidence: `Sources/StatusCore/ProviderProbe.swift:49`, `Sources/StatusCore/ProviderProbe+JSONLandings.swift:45`, `Sources/StatusCore/SlackParser.swift:21`.
+- Priority 3: keep the model and persistence file arrangements unless a concrete module split requires different ownership. Evidence: `Sources/StatusCore/Models.swift:21`, `Sources/StatusCore/Models.swift:132`, `Sources/StatusCore/PageStore.swift:3`, `Sources/StatusCore/StateFile.swift:38`.
+- Estimated optional change impact: about **30 existing lines across 10 existing source files**, plus relocated helper bodies. No material LOC reduction is expected. The estimates come from the two helper definitions and their callers below. Evidence: `Sources/StatusCore/ProviderProbe+Icinga.swift:4`, `Sources/StatusCore/HTTPAuth.swift:15`, `Sources/StatusCore/ProviderProbe.swift:49`, `Sources/StatusCore/URLAuth.swift:3`, and the six parser references in CIRC-002.
 
-There are 4 semantic findings: 0 HIGH, 1 MEDIUM, and 3 LOW. None is a confirmed breaking or runtime retain cycle. The MEDIUM finding is a file-level structural SCC in `StatusCore`. The LOW findings are intentional event or delegate loops whose back edges are weak or framework-managed.
+### Pre-flight and method
 
-Top three priorities:
+The repository uses Swift Package Manager, Swift tools 5.9, and macOS 13 or later. The UI uses AppKit. Evidence: `Package.swift:1`, `Package.swift:6`, `Sources/greendot/AppDelegate.swift:1`.
 
-1. `circular-001` (MEDIUM): keep generic severity aggregation independent from model-specific extensions. Extract the model-aware aggregation extension as the weakest-link change. This has the largest structural blast radius because it touches the `StatusCore` public aggregation surface.
-2. `circular-002` (LOW): keep the menu callback loop, but preserve `[weak self]` in application handlers and the tracking-ended callback. The loop is part of menu interaction and has no strong owner back edge in the current code.
-3. `circular-003` (LOW): keep the editor/panel callback loop. Preserve weak callback captures, cancellation generation checks, and the panel lifecycle test. The blast radius is limited to add/edit/remove UI flow.
+The manifest declares five local targets and no external package dependency entries. The separate UI-test project declares one UI-test target. Evidence: `Package.swift:4`, `Package.swift:8`, `Package.swift:10`, `Package.swift:15`, `Package.swift:19`, `Package.swift:23`, `UITests/project.yml:6`.
 
-The overall impact is low. No target graph change is required. The only recommended design improvement is the small extraction for `circular-001`; the other loops are useful control flow and should not be removed without a specific lifecycle defect.
+Session tool check: `command -v` found `rg` and `python3`. It did not find `swift`, `swiftc`, `swiftlint`, `madge`, `lint-imports`, `pydeps`, `grimp`, or `importlab`. This is an environment observation, not a repository defect. The repository's native commands require Swift and SwiftLint. Evidence: `Makefile:10`, `Makefile:13`, `Makefile:19`.
+
+Read-only analysis used import searches, numbered source reads, and inline Python standard-library scripts. The scripts checked the manifest graph with `graphlib.TopologicalSorter` and collected candidate cycles from named-type references. A second pass assigned Swift extensions to their owning type. Manual reads checked each reported edge. The import inventory covered `Sources`, `Tests`, and `UITests`. The source scan covered 68 production files and 78 test/support files. No tool installation, build, test execution, or dependency resolution occurred.
+
+The lexical scan is a candidate detector, not a Swift compiler. It does not resolve every inferred type, string interpolation, or dynamic callback. Accordingly, this report makes no claim about runtime success or exhaustive call-graph coverage. The native test command is `swift test`, and the documented build platform is macOS with Xcode. Evidence: `Makefile:13`, `README.md:30`.
+
+### Package import graph
+
+An arrow means “depends on.” These target edges have no path back to their starting target.
+
+| Target | Local dependencies | Evidence |
+|---|---|---|
+| `StatusCore` | None declared | `Package.swift:8` |
+| `TestSupport` | `StatusCore` | `Package.swift:11`, `Tests/TestSupport/HTTPClientDoubles.swift:2` |
+| `greendot` | `StatusCore` | `Package.swift:16`, `Sources/greendot/AppDelegate.swift:2` |
+| `StatusCoreTests` | `StatusCore`, `TestSupport` | `Package.swift:20`, `Tests/StatusCoreTests/AwsProbeTests.swift:2`, `Tests/StatusCoreTests/AwsProbeTests.swift:3` |
+| `greendotTests` | `greendot`, `StatusCore`, `TestSupport` | `Package.swift:24`, `Tests/greendotTests/AppDelegateConfigMenuTests.swift:2`, `Tests/greendotTests/AppDelegateConfigMenuTests.swift:4`, `Tests/greendotTests/AppDelegateConfigMenuTests.swift:5` |
+
+The findings below concern references inside `StatusCore`, not circular `import` statements. Swift extensions contribute methods to the same type. For example, the probe implementation and its Icinga extension both belong to `ProviderProbe`. Evidence: `Package.swift:8`, `Sources/StatusCore/ProviderProbe.swift:23`, `Sources/StatusCore/ProviderProbe+Icinga.swift:3`.
 
 ## Critical Findings
 
-None. No HIGH finding was identified. The target graph is acyclic, and the source compiles as one `greendot` executable target plus the `StatusCore` library.
+None established. There is no declared target cycle, and the identified return helpers do not call the probe dispatcher. This is a source-analysis result, not a successful build result. Evidence: `Package.swift:8`, `Package.swift:11`, `Package.swift:16`, `Package.swift:20`, `Package.swift:24`, `Sources/StatusCore/ProviderProbe.swift:49`, `Sources/StatusCore/ProviderProbe+Icinga.swift:4`.
 
 ## Medium Findings
 
-### circular-001 - model-aware `Aggregator` extension forms a file-level SCC
+### CIRC-001 — HTTP policy depends on the probe implementation
 
-Cycle traced as:
+**Classification:** MEDIUM / STRUCTURAL. **Recommendation:** REVIEW. **Confidence:** CERTAIN for the source references. **Verified:** false.
 
-`Sources/StatusCore/Severity.swift::Aggregator` (`8-15`) -> `Sources/StatusCore/Models.swift::extension Aggregator` (`88-96`, which consumes `PageSnapshot` and `ComponentStatus`) -> `Sources/StatusCore/Models.swift::WatchedPage.displaySeverity` (`123-130`) -> `Sources/StatusCore/Severity.swift::Aggregator` (`9-15`).
+The complete file-reference cycle is:
 
-`Aggregator.fromSeverities` is declared in `Severity.swift`. `Models.swift` then extends that type with model-specific methods, and `WatchedPage.displaySeverity` calls the model-aware method. This is a structural file dependency cycle inside one Swift target, not a package import cycle and not a recursive runtime call. It couples the generic severity utility to the domain model file and makes future movement of either file harder. The public methods are exercised by `AggregatorTests` and by monitor/menu code, so a careless move could affect those callers.
+```text
+HTTPClient.swift
+  -> HTTPAuth.swift             HTTPClient.swift:82 or HTTPClient.swift:118
+  -> ProviderProbe+Icinga.swift HTTPAuth.swift:15 or HTTPAuth.swift:24
+  -> HTTPClient.swift          ProviderProbe+Icinga.swift:82
+```
 
-Minimal resolution: `EXTRACT` the model-aware methods into a small `StatusAggregation` helper or dedicated model aggregation file. Keep `Aggregator.fromSeverities` in `Severity.swift` and keep the public API as a forwarding layer if source compatibility is required. Blast radius: `StatusCore` aggregation code, `AggregatorTests`, and any external caller of `Aggregator.barSeverity` or `Aggregator.severity`; no UI ownership change is needed.
+All files in this diagram are under `Sources/StatusCore/`. The edges are:
+
+| Edge | Evidence |
+|---|---|
+| Live transport calls the authentication helper | `Sources/StatusCore/HTTPClient.swift:82` |
+| The transport delegate calls the TLS policy helper | `Sources/StatusCore/HTTPClient.swift:118` |
+| Both helpers call `ProviderProbe.isIcingaAPI` | `Sources/StatusCore/HTTPAuth.swift:15`, `Sources/StatusCore/HTTPAuth.swift:24` |
+| The Icinga extension owns that predicate and also fetches through `HTTPClient` | `Sources/StatusCore/ProviderProbe+Icinga.swift:4`, `Sources/StatusCore/ProviderProbe+Icinga.swift:82`, `Sources/StatusCore/ProviderProbe+Icinga.swift:85` |
+
+**Why it exists:** HTTP policy reuses the probe's Icinga URL classification. The same classification selects JSON headers, TLS handling, and Icinga probing. Evidence: `Sources/StatusCore/HTTPAuth.swift:15`, `Sources/StatusCore/HTTPAuth.swift:24`, `Sources/StatusCore/ProviderProbe+Icinga.swift:15`.
+
+**Limit:** This is a file/layer cycle, not a cycle between the `HTTPClient` protocol and `ProviderProbe`. The protocol has no probe reference. Its concrete implementation shares its file. The predicate returns a Boolean without fetching. Evidence: `Sources/StatusCore/HTTPClient.swift:42`, `Sources/StatusCore/HTTPClient.swift:54`, `Sources/StatusCore/ProviderProbe+Icinga.swift:4`.
+
+**Weakest link and minimal resolution:** If changing this boundary, move the existing predicate into the existing `HTTPAuth` enum. Let both TLS policy and probing call `HTTPAuth.isIcingaAPI`. Move the body unchanged. This removes HTTP policy's reference to the probe without adding a module or protocol. Evidence: `Sources/StatusCore/HTTPAuth.swift:3`, `Sources/StatusCore/HTTPAuth.swift:15`, `Sources/StatusCore/HTTPAuth.swift:24`, `Sources/StatusCore/ProviderProbe+Icinga.swift:4`, `Sources/StatusCore/ProviderProbe+Icinga.swift:15`, `Sources/StatusCore/ProviderProbe+Icinga.swift:72`.
+
+**Blast radius:** Two existing source files, about 10–15 existing lines affected by movement and caller changes. Risk: MEDIUM because this predicate also controls TLS handling. Preserve all path, host, and port conditions. Do not broaden the accepted URLs to simplify the dependency. Evidence: `Sources/StatusCore/ProviderProbe+Icinga.swift:4`, `Sources/StatusCore/HTTPAuth.swift:24`, `Sources/StatusCore/HTTPClient.swift:116`.
+
+**Future validation:** Reuse the authentication, TLS-policy, and Icinga routing tests. These tests were read but not run here. Evidence: `Tests/StatusCoreTests/HTTPAuthTests.swift:5`, `Tests/StatusCoreTests/HTTPAuthTests.swift:23`, `Tests/StatusCoreTests/IcingaProbeTests.swift:26`, `Tests/StatusCoreTests/IcingaProbeTests.swift:36`.
+
+### CIRC-002 — Six parsers depend on the probe that selects them
+
+**Classification:** MEDIUM / STRUCTURAL. **Recommendation:** REVIEW. **Confidence:** CERTAIN for the source references. **Verified:** false.
+
+Each row is a complete cycle between logical types. The forward reference selects or invokes a parser. The return reference calls `ProviderProbe.normalizedBase`.
+
+| Cycle | Probe-to-parser reference | Parser-to-probe reference |
+|---|---|---|
+| `ProviderProbe -> SlackParser -> ProviderProbe` | `Sources/StatusCore/ProviderProbe+JSONLandings.swift:45` | `Sources/StatusCore/SlackParser.swift:21` |
+| `ProviderProbe -> HerokuParser -> ProviderProbe` | `Sources/StatusCore/ProviderProbe+JSONLandings.swift:62` | `Sources/StatusCore/HerokuParser.swift:45` |
+| `ProviderProbe -> GoogleParser -> ProviderProbe` | `Sources/StatusCore/ProviderProbe+JSONLandings.swift:81` | `Sources/StatusCore/GoogleParser.swift:14` |
+| `ProviderProbe -> AppleParser -> ProviderProbe` | `Sources/StatusCore/ProviderProbe+JSONLandings.swift:98` | `Sources/StatusCore/AppleParser.swift:12` |
+| `ProviderProbe -> IncidentioParser -> ProviderProbe` | `Sources/StatusCore/ProviderProbe+JSONLandings.swift:140` | `Sources/StatusCore/IncidentioParser.swift:13` |
+| `ProviderProbe -> OktaParser -> ProviderProbe` | `Sources/StatusCore/ProviderProbe+Okta.swift:40` | `Sources/StatusCore/OktaParser.swift:16` |
+
+The extension declarations bind those forward references to `ProviderProbe`. The common return helper lives in its base file. This produces one connected group of seven mutually reachable types, with six direct two-type cycles. Evidence: `Sources/StatusCore/ProviderProbe+JSONLandings.swift:3`, `Sources/StatusCore/ProviderProbe+Okta.swift:3`, `Sources/StatusCore/ProviderProbe.swift:49`, and the twelve references above.
+
+**Why it exists:** Parsers reuse URL normalization that belongs to the orchestration type. The helper adds a missing scheme, removes query and fragment, and removes trailing path slashes. It does not invoke a parser. Evidence: `Sources/StatusCore/ProviderProbe.swift:49`, `Sources/StatusCore/ProviderProbe.swift:51`, `Sources/StatusCore/ProviderProbe.swift:54`, `Sources/StatusCore/ProviderProbe.swift:57`.
+
+**Impact:** A parser extracted into an independent target would retain a reference to the orchestration type for this small helper. The present package keeps both in one target, so this does not establish a build failure. Evidence: `Sources/StatusCore/SlackParser.swift:21`, `Sources/StatusCore/OktaParser.swift:16`, `Package.swift:8`.
+
+**Weakest link and minimal resolution:** If independent parser reuse is needed, move the unchanged helper body to an internal function in the existing URL-helper file. Change the six parser calls to use that function. Retain the public `ProviderProbe.normalizedBase` entry point as a forwarding method. This preserves existing callers without adding a new target or utility framework. Evidence: `Sources/StatusCore/URLAuth.swift:1`, `Sources/StatusCore/URLAuth.swift:3`, `Sources/StatusCore/ProviderProbe.swift:49`, `Tests/StatusCoreTests/AwsProbeTests.swift:26`, and the six parser references above.
+
+Do not merely delete the parser calls because the probe also normalizes URLs. The parsers expose public entry points, and tests call them directly. Evidence: `Sources/StatusCore/ProviderProbe+JSONLandings.swift:203`, `Sources/StatusCore/SlackParser.swift:4`, `Tests/StatusCoreTests/SlackParserTests.swift:11`, `Tests/StatusCoreTests/OktaParserTests.swift:14`.
+
+Do not substitute `persistedPageURL`. That function preserves query and trailing slash, unlike `normalizedBase`. Evidence: `Sources/StatusCore/ProviderProbe.swift:54`, `Sources/StatusCore/ProviderProbe.swift:57`, `Sources/StatusCore/ProviderProbe.swift:62`, `Tests/StatusCoreTests/RssPersistTests.swift:19`.
+
+**Blast radius:** Eight existing source files: six parsers, `ProviderProbe.swift`, and `URLAuth.swift`. About 20 existing lines move or change. Risk: LOW to MEDIUM if URL behavior and the public entry point stay unchanged. Evidence: the six parser references above, `Sources/StatusCore/ProviderProbe.swift:49`, `Sources/StatusCore/URLAuth.swift:3`.
+
+**Future validation:** Reuse parser and probe tests, including direct parser URL assertions. Add one focused normalization check if the helper moves. Cover scheme, query, fragment, and trailing slash behavior. The tests were not run here. Evidence: `Tests/StatusCoreTests/SlackParserTests.swift:14`, `Tests/StatusCoreTests/OktaParserTests.swift:17`, `Tests/StatusCoreTests/SaaSPlatformProbeTests.swift:28`, `Tests/StatusCoreTests/OktaProbeTests.swift:14`, `Sources/StatusCore/ProviderProbe.swift:49`.
 
 ## Low / Debatable Findings
 
-### circular-002 - application/menu callback loop is intentional and weak-backed
+### CIRC-003 — Model/tree file cycle comes from grouping different types
 
-Cycle traced as:
+**Classification:** LOW / COSMETIC file grouping, not a barrel artifact. **Recommendation:** KEEP. **Verified:** false.
 
-`AppDelegate.statusMenu` (`Sources/greendot/AppDelegate.swift:5`, `42-45`) -> `StatusMenuController.builder` (`Sources/greendot/StatusMenuController.swift:7-10`, `33`) -> `MenuBuilder.handlers` and retained `TargetAction` menu items (`Sources/greendot/MenuBuilder.swift:34-39`, `61-74`, `206-223`) -> application handlers (`Sources/greendot/AppDelegate.swift:142-160`) -> `AppDelegate`.
+File cycle: `Models.swift -> ComponentTree.swift -> Models.swift`. `WatchedPage` calls tree aggregation, while tree functions accept `ComponentStatus`. Evidence: `Sources/StatusCore/Models.swift:132`, `Sources/StatusCore/Models.swift:148`, `Sources/StatusCore/ComponentTree.swift:25`, `Sources/StatusCore/Models.swift:21`.
 
-The related tracking loop is:
+The type chain is `WatchedPage -> ComponentTree -> ComponentStatus -> Severity`. `ComponentStatus` does not call `WatchedPage` or `ComponentTree`. Thus the file cycle does not establish mutual type ownership. Evidence: `Sources/StatusCore/Models.swift:100`, `Sources/StatusCore/Models.swift:132`, `Sources/StatusCore/ComponentTree.swift:25`, `Sources/StatusCore/Models.swift:21`, `Sources/StatusCore/Models.swift:24`.
 
-`StatusMenuController.clickOpener` (`Sources/greendot/StatusMenuController.swift:9`, `39-40`) -> `MenuClickOpener.onTrackingEnded` (`Sources/greendot/MenuClickOpener.swift:7`, `40-47`) -> `StatusMenuController.scheduleDeferredMenuWork` (`Sources/greendot/StatusMenuController.swift:119-122`) -> `StatusMenuController`.
+**Weakest link:** File grouping. Keep the existing arrangement. If an actual module split requires it, move the `WatchedPage` declaration and Codable extension together. No new interface is needed. Evidence: `Sources/StatusCore/Models.swift:100`, `Sources/StatusCore/Models.swift:163`.
 
-The first path is the normal menu event path. The application handlers capture `self` weakly, and the tracking callback also captures the controller weakly. `MenuClickOpener` removes its event monitor in `deinit` (`Sources/greendot/MenuClickOpener.swift:13-15`, `50-54`). Therefore the paths are semantic callback loops but not strong retain cycles in the current implementation. Changing the handlers to strong captures would turn this into a runtime leak risk.
+**Blast radius:** Recommended change: zero files and zero LOC. Optional split: two files, with 89 physical lines moved. Risk: LOW for a pure move. Preserve enabled-component behavior. Evidence: `Sources/StatusCore/Models.swift:100`, `Sources/StatusCore/Models.swift:188`, `Tests/StatusCoreTests/ComponentTreeSeverityTests.swift:43`.
 
-Minimal resolution: `KEEP` the callback design and retain the weak captures. Blast radius: menu refresh, menu actions, and deferred menu presentation only. If the handler container is changed later, add a lifecycle test before changing ownership.
+### CIRC-004 — Persistence file cycle comes from the location of AppConfig
 
-### circular-003 - editor, panel, and component picker callback loop
+**Classification:** LOW / COSMETIC file grouping, not a barrel artifact. **Recommendation:** KEEP. **Verified:** false.
 
-Cycle traced as:
+File cycle: `PageStore.swift -> StateFile.swift -> PageStore.swift`. The store decodes and creates `StateFile`. `StateFile` reads constants from `AppConfig`, which shares the store's file. Evidence: `Sources/StatusCore/PageStore.swift:134`, `Sources/StatusCore/PageStore.swift:200`, `Sources/StatusCore/StateFile.swift:20`, `Sources/StatusCore/StateFile.swift:31`, `Sources/StatusCore/PageStore.swift:3`.
 
-`StatusPageEditor.panel` (`Sources/greendot/StatusPageEditor.swift:5-10`, `41-57`) -> `PagePanelController.onSave` (`Sources/greendot/PagePanelController.swift:9-20`, `22-37`) -> the `onSave` closure (`Sources/greendot/StatusPageEditor.swift:41-45`) -> `StatusPageEditor.save` (`Sources/greendot/StatusPageEditor.swift:94-107`) -> `StatusPageEditor`.
+`StateFile.swift` also declares `AppConfig`'s Codable conformance. The `AppConfig` declaration itself does not depend on `PageStore` or `StateFile`. This is file organization, not a recursive load/save call. Evidence: `Sources/StatusCore/StateFile.swift:38`, `Sources/StatusCore/PageStore.swift:3`, `Sources/StatusCore/PageStore.swift:28`.
 
-The component path is:
+**Weakest link:** File grouping. Keep it unless persistence becomes a separate module. For that concrete split, move the `AppConfig` declaration beside its existing Codable extension. This removes the file-level return edge without duplicating version constants. Evidence: `Sources/StatusCore/PageStore.swift:3`, `Sources/StatusCore/StateFile.swift:20`, `Sources/StatusCore/StateFile.swift:38`.
 
-`StatusPageEditor` (`Sources/greendot/StatusPageEditor.swift:47-48`) -> `PagePanelController.picker` (`Sources/greendot/PagePanelController.swift:20`, `31-36`) -> `ComponentPicker` callbacks (`Sources/greendot/ComponentPicker.swift:4-20`, `98-124`) -> `StatusPageEditor.toggleComponentHandler` or `setAllComponentsHandler` (`Sources/greendot/StatusPageEditor.swift:73-91`) -> `StatusPageEditor`.
-
-These are intended UI callbacks. The editor callbacks use `[weak self]`, the save task uses `[weak self]` (`Sources/greendot/PagePanelController.swift:161-175`), and close invalidates pending operations (`Sources/greendot/PagePanelController.swift:64-68`, `192-196`). `PanelReleaseTests` also checks that the controller and window deallocate (`Tests/greendotTests/PanelLifecycleTests.swift:269-290`). The remaining concern is maintenance risk if a new callback captures the editor or panel strongly.
-
-Minimal resolution: `KEEP` the current weak callback boundary and generation guard. Blast radius: editor add/edit/remove and component toggle UI. Do not split the panel or monitor without a measured lifecycle problem.
-
-### circular-004 - `PagePanelController` and `NSWindow` delegate edge is debatable
-
-Cycle traced as:
-
-`PagePanelController` retains its `window` (`Sources/greendot/PagePanelController.swift:9-10`, `42-53`) -> `NSWindow.delegate = self` (`Sources/greendot/PagePanelController.swift:51-53`) -> `PagePanelController`.
-
-This is an AppKit delegate relationship, not a confirmed strong ownership cycle: AppKit delegate references are framework-managed and the controller explicitly clears the delegate before ordering the window out (`Sources/greendot/PagePanelController.swift:64-68`). The release test passes for both controller and window. It is recorded because delegate ownership is an easy regression point when replacing the window type or changing close behavior.
-
-Minimal resolution: `KEEP` the current delegate clearing and release test. Blast radius: panel close and replacement only. Review again if a custom window class or retained delegate wrapper is introduced.
+**Blast radius:** Recommended change: zero files and zero LOC. Optional move: two existing files and 26 physical lines moved. Risk: LOW for a pure move. Preserve decoding defaults, validation, and save rollback. Evidence: `Sources/StatusCore/PageStore.swift:3`, `Sources/StatusCore/PageStore.swift:28`, `Sources/StatusCore/StateFile.swift:44`, `Sources/StatusCore/PageStore.swift:264`, `Sources/StatusCore/PageStore.swift:204`.
 
 ## Recommendations
 
-- Apply only the `circular-001` extraction if reducing structural coupling is required. Move the model-aware `Aggregator` extension as one unit; do not split `StatusCore` targets or introduce a dependency from `StatusCore` to the executable.
-- Preserve weak captures in `AppDelegate`, `StatusMenuController`, `StatusPageEditor`, and asynchronous panel tasks. Treat a new strong capture in these paths as a release-blocking review item.
-- Preserve `PagePanelController.close()` delegate clearing and the existing deallocation test when changing panel ownership.
-- Keep `TestSupport` as a one-way dependency on `StatusCore`. Do not move production types into `TestSupport` to solve a test-only callback.
+1. Keep the current target graph. No new package or dependency is needed to address these observations. Evidence: `Package.swift:8`, `Package.swift:11`, `Package.swift:16`, `Package.swift:20`, `Package.swift:24`.
+2. Treat CIRC-001 as a small ownership change during relevant Icinga maintenance. Reuse one unchanged predicate and retain the existing security decisions. Evidence: `Sources/StatusCore/ProviderProbe+Icinga.swift:4`, `Sources/StatusCore/HTTPAuth.swift:15`, `Sources/StatusCore/HTTPAuth.swift:24`.
+3. Defer CIRC-002 until parser reuse or a target split supplies a concrete need. Then extract only the shared URL function. Evidence: `Package.swift:8`, `Sources/StatusCore/ProviderProbe.swift:49`, `Sources/StatusCore/SlackParser.swift:21`.
+4. Keep CIRC-003 and CIRC-004. File splitting alone does not remove a runtime failure demonstrated by this assessment. Evidence: `Sources/StatusCore/Models.swift:132`, `Sources/StatusCore/ComponentTree.swift:25`, `Sources/StatusCore/StateFile.swift:20`, `Sources/StatusCore/PageStore.swift:3`.
 
 ## Out of Scope / Flagged for Review
 
-- `TestSupport -> StatusCore` is a one-way target edge. `ControllableHTTPClient` conforms to `HTTPClient` and stores continuations, but no production target imports `TestSupport`; there is no test-support backedge. Tests use `failAll()` teardown for pending requests.
-- `StatusDot`'s static image cache and `ProviderProbe`'s static counters/regular expression are shared state, but neither stores a callback or owner that points back to its caller. They are coupling points, not cycles.
-- `PageStore.defaultDirectory` and `AppDelegate` read `GREENDOT_CONFIG_DIR` and other `GREENDOT_*` environment keys. These are input-only string/config edges. The source does not write those keys or call back into the environment, so no config cycle was found.
-- Distributed notification names in `AppDelegate.installUITestHooks` (`Sources/greendot/AppDelegate.swift:192-232`) lead to `UITestDriver` actions, but the notification sender is external to this package and the package does not post the same names. This is an external UI-test edge, not an in-process cycle.
-- `NSMenu.delegate`, `NSButton.target`, and `NSWindow.delegate` are framework ownership edges. The menu and panel paths are covered above only where source-level callback evidence exists; no package import cycle was invented from these AppKit relationships.
-
-## Independent Verification Disposition
-
-The mandatory gate selected 2 of 4 records. Independent verifiers confirmed 2; those records now have `verified: true`. 2 lower-confidence records remain provisional.
-
-Verification evidence: [verification-batch-2.md](verification-batch-2.md).
-
-Final machine-readable severity counts: HIGH 0, MEDIUM 1, LOW 3. The original prose above records the specialist's pre-verification assessment; this disposition and the JSON block below are authoritative after verification.
+- **Same-type extensions:** Do not count the `Monitor+Polling`/`Monitor+PollConfirmation` method references as a module cycle. Both extend `Monitor`. Evidence: `Sources/StatusCore/Monitor+Polling.swift:3`, `Sources/StatusCore/Monitor+Polling.swift:14`, `Sources/StatusCore/Monitor+PollConfirmation.swift:3`, `Sources/StatusCore/Monitor+PollConfirmation.swift:18`.
+- **AppDelegate grouping:** `AppDelegate.swift` uses `ConfigMenuError`, while that error's file also extends `AppDelegate`. The error type has no delegate dependency. Keep this arrangement. Evidence: `Sources/greendot/AppDelegate.swift:174`, `Sources/greendot/AppDelegate+Config.swift:5`, `Sources/greendot/AppDelegate+Config.swift:13`.
+- **Callbacks:** Menu handlers and editor callbacks are not concrete imports back to `AppDelegate`. Do not infer a dependency cycle from callbacks alone. Evidence: `Sources/greendot/MenuBuilder.swift:20`, `Sources/greendot/AppDelegate.swift:139`, `Sources/greendot/AppDelegate.swift:182`, `Sources/greendot/StatusPageEditor.swift:8`.
+- **Barrels:** The import scan found no `@_exported import` declarations. The package graph uses explicit target dependencies. The LOW observations concern co-located types, not re-export files. Evidence: `Package.swift:11`, `Package.swift:16`, `Package.swift:20`, `Package.swift:24`, `Sources/StatusCore/Models.swift:21`, `Sources/StatusCore/PageStore.swift:3`.
+- **Runtime checks:** Native builds, tests, object-retention analysis, and dynamic call-graph verification remain outside this static assessment. No compile, initialization, or memory failure is asserted. The repository requires native Swift/AppKit tooling. Evidence: `Makefile:10`, `Makefile:13`, `Sources/greendot/AppDelegate.swift:1`, `README.md:30`.
+- **Security policy:** This report assesses dependency direction only. It does not approve or redesign the TLS exception. Any later predicate move must preserve its boundary conditions and receive focused validation. Evidence: `Sources/StatusCore/ProviderProbe+Icinga.swift:4`, `Sources/StatusCore/HTTPAuth.swift:24`, `Sources/StatusCore/HTTPClient.swift:118`, `Tests/StatusCoreTests/HTTPAuthTests.swift:23`.
 
 ## Machine-Readable Findings
 
+The entries describe analysis findings. All `verified` values remain `false`. `REVIEW` requires a scope decision before implementation. `KEEP` requests no change.
+
 ```json
-{"findings":[{"id":"circular-001","file":"Sources/StatusCore/Models.swift","line":"88-96, 123-130","severity":"MEDIUM","confidence":"LIKELY","recommendation":"EXTRACT","detail":"File-level SCC: Severity.swift Aggregator -> Models.swift model-aware Aggregator extension -> WatchedPage.displaySeverity -> Severity.swift Aggregator. Structural only; no recursive runtime call.","verified":false},{"id":"circular-002","file":"Sources/greendot/AppDelegate.swift","line":"5, 42-45, 142-160","severity":"LOW","confidence":"CERTAIN","recommendation":"KEEP","detail":"Intentional menu callback loops have no strong self-retaining back-edge in the current code.","verified":true},{"id":"circular-003","file":"Sources/greendot/StatusPageEditor.swift","line":"41-57, 73-107","severity":"LOW","confidence":"CERTAIN","recommendation":"KEEP","detail":"The UI callback graph is cyclic as event flow but weak-backed and generation-gated.","verified":true},{"id":"circular-004","file":"Sources/greendot/PagePanelController.swift","line":"9-10, 42-53, 64-68","severity":"LOW","confidence":"UNCERTAIN","recommendation":"KEEP","detail":"Debatable AppKit edge: PagePanelController -> NSWindow -> delegate PagePanelController. Delegate ownership is framework-managed and cleared on close; release coverage passes.","verified":false}]}
+{
+  "findings": [
+    {
+      "id": "circular-deps-001",
+      "file": "Sources/StatusCore/HTTPAuth.swift",
+      "line": 15,
+      "severity": "MEDIUM",
+      "confidence": "CERTAIN",
+      "recommendation": "REVIEW",
+      "cycle_kind": "STRUCTURAL",
+      "detail": "A file/layer cycle connects Sources/StatusCore/HTTPClient.swift:82 and Sources/StatusCore/HTTPClient.swift:118 to Sources/StatusCore/HTTPAuth.swift:15 and Sources/StatusCore/HTTPAuth.swift:24, then to Sources/StatusCore/ProviderProbe+Icinga.swift:4 and back through its HTTPClient parameter at Sources/StatusCore/ProviderProbe+Icinga.swift:82. The protocol itself has no return dependency. During relevant maintenance, move the unchanged predicate into HTTPAuth. This affects two source files and requires preservation of all TLS and URL conditions.",
+      "verified": false
+    },
+    {
+      "id": "circular-deps-002",
+      "file": "Sources/StatusCore/ProviderProbe.swift",
+      "line": 49,
+      "severity": "MEDIUM",
+      "confidence": "CERTAIN",
+      "recommendation": "REVIEW",
+      "cycle_kind": "STRUCTURAL",
+      "detail": "ProviderProbe selects six parsers at Sources/StatusCore/ProviderProbe+JSONLandings.swift:45, Sources/StatusCore/ProviderProbe+JSONLandings.swift:62, Sources/StatusCore/ProviderProbe+JSONLandings.swift:81, Sources/StatusCore/ProviderProbe+JSONLandings.swift:98, Sources/StatusCore/ProviderProbe+JSONLandings.swift:140, and Sources/StatusCore/ProviderProbe+Okta.swift:40. Return references call its URL helper at Sources/StatusCore/SlackParser.swift:21, Sources/StatusCore/HerokuParser.swift:45, Sources/StatusCore/GoogleParser.swift:14, Sources/StatusCore/AppleParser.swift:12, Sources/StatusCore/IncidentioParser.swift:13, and Sources/StatusCore/OktaParser.swift:16. If independent parser reuse is required, extract the unchanged helper into the existing URLAuth.swift file and preserve the public probe method as a forwarder. Eight source files would change.",
+      "verified": false
+    },
+    {
+      "id": "circular-deps-003",
+      "file": "Sources/StatusCore/Models.swift",
+      "line": 132,
+      "severity": "LOW",
+      "confidence": "CERTAIN",
+      "recommendation": "KEEP",
+      "cycle_kind": "COSMETIC",
+      "detail": "Sources/StatusCore/Models.swift:132 calls ComponentTree, whose parameter at Sources/StatusCore/ComponentTree.swift:25 uses ComponentStatus declared at Sources/StatusCore/Models.swift:21. This is a file-grouping cycle. The distinct type chain does not return from ComponentStatus to WatchedPage. Keep the arrangement unless an actual module split requires moving WatchedPage.",
+      "verified": false
+    },
+    {
+      "id": "circular-deps-004",
+      "file": "Sources/StatusCore/StateFile.swift",
+      "line": 20,
+      "severity": "LOW",
+      "confidence": "CERTAIN",
+      "recommendation": "KEEP",
+      "cycle_kind": "COSMETIC",
+      "detail": "Sources/StatusCore/PageStore.swift:134 decodes StateFile, which refers at Sources/StatusCore/StateFile.swift:20 to AppConfig declared in Sources/StatusCore/PageStore.swift:3. Sources/StatusCore/StateFile.swift:38 also extends AppConfig. The model has no store dependency. Keep this file grouping unless a concrete persistence split requires moving the AppConfig declaration beside its conformance.",
+      "verified": false
+    }
+  ]
+}
 ```

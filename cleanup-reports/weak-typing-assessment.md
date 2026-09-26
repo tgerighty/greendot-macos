@@ -1,370 +1,116 @@
-# Weak Typing Assessment — greendot
+Ponytail: full intensity. Keep `Any` at real trust boundaries. Prefer native Swift types and the smallest change that preserves validation, security, and accessibility.
 
-Scope: commit 310032b in Sources/StatusCore, Sources/greendot, Tests, and
-UITests. The generated Xcode UI-test project, .build, greendot.app, and other
-cleanup reports were excluded. This was a read-only review. The requested
-checks were run on 2026-08-25.
+# Weak Typing Assessment
 
 ## Executive Summary
 
-There are 22 findings: 0 HIGH, 6 MEDIUM, and 16 LOW. Confidence is
-16 CERTAIN, 5 LIKELY, and 1 UNCERTAIN. Recommendation counts are
-6 STRENGTHEN, 4 ISOLATE, 3 REVIEW, and 9 KEEP. All machine findings remain
-verified false.
-
-The top three items are:
-
-1. Add a clear MainActor boundary to AppDelegate, PagePanelController, and the
-   AppKit helper types. The requested concurrency build passes today, but a
-   supplemental Swift 6 language-mode build reports source-owned actor
-   diagnostics and sendability risks.
-2. Isolate StatusDot.cache. It is mutable shared UI state protected by a lock,
-   but Swift 6 reports it as an unsafe global variable.
-3. Remove success defaults from PagePanelController component callbacks. A
-   missing callback can report success without changing the page.
-
-The three direct low-risk type cleanups are the groupID force unwrap, the
-NSOrderedSet bridge, and the test selector dispatch. The JSON parser dictionaries,
-AppKit tokens, and notification payloads are real runtime boundaries. They map
-to typed domain values at the boundary and should not be replaced by guessed
-models.
-
-Evidence:
-
-- swift build -Xswiftc -warn-concurrency: passed, with no concurrency
-  diagnostics.
-- swift test: passed 150 tests, with 1 skipped and 0 failures.
-- swiftlint lint --strict: failed with 11 existing violations. They are
-  function/type length, large tuple, line length, identifier, and for-where
-  rules; none adds a weak-typing finding here.
-- A supplemental swift build -Xswiftc -swift-version -Xswiftc 6 probe failed
-  because of source-owned AppKit isolation and sendability diagnostics. The
-  SDK-origin text in those diagnostics is recorded below as forward-looking
-  evidence, not as a failure of the requested baseline command.
-- No as!, try!, @preconcurrency, unsafe, or unowned use was found. Production
-  code has no implicitly unwrapped properties. UI-test lifecycle properties
-  and literal test URLs are recorded as deliberate test patterns.
+- Total actionable issues: 8. Severity: HIGH=2, MEDIUM=4, LOW=2. The two high priorities are component status values that become green when an external JSON field is missing or has the wrong type. The menu then uses component severity in place of the page's overall severity. `Sources/StatusCore/StatuspageParser.swift:47` `Sources/StatusCore/InstatusParser.swift:24` `Sources/StatusCore/Models.swift:128`
+- Next priorities are malformed Okta JSON that becomes an empty green result, numeric status coercion, and top-level incident arrays that discard records with the wrong shape. `Sources/StatusCore/OktaParser.swift:70` `Sources/StatusCore/IcingaParser.swift:107` `Sources/StatusCore/StatusioParser.swift:50` `Sources/StatusCore/AwsParser.swift:5`
+- Estimated scope: 10 production files for the 8 findings. Use local guards or narrower casts; no new dependency or provider-wide model layer is justified by these findings. The package declares only local targets. `Package.swift:5`
+- Method: source and test inspection. The host has no `swift`, `swiftc`, `swiftlint`, or `xcodebuild` command, so the inferred payload outcomes below need a macOS test run before an implementation is accepted. Existing tests cover normal provider payloads and a concurrent first-run call, but not the malformed cases in these findings. `Tests/StatusCoreTests/ParserTests.swift:5` `Tests/StatusCoreTests/MonitorFirstRunTests.swift:7`
 
 ## Critical Findings
 
-None. The requested build and the unit test suite pass. No current
-type-escape finding is a release-blocking runtime failure.
+### WT-001 — Missing Statuspage component status becomes green (HIGH; confidence HIGH)
+
+`nest` accepts a component with a `name` and substitutes `"operational"` when `status` is absent or not a string. The mapping makes that value green. For a payload with `status.indicator = "major"` and `components = [{"name":"API"}]`, the parser records a red overall result and a green component. `WatchedPage.displaySeverity` then uses the nonempty component tree, so the menu can show green. This is a source-level inference; no payload test was run here. `Sources/StatusCore/StatuspageParser.swift:6` `Sources/StatusCore/StatuspageParser.swift:41` `Sources/StatusCore/StatuspageParser.swift:47` `Sources/StatusCore/StatusMapping.swift:11` `Sources/StatusCore/Models.swift:128`
+
+**Replacement type/action:** Keep the external dictionary at entry. Require a nonempty `String` for each component status before constructing the already typed `Row.status: String`; return a parse error or a non-green unknown status on invalid input. Do not silently create an operational status. The local `Row` already supplies the internal type. `Sources/StatusCore/StatuspageParser.swift:32` `Sources/StatusCore/StatuspageParser.swift:40` `Sources/StatusCore/ParserError.swift:3`
+
+### WT-002 — Missing Instatus component status becomes green (HIGH; confidence HIGH)
+
+The parser requires a string for `page.status` but substitutes `"OPERATIONAL"` for a missing or mistyped component `status`. That branch maps to green. When a page has any component, `displaySeverity` reads the component tree. A `HASISSUES` page with a named component that has no valid status can therefore appear green. This is a source-level inference. `Sources/StatusCore/InstatusParser.swift:5` `Sources/StatusCore/InstatusParser.swift:22` `Sources/StatusCore/InstatusParser.swift:24` `Sources/StatusCore/InstatusParser.swift:27` `Sources/StatusCore/Models.swift:128`
+
+**Replacement type/action:** Validate the component status as `String` before creating `ComponentStatus`; treat invalid input as unknown/non-green or reject the payload. Preserve the existing `PageSnapshot` output type. `Sources/StatusCore/InstatusParser.swift:22` `Sources/StatusCore/InstatusParser.swift:32` `Sources/StatusCore/InstatusParser.swift:34`
 
 ## Medium Findings
 
-### typing-004 — PageStore uses an unnecessary unchecked Sendable escape
+### WT-003 — Malformed Okta incident JSON becomes an empty green tree (MEDIUM; confidence HIGH)
 
-- File: Sources/StatusCore/PageStore.swift:27
-- PageStore is a final class with immutable URL properties and no mutable
-  instance state. Its load, save, and validation operations use local values.
-  The unchecked Sendable declaration therefore hides a contract that can be
-  expressed by the type itself. Repository call sites do not use object
-  identity.
-- Proposed concrete type: make PageStore a value type, struct PageStore:
-  Sendable, or prove a final class: Sendable conformance after the Foundation
-  URL check.
-- Severity: MEDIUM. Confidence: LIKELY. Recommendation: STRENGTHEN.
+The presence of the embedded `incidents` span admits an Okta page, but `array` converts JSON parse errors or a non-array root to `[]`. The empty component tree maps to green. A malformed incident payload can therefore be reported as healthy. The test rejects an HTML page without the span but does not cover a malformed span. `Sources/StatusCore/OktaParser.swift:6` `Sources/StatusCore/OktaParser.swift:9` `Sources/StatusCore/OktaParser.swift:18` `Sources/StatusCore/OktaParser.swift:70` `Sources/StatusCore/ComponentTree.swift:24` `Tests/StatusCoreTests/OktaParserTests.swift:66`
 
-### typing-005 — StatusDot has mutable global UI state without actor isolation
+**Replacement type/action:** Make the required incident array parser throw and require `[[String: Any]]` after `JSONSerialization`; keep the optional planned-outage array optional. Do not replace external data with `any` or add a provider SDK. `Sources/StatusCore/OktaParser.swift:9` `Sources/StatusCore/OktaParser.swift:10` `Sources/StatusCore/OktaParser.swift:70`
 
-- File: Sources/greendot/StatusDot.swift:11
-- The static NSImage cache is mutable shared state. An NSLock protects the
-  accesses, but the Swift 6 probe reports a concurrency-safety error for the
-  global cache.
-- Proposed concrete type: mark StatusDot and its image/color methods
-  MainActor-isolated. All production callers are UI or main-actor toast paths.
-  Do not use nonisolated unsafe access as the first fix.
-- Severity: MEDIUM. Confidence: CERTAIN. Recommendation: ISOLATE.
+### WT-004 — Icinga numeric state loses its original shape (MEDIUM; confidence MEDIUM)
 
-### typing-006 — AppDelegate has no explicit MainActor contract
+`intValue` accepts `NSNumber` through `.intValue` before the `Double` and `String` branches. The state then controls the green/red mapping. Fractional or out-of-range JSON numbers can be narrowed without an explicit integral/range check; a value near zero can be treated as state zero. The current fixtures use integral numeric values such as `1.0`, so an integral check must retain those inputs. This is a risk inferred from the conversion path. `Sources/StatusCore/IcingaParser.swift:79` `Sources/StatusCore/IcingaParser.swift:107` `Sources/StatusCore/StatusMapping.swift:68` `Tests/StatusCoreTests/IcingaParserTests.swift:15`
 
-- File: Sources/greendot/AppDelegate.swift:4
-- AppDelegate owns NSMenu, timers, panels, alerts, and the poll state. The
-  Swift 6 probe reports a main-actor default-value error for the NSAlert
-  callback at line 12 and non-Sendable AppDelegate captures in timer Tasks at
-  lines 60 and 65.
-- Proposed concrete type: annotate AppDelegate MainActor, make presentError a
-  MainActor callback over any Error, and make timer tasks enter that actor
-  explicitly. Keep network work in Monitor and return typed results to the
-  actor.
-- Severity: MEDIUM. Confidence: CERTAIN. Recommendation: ISOLATE.
+**Replacement type/action:** Keep `Any?` only at JSON lookup. Convert to `Int?` only when a numeric value is finite, integral, and in `Int` range; preserve the existing accepted integral strings if the provider needs them. An invalid state already maps to yellow through `Int?`. `Sources/StatusCore/IcingaParser.swift:107` `Sources/StatusCore/StatusMapping.swift:68`
 
-### typing-007 — PagePanelController is an unisolated AppKit controller
+### WT-005 — Status.io numeric code loses its original shape (MEDIUM; confidence MEDIUM)
 
-- File: Sources/greendot/PagePanelController.swift:9
-- The controller creates and mutates NSWindow and NSTextField state. The
-  Swift 6 probe reports errors for the field default initialisers at lines 11
-  and 12 and further AppKit actor warnings in the initializer and actions.
-- Proposed concrete type: mark PagePanelController MainActor-isolated, including
-  its NSWindowDelegate methods and save-task completion hop.
-- Severity: MEDIUM. Confidence: CERTAIN. Recommendation: ISOLATE.
+`JSONScalar.intValue` also accepts `NSNumber.intValue` without an integral/range check. Status code 100 means green, so a malformed fractional code can be narrowed to a known code. The tests exercise integer codes only. This is a risk inferred from the conversion path. `Sources/StatusCore/StatusioParser.swift:10` `Sources/StatusCore/StatusioParser.swift:50` `Sources/StatusCore/StatusMapping.swift:100` `Tests/StatusCoreTests/StatusioParserTests.swift:11`
 
-### typing-008 — Several AppKit helper surfaces lack a global-actor boundary
+**Replacement type/action:** Make `JSONScalar.intValue` return `Int?` only for a finite, integral, in-range number. Reuse that one helper for Status.io and other current callers; keep unknown codes yellow. `Sources/StatusCore/StatusioParser.swift:50` `Sources/StatusCore/StatusioParser.swift:56` `Sources/StatusCore/StatusMapping.swift:100`
 
-- File: Sources/greendot/ComponentPicker.swift:4
-- The same pattern occurs in UITestDriver.swift:3, AppEditMenu.swift:5,
-  BuildInfo.swift:26 for AboutPanel.show, and MenuClickOpener.swift:5.
-  These types walk or mutate AppKit view, menu, event, and application state
-  from methods that are not explicitly MainActor-isolated. The Swift 6 probe
-  reports AppKit actor warnings and ComponentPicker sendability errors.
-- Proposed concrete type: mark ComponentPicker, UITestDriver, AppEditMenu,
-  AboutPanel.show, and MenuClickOpener MainActor-isolated. Keep pure hash
-  parsing in BuildInfo nonisolated if desired.
-- Severity: MEDIUM. Confidence: CERTAIN. Recommendation: ISOLATE.
+### WT-006 — Top-level incident arrays drop malformed records (MEDIUM; confidence HIGH)
 
-### typing-009 — Monitor relies on unchecked Sendable and an untyped callback
+AWS, Google, and Salesforce parse the root as `[Any]`, then use `compactMap` to discard non-object members. If all members have the wrong shape, the resulting component tree is empty and its severity is green. The providers already require an array root, so a narrower `[[String: Any]]` cast can reject this shape at entry without adding model structs. `Sources/StatusCore/AwsParser.swift:5` `Sources/StatusCore/AwsParser.swift:8` `Sources/StatusCore/GoogleParser.swift:5` `Sources/StatusCore/GoogleParser.swift:8` `Sources/StatusCore/SalesforceParser.swift:5` `Sources/StatusCore/SalesforceParser.swift:8` `Sources/StatusCore/ComponentTree.swift:24`
 
-- File: Sources/StatusCore/Monitor.swift:3
-- Monitor has mutable configuration and poll revisions. It protects them with
-  stateLock and transitionLock, so the current implementation has a deliberate
-  synchronization design. However, @unchecked Sendable also covers the
-  unannotated onLaunchAtLoginEnable closure at line 13. The compiler cannot
-  check that callback's execution context or sendability.
-- Proposed concrete type: make Monitor an actor or MainActor-isolated type, or
-  retain the locks and change the callback to an explicit MainActor Sendable
-  callback invoked through an actor hop. Add tests for the lock invariant
-  before choosing the smaller change.
-- Severity: MEDIUM. Confidence: LIKELY. Recommendation: REVIEW.
+**Replacement type/action:** Require `[[String: Any]]` for the root and reject a non-object member. Keep per-record field validation; AWS already skips a record without its required ARN, which is a separate provider decision. `Sources/StatusCore/AwsParser.swift:23` `Sources/StatusCore/AwsParser.swift:24`
 
 ## Low / Debatable Findings
 
-### typing-001 — StatuspageParser force-unwraps a filtered optional
+### WT-007 — An unchecked `Sendable` monitor has a mutable callback (LOW; confidence MEDIUM)
 
-- File: Sources/StatusCore/StatuspageParser.swift:65
-- Dictionary grouping uses groupID! after filtering groupID != nil. The filter
-  currently guarantees the value, but a later edit can make the filter and
-  unwrap diverge.
-- Proposed concrete type: compactMap rows to (groupID: String, row: Row), then
-  group by the non-optional String key.
-- Severity: LOW. Confidence: CERTAIN. Recommendation: STRENGTHEN.
+`Monitor` declares `@unchecked Sendable`, while `onLaunchAtLoginEnable` is a public mutable closure without `@Sendable` or lock protection. The first-run method reads and invokes it after it releases the transition lock. The app assigns the callback during launch before its first call, so a race needs a concurrent reassignment and has not been shown in the app flow. A test does call the first-run method from global queues. `Sources/StatusCore/Monitor.swift:3` `Sources/StatusCore/Monitor.swift:29` `Sources/StatusCore/Monitor+Mutations.swift:27` `Sources/StatusCore/Monitor+Mutations.swift:39` `Sources/greendot/AppDelegate.swift:43` `Tests/StatusCoreTests/MonitorFirstRunTests.swift:32`
 
-### typing-002 — Statuspal host uniqueness uses an Objective-C bridge
+**Replacement type/action:** If the callback must remain mutable after initialization, store a `(@Sendable () -> Void)?` behind the existing state lock and read a snapshot before invocation. If it is always set once, pass an immutable callback at construction instead. Check actor needs at the app call site before changing the public API. `Sources/StatusCore/Monitor.swift:14` `Sources/StatusCore/Monitor.swift:29` `Sources/greendot/AppDelegate.swift:43`
 
-- File: Sources/StatusCore/ProviderProbe.swift:192
-- Array(NSOrderedSet(...)) is [Any]. The as? [String] ?? subdomains fallback
-  silently keeps duplicates if the bridge fails.
-- Proposed concrete type: preserve order with a Set<String> of seen names and a
-  [String] result. This removes the untyped bridge and the weak fallback.
-- Severity: LOW. Confidence: CERTAIN. Recommendation: STRENGTHEN.
+### WT-008 — A Foundation collection bridge adds a needless cast (LOW; confidence HIGH)
 
-### typing-003 — A menu test uses string selector dispatch
+The Statuspal probe makes a `[String]`, bridges it through `NSOrderedSet`, casts it back to `[String]`, and falls back to the original array if the cast fails. The current control flow appends at most one subdomain before this line, so deduplication has no work to do. `Sources/StatusCore/ProviderProbe.swift:182` `Sources/StatusCore/ProviderProbe.swift:186` `Sources/StatusCore/ProviderProbe.swift:195` `Sources/StatusCore/ProviderProbe.swift:202`
 
-- File: Tests/greendotTests/MenuBuilderTests.swift:187
-- The helper casts representedObject to AnyObject, calls
-  NSSelectorFromString for invoke, and discards the result. Production stores a
-  TargetAction and exposes invoke.
-- Proposed concrete type: cast representedObject as? TargetAction and call
-  TargetAction.invoke() directly. This is test-only.
-- Severity: LOW. Confidence: CERTAIN. Recommendation: STRENGTHEN.
-
-### typing-010 — Component callback optionals default to success
-
-- File: Sources/greendot/PagePanelController.swift:25
-- When a page is present, nil onToggleComponent or onSetAll is replaced by a
-  closure that returns true. A directly constructed editing panel can therefore
-  display a successful toggle without a mutation callback.
-- Proposed concrete type: use an editing initializer that requires both
-  callbacks, or return false and disable the picker when a callback is absent.
-  Keep onRemove optional for add mode.
-- Severity: LOW. Confidence: LIKELY. Recommendation: STRENGTHEN.
-
-### typing-011 — Poll outcome uses an optional Error in a tuple
-
-- File: Sources/greendot/AppDelegate.swift:257
-- The tuple can represent both toasts and an error, or neither, even though the
-  code intends a mutually exclusive success or failure state.
-- Proposed concrete type: Result<[Toast], any Error>, or a PollOutcome enum with
-  success and failure cases. This also makes the generic error boundary
-  explicit.
-- Severity: LOW. Confidence: LIKELY. Recommendation: STRENGTHEN.
-
-### typing-012 — Automatic seed failure is discarded
-
-- File: Sources/greendot/AppDelegate.swift:121
-- try? await monitor.add hides a probe or persistence error while adding the
-  first OpenAI page. The app can finish launch with no page and no explanation.
-- Proposed concrete type: handle a typed seed result with do/catch, then log or
-  present the error according to the first-run product policy. Do not silently
-  convert all failures to success.
-- Severity: LOW. Confidence: LIKELY. Recommendation: REVIEW.
-
-### typing-013 — HTTPClient exposes a weak tuple response contract
-
-- File: Sources/StatusCore/HTTPClient.swift:4
-- Every client returns (Data, Int). The positional status value is easy to swap
-  and does not state whether it is an HTTP status, a transport result, or a
-  sentinel.
-- Proposed concrete type: introduce a Sendable HTTPResponse with named data and
-  statusCode properties, then update the production and test clients together.
-  This is a larger API change and is not required by current tests.
-- Severity: LOW. Confidence: UNCERTAIN. Recommendation: REVIEW.
-
-### typing-014 — Provider JSON parsers use Any at a real external boundary
-
-- File: Sources/StatusCore/StatuspageParser.swift:92
-- StatuspageParser, InstatusParser, and StatuspalParser decode foreign JSON
-  with [String: Any] and narrow fields with as?. Statuspal accepts service IDs
-  as either Int or String. The parsers fail closed and immediately return
-  PageSnapshot, ComponentStatus, and Incident values.
-- Proposed concrete type: none without an authoritative provider schema.
-  Replacing these dictionaries with guessed Codable DTOs would lose valid
-  provider variants. Keep the untyped input local to each parser.
-- Severity: LOW. Confidence: CERTAIN. Recommendation: KEEP.
-
-### typing-015 — AppKit dynamic objects and selectors are framework contracts
-
-- File: Sources/greendot/MenuClickOpener.swift:10
-- NSEvent monitor tokens are returned as Any and removed through an Any API.
-  NSMenuItem.representedObject is Any? and is cast to TargetAction at
-  MenuCommands.swift:41 and MenuClickOpener.swift:59. Notification.object is
-  Any? at AppDelegate.swift:230. UITestDriver uses as? while walking NSView
-  subviews. AppEditMenu uses undo: and redo: selectors for the first
-  responder. These are AppKit or distributed-test boundaries, not internal
-  domain values.
-- Proposed concrete type: keep the AppKit token and representedObject casts;
-  keep typed TargetAction after the boundary, fail closed on a wrong object,
-  and keep the first-responder selectors.
-- Severity: LOW. Confidence: CERTAIN. Recommendation: KEEP.
-
-### typing-016 — Cocoa and bundle bridges cannot be strengthened locally
-
-- File: Sources/StatusCore/HTTPClient.swift:16
-- URLSession returns URLResponse, so the HTTPURLResponse cast is required to
-  read statusCode. PageStore uses as NSError to inspect Cocoa error domain and
-  file codes. BuildInfo reads Bundle.infoDictionary as [String: Any] and
-  AboutPanel passes [NSApplication.AboutPanelOptionKey: Any] to AppKit.
-- Proposed concrete type: keep HTTPURLResponse, NSError, Bundle's dictionary,
-  and AppKit's Any option dictionary at those API edges. Map to domain types
-  after the bridge.
-- Severity: LOW. Confidence: CERTAIN. Recommendation: KEEP.
-
-### typing-017 — Static regex compilation uses try? as fail-closed policy
-
-- File: Sources/StatusCore/ProviderProbe.swift:224
-- The regular expression is a fixed source literal. try? makes a compile
-  failure disable Statuspal subdomain extraction rather than crash the app, and
-  the optional is checked before use.
-- Proposed concrete type: keep the optional boundary and add a focused parser
-  test for the literal. A forced compile would trade a recoverable miss for a
-  startup crash.
-- Severity: LOW. Confidence: CERTAIN. Recommendation: KEEP.
-
-### typing-018 — Lock-backed unchecked Sendable adapters are intentional
-
-- File: Sources/StatusCore/HTTPClient.swift:52
-- RecordingHTTPClient and RecordedURLs use locks. CountBox at
-  ProviderProbe.swift:246, LiveUserNotificationCenterClient at
-  Sources/greendot/SystemToastDelivery.swift:18, and the ControllableHTTPClient,
-  ControllableLock, ConcurrencyProbeHTTPClient, SequenceHTTPClient, and
-  RecordingUserNotificationCenter test doubles use the same explicit
-  synchronization or main-actor-only test usage.
-- Proposed concrete type: keep the current adapters. Replacing them with
-  actors would make synchronous counters and test controls asynchronous. If
-  the adapters remain public, document their synchronization contract.
-- Severity: LOW. Confidence: CERTAIN. Recommendation: KEEP.
-
-### typing-019 — UI-test IUOs and literal fixture URL force unwraps are lifecycle patterns
-
-- File: UITests/GreenDotUITests/GreenDotUITests.swift:8
-- XCUIApplication and temporary URL properties are assigned in
-  setUpWithError before test use. Unit tests also use force unwraps for
-  compile-time fixture URLs. Production has no implicitly unwrapped property.
-- Proposed concrete type: keep the XCTest lifecycle pattern. Use
-  XCTUnwrap only where a test is checking a runtime-built URL.
-- Severity: LOW. Confidence: CERTAIN. Recommendation: KEEP.
-
-### typing-020 — Generic Error values preserve heterogeneous failure sources
-
-- File: Sources/greendot/StatusPageEditor.swift:9
-- UI error callbacks accept Error because callers can return MonitorError,
-  ProbeError, StoreError, URLError, or Foundation file errors. The same
-  boundary appears in AppDelegate and the UserNotifications completion API.
-  ProviderProbe also needs an arbitrary Error to test cancellation.
-- Proposed concrete type: use any Error for explicit existential syntax if the
-  project adopts that style, but do not invent one enum that drops source
-  error details.
-- Severity: LOW. Confidence: CERTAIN. Recommendation: KEEP.
-
-### typing-021 — Cleanup and diagnostic try? calls intentionally do not block work
-
-- File: Sources/greendot/URLOpener.swift:31
-- Optional URL-log writes, UI-test dump writes, attachment cleanup, and test
-  teardown removal use try? because logging, cleanup, and diagnostics must not
-  change the user operation. The ignored seek result and modal return value
-  have the same deliberate policy.
-- Proposed concrete type: keep these calls. If diagnostic reliability becomes
-  a requirement, add a separate logging channel instead of changing the
-  application result type.
-- Severity: LOW. Confidence: CERTAIN. Recommendation: KEEP.
-
-### typing-022 — Domain optionals and defaults encode real state
-
-- File: Sources/StatusCore/Models.swift:105
-- snapshot is optional before the first poll, component IDs can be absent at a
-  provider boundary, and Codable defaults preserve older local config files.
-  Toast.autoDismissSeconds uses nil for a persistent notification. Page-panel
-  onRemove is optional because add mode has no page to remove.
-- Proposed concrete type: keep these optionals and defaults. Do not replace
-  missing first-run state with sentinel values or force unwraps.
-- Severity: LOW. Confidence: CERTAIN. Recommendation: KEEP.
+**Replacement type/action:** Use the existing `[String]` directly. If a later source can append more than one value, use a native `Set<String>` only if duplicates become possible. `Sources/StatusCore/ProviderProbe.swift:182` `Sources/StatusCore/ProviderProbe.swift:202`
 
 ## Recommendations
 
-1. Plan one UI isolation change that covers typing-005 through typing-008.
-   Mark AppKit-owned types MainActor-isolated and keep network/domain work in
-   StatusCore. Re-run the requested build and the full test suite after the
-   change.
-2. Convert PageStore to a checked Sendable value or class, and decide the
-   Monitor actor-versus-lock contract before adding more concurrent entry
-   points.
-3. Remove the three direct weak operations in typing-001 through typing-003.
-   They have concrete replacements and small downstream surfaces.
-4. Make editing callbacks required and represent poll success/failure with a
-   Result or enum. Review the first-run seed error policy before changing
-   try?.
-5. Keep external JSON, AppKit, Foundation, notification, and test-lifecycle
-   boundaries weakly typed. Add boundary tests instead of guessed types.
+1. Correct WT-001 and WT-002 at the JSON-to-`ComponentStatus` boundary. Add one malformed-field test for each, including the final `WatchedPage.displaySeverity` value. `Sources/StatusCore/StatuspageParser.swift:40` `Sources/StatusCore/InstatusParser.swift:22` `Sources/StatusCore/Models.swift:128`
+2. Make the required Okta incident array fail on bad JSON. Then use one malformed-root test each for AWS, Google, and Salesforce before changing their `[Any]` casts. `Sources/StatusCore/OktaParser.swift:70` `Sources/StatusCore/AwsParser.swift:5` `Sources/StatusCore/GoogleParser.swift:5` `Sources/StatusCore/SalesforceParser.swift:5`
+3. Validate numeric status values before converting to `Int`. Preserve integral `1.0` Icinga input and the integer Status.io codes shown in existing tests. `Sources/StatusCore/IcingaParser.swift:107` `Sources/StatusCore/StatusioParser.swift:50` `Tests/StatusCoreTests/IcingaParserTests.swift:15` `Tests/StatusCoreTests/StatusioParserTests.swift:11`
+4. Remove the Statuspal collection bridge. Revisit the mutable `Sendable` callback only with a demonstrated need for reassignment or a concurrency check. `Sources/StatusCore/ProviderProbe.swift:202` `Sources/StatusCore/Monitor.swift:29`
 
 ## Out of Scope / Flagged for Review
 
-- The requested swift build -Xswiftc -warn-concurrency is the current
-  baseline and passes without warnings. The Swift 6 language-mode probe is a
-  forward-compatibility signal only. Its AppKit diagnostic wording comes from
-  SDK actor annotations, while the unannotated repository methods are the
-  actionable source shape.
-- PageStore.defaultDirectory indexes the application-support URL list at
-  Sources/StatusCore/PageStore.swift:40. Foundation documents a result for
-  this search, but a guarded first-element policy can be reviewed separately.
-- PageStore's as NSError at line 49 is needed for NSCocoaErrorDomain and
-  missing-file codes. It is not an unsafe cast.
-- Typed #selector calls for AppKit actions are not string dispatch. The only
-  string selectors are undo: and redo:, which are first-responder actions.
-- Weak captures are used for UI lifetime management. No unowned capture was
-  found. No production IUO, as!, try!, @preconcurrency, or unsafe declaration
-  was found.
-- The 11 SwiftLint violations and the generated UI-test project are outside
-  this weak-typing disposition. No formal release or validation conclusion is
-  made by this development audit.
+The following inventory covers the explicit `Any` declarations in production Swift. **KEEP** means the value comes from untrusted JSON or a native framework interface and is narrowed before use. It is not a request to replace `Any` with a provider-wide `Codable` layer. The normal internal output is already `PageSnapshot` or `ComponentStatus`. `Sources/StatusCore/StatuspageParser.swift:83` `Sources/StatusCore/StatuspageParser.swift:21` `Sources/StatusCore/Models.swift:21`
 
-## Independent Verification Disposition
+| Source and weak declaration | Current role; proposed type or decision |
+| --- | --- |
+| `Sources/StatusCore/AppleParser.swift:5`, `Sources/StatusCore/AppleParser.swift:6`, `Sources/StatusCore/AppleParser.swift:21`, `Sources/StatusCore/AppleParser.swift:23` | KEEP JSON object/array until narrowed to `ComponentStatus`. |
+| `Sources/StatusCore/AwsParser.swift:5`, `Sources/StatusCore/AwsParser.swift:9`, `Sources/StatusCore/AwsParser.swift:23`, `Sources/StatusCore/AwsParser.swift:39`, `Sources/StatusCore/AwsParser.swift:40`, `Sources/StatusCore/AwsParser.swift:42`, `Sources/StatusCore/AwsParser.swift:57` | Root `[Any]` is WT-006; keep local JSON dictionaries and `Any?` scalar checks, with `ComponentStatus` as output. |
+| `Sources/StatusCore/FlashdutyParser.swift:5`, `Sources/StatusCore/FlashdutyParser.swift:7`, `Sources/StatusCore/FlashdutyParser.swift:11`, `Sources/StatusCore/FlashdutyParser.swift:26`, `Sources/StatusCore/FlashdutyParser.swift:27` | KEEP JSON input; `events` returns typed `[Incident]`. |
+| `Sources/StatusCore/GoogleParser.swift:5`, `Sources/StatusCore/GoogleParser.swift:9`, `Sources/StatusCore/GoogleParser.swift:23`, `Sources/StatusCore/GoogleParser.swift:29` | Root `[Any]` is WT-006; keep nested JSON checks and `ComponentStatus` output. |
+| `Sources/StatusCore/HerokuParser.swift:5`, `Sources/StatusCore/HerokuParser.swift:6`, `Sources/StatusCore/HerokuParser.swift:19`, `Sources/StatusCore/HerokuParser.swift:30` | KEEP JSON input; parsed entries become `ComponentStatus`. |
+| `Sources/StatusCore/IcingaParser.swift:38`, `Sources/StatusCore/IcingaParser.swift:39`, `Sources/StatusCore/IcingaParser.swift:40`, `Sources/StatusCore/IcingaParser.swift:43`, `Sources/StatusCore/IcingaParser.swift:75`, `Sources/StatusCore/IcingaParser.swift:76`, `Sources/StatusCore/IcingaParser.swift:87`, `Sources/StatusCore/IcingaParser.swift:88`, `Sources/StatusCore/IcingaParser.swift:103`, `Sources/StatusCore/IcingaParser.swift:107`, `Sources/StatusCore/IcingaParser.swift:115` | KEEP Icinga's JSON boundary and typed `HostGroup`/`ServiceRecord` result; numeric conversion is WT-004. |
+| `Sources/StatusCore/IncidentioParser.swift:5`, `Sources/StatusCore/IncidentioParser.swift:6`, `Sources/StatusCore/IncidentioParser.swift:14`, `Sources/StatusCore/IncidentioParser.swift:26`, `Sources/StatusCore/IncidentioParser.swift:32` | KEEP JSON input; incidents become `ComponentStatus`. |
+| `Sources/StatusCore/InstatusParser.swift:5`, `Sources/StatusCore/InstatusParser.swift:6`, `Sources/StatusCore/InstatusParser.swift:15`, `Sources/StatusCore/InstatusParser.swift:21` | KEEP JSON input; strengthen the component status validation in WT-002. |
+| `Sources/StatusCore/OktaParser.swift:25`, `Sources/StatusCore/OktaParser.swift:51`, `Sources/StatusCore/OktaParser.swift:64`, `Sources/StatusCore/OktaParser.swift:70`, `Sources/StatusCore/OktaParser.swift:71` | KEEP JSON input; change the required array's error handling in WT-003. |
+| `Sources/StatusCore/SalesforceParser.swift:5`, `Sources/StatusCore/SalesforceParser.swift:9`, `Sources/StatusCore/SalesforceParser.swift:23`, `Sources/StatusCore/SalesforceParser.swift:37`, `Sources/StatusCore/SalesforceParser.swift:52`, `Sources/StatusCore/SalesforceParser.swift:67` | Root `[Any]` is WT-006; keep the local JSON scalar checks. |
+| `Sources/StatusCore/SlackParser.swift:5`, `Sources/StatusCore/SlackParser.swift:12`, `Sources/StatusCore/SlackParser.swift:30` | KEEP JSON input; incidents become `ComponentStatus`. |
+| `Sources/StatusCore/StatusioParser.swift:5`, `Sources/StatusCore/StatusioParser.swift:6`, `Sources/StatusCore/StatusioParser.swift:7`, `Sources/StatusCore/StatusioParser.swift:11`, `Sources/StatusCore/StatusioParser.swift:25`, `Sources/StatusCore/StatusioParser.swift:28`, `Sources/StatusCore/StatusioParser.swift:50`, `Sources/StatusCore/StatusioParser.swift:56`, `Sources/StatusCore/StatusioParser.swift:69`, `Sources/StatusCore/StatusioParser.swift:70` | KEEP JSON input; `JSONScalar.intValue` is WT-005. |
+| `Sources/StatusCore/StatuspageParser.swift:6`, `Sources/StatusCore/StatuspageParser.swift:10`, `Sources/StatusCore/StatuspageParser.swift:13`, `Sources/StatusCore/StatuspageParser.swift:15`, `Sources/StatusCore/StatuspageParser.swift:40`, `Sources/StatusCore/StatuspageParser.swift:83`, `Sources/StatusCore/StatuspageParser.swift:84` | KEEP JSON input and local typed `Row`; its status fallback is WT-001. |
+| `Sources/StatusCore/StatuspalParser.swift:5`, `Sources/StatusCore/StatuspalParser.swift:6`, `Sources/StatusCore/StatuspalParser.swift:13`, `Sources/StatusCore/StatuspalParser.swift:15`, `Sources/StatusCore/StatuspalParser.swift:31`, `Sources/StatusCore/StatuspalParser.swift:45` | KEEP JSON input; nested services become `ComponentStatus`. |
+| `Sources/StatusCore/PageStore.swift:175`, `Sources/StatusCore/PageStore.swift:176` | KEEP the local `[String: Any]` check of a user-editable file for ID normalization; the main load uses typed `AppConfig` decoding. |
+| `Sources/greendot/BuildInfo.swift:5`, `Sources/greendot/BuildInfo.swift:10`, `Sources/greendot/BuildInfo.swift:16`, `Sources/greendot/BuildInfo.swift:23` | KEEP Foundation info-dictionary and AppKit option `Any` types; both values are narrowed to `String` before use. |
+| `Sources/greendot/MenuClickOpener.swift:11` | KEEP the `Any?` event-monitor token; it is returned to `NSEvent.removeMonitor`, the native matching API. `Sources/greendot/MenuClickOpener.swift:38` `Sources/greendot/MenuClickOpener.swift:55` |
 
-The mandatory gate selected 16 of 22 records. Independent verifiers confirmed
-15; those records now have `verified: true`. Seven records remain provisional:
-`typing-002` was selected but only partially confirmed, and six
-lower-confidence records were not selected.
+Other checked casts are native boundary checks: `HTTPURLResponse` from `URLSession` (`Sources/StatusCore/HTTPClient.swift:85`), `XMLElement` from XML nodes (`Sources/StatusCore/RssParser.swift:242`), `NSButton`/`NSTextField` from AppKit views (`Sources/greendot/UITestDriver.swift:36` `Sources/greendot/UITestDriver.swift:40`), `TargetAction` from `representedObject` (`Sources/greendot/MenuCommands.swift:41`), and a string from notification `object` (`Sources/greendot/AppDelegate.swift:243`). KEEP their conditional casts; the source APIs do not promise a narrower value. `Sources/greendot/MenuBuilder.swift:220`
 
-The verifier found `typing-002` only partial. It has been narrowed to `UNCERTAIN` / `REVIEW`, with the counterevidence recorded in the machine-readable detail.
+Other production `@unchecked Sendable` declarations need targeted concurrency review before any removal: `PageStore` locks its mutable remembered config bytes (`Sources/StatusCore/PageStore.swift:44` `Sources/StatusCore/PageStore.swift:222`); `PathNetworkReachability` locks its stored state and callback (`Sources/StatusCore/NetworkReachability.swift:16` `Sources/StatusCore/NetworkReachability.swift:25` `Sources/StatusCore/NetworkReachability.swift:31`); the redirect delegate has no mutable stored state (`Sources/StatusCore/HTTPClient.swift:95`); and the notification-center adapter locks lazy initialization (`Sources/greendot/SystemToastDelivery.swift:22` `Sources/greendot/SystemToastDelivery.swift:26`). No data race is asserted for those types here. `Monitor` is assessed separately in WT-007. `Sources/StatusCore/Monitor.swift:3`
 
-Verification evidence: [verification-batch-1.md](verification-batch-1.md), [verification-batch-3.md](verification-batch-3.md).
-
-Final machine-readable severity counts: HIGH 4, MEDIUM 2, LOW 16. The original prose above records the specialist's pre-verification assessment; this disposition and the JSON block below are authoritative after verification.
+No TypeScript `@types/*` packages apply to this Swift package. `Package.swift:1` `Package.swift:5`
 
 ## Machine-Readable Findings
 
-The findings below contain the authoritative mixed verification flags: 15 are
-`verified: true` and 7 are `verified: false`. The final object is intentionally
-the only fenced object in this report.
-
 ```json
-{"findings":[{"id":"typing-001","file":"Sources/StatusCore/StatuspageParser.swift","line":65,"severity":"LOW","confidence":"CERTAIN","recommendation":"STRENGTHEN","detail":"Use a compactMap pair to make the grouping key non-optional.","verified":true},{"id":"typing-002","file":"Sources/StatusCore/ProviderProbe.swift","line":192,"severity":"LOW","confidence":"UNCERTAIN","recommendation":"REVIEW","detail":"Remove the bridge with an ordered native Set pass; the duplicate-runtime-risk wording is overstated. Independent verifier disposition: PARTIAL. NSOrderedSet/Array/as? is an untyped bridge, but subdomains is [String] with only String insertions and a direct Darwin check deduplicated successfully; duplicate fallback is not observed under the invariant.","verified":false},{"id":"typing-003","file":"Tests/greendotTests/MenuBuilderTests.swift","line":187,"severity":"LOW","confidence":"CERTAIN","recommendation":"STRENGTHEN","detail":"Cast representedObject to TargetAction and call invoke().","verified":true},{"id":"typing-004","file":"Sources/StatusCore/PageStore.swift","line":27,"severity":"MEDIUM","confidence":"LIKELY","recommendation":"STRENGTHEN","detail":"PageStore has immutable URL state and stateless I/O but uses @unchecked Sendable; convert it to a checked Sendable struct or class after the URL check.","verified":false},{"id":"typing-005","file":"Sources/greendot/StatusDot.swift","line":11,"severity":"HIGH","confidence":"CERTAIN","recommendation":"ISOLATE","detail":"The lock-backed AppKit cache is still rejected by strict Swift 6 concurrency checking.","verified":true},{"id":"typing-006","file":"Sources/greendot/AppDelegate.swift","line":4,"severity":"HIGH","confidence":"CERTAIN","recommendation":"ISOLATE","detail":"AppDelegate needs explicit actor isolation and an actor-aware callback type.","verified":true},{"id":"typing-007","file":"Sources/greendot/PagePanelController.swift","line":9,"severity":"HIGH","confidence":"CERTAIN","recommendation":"ISOLATE","detail":"The panel controller lacks required MainActor isolation under strict Swift 6.","verified":true},{"id":"typing-008","file":"Sources/greendot/ComponentPicker.swift","line":4,"severity":"HIGH","confidence":"CERTAIN","recommendation":"ISOLATE","detail":"All listed AppKit helpers lack explicit boundaries; some are hard errors and the rest produce actor warnings.","verified":true},{"id":"typing-009","file":"Sources/StatusCore/Monitor.swift","line":3,"severity":"MEDIUM","confidence":"LIKELY","recommendation":"REVIEW","detail":"Monitor uses @unchecked Sendable for mutable state and an unannotated callback. Locks make this deliberate, but an actor or explicit MainActor Sendable callback would make the contract checkable.","verified":false},{"id":"typing-010","file":"Sources/greendot/PagePanelController.swift","line":25,"severity":"LOW","confidence":"LIKELY","recommendation":"STRENGTHEN","detail":"Editing component callbacks default to closures that return true, so a missing callback can report success without mutation; require callbacks or return false.","verified":false},{"id":"typing-011","file":"Sources/greendot/AppDelegate.swift","line":257,"severity":"LOW","confidence":"LIKELY","recommendation":"STRENGTHEN","detail":"The optional Error field in the poll tuple permits invalid success and failure combinations; use Result<[Toast], any Error> or a PollOutcome enum.","verified":false},{"id":"typing-012","file":"Sources/greendot/AppDelegate.swift","line":121,"severity":"LOW","confidence":"LIKELY","recommendation":"REVIEW","detail":"try? hides automatic OpenAI seed probe and save errors; use a typed result and an explicit first-run logging or presentation policy.","verified":false},{"id":"typing-013","file":"Sources/StatusCore/HTTPClient.swift","line":4,"severity":"LOW","confidence":"UNCERTAIN","recommendation":"REVIEW","detail":"The HTTPClient tuple (Data, Int) has positional and sentinel semantics; a Sendable HTTPResponse with named data and statusCode fields would be clearer.","verified":false},{"id":"typing-014","file":"Sources/StatusCore/StatuspageParser.swift","line":92,"severity":"LOW","confidence":"CERTAIN","recommendation":"KEEP","detail":"Keep Any local to provider JSON boundaries and do not guess Codable DTOs.","verified":true},{"id":"typing-015","file":"Sources/greendot/MenuClickOpener.swift","line":10,"severity":"LOW","confidence":"CERTAIN","recommendation":"KEEP","detail":"Keep these dynamic edges and fail closed after them.","verified":true},{"id":"typing-016","file":"Sources/StatusCore/HTTPClient.swift","line":16,"severity":"LOW","confidence":"CERTAIN","recommendation":"KEEP","detail":"Retain the framework bridge types and map to domain values after each edge where applicable.","verified":true},{"id":"typing-017","file":"Sources/StatusCore/ProviderProbe.swift","line":224,"severity":"LOW","confidence":"CERTAIN","recommendation":"KEEP","detail":"Keep fail-closed optional regex compilation and extraction test.","verified":true},{"id":"typing-018","file":"Sources/StatusCore/HTTPClient.swift","line":52,"severity":"LOW","confidence":"CERTAIN","recommendation":"KEEP","detail":"Keep and document intentional unchecked synchronization adapters.","verified":true},{"id":"typing-019","file":"UITests/GreenDotUITests/GreenDotUITests.swift","line":8,"severity":"LOW","confidence":"CERTAIN","recommendation":"KEEP","detail":"Keep assigned XCTest lifecycle IUOs and known test fixtures; use XCTUnwrap for runtime-built values.","verified":true},{"id":"typing-020","file":"Sources/greendot/StatusPageEditor.swift","line":9,"severity":"LOW","confidence":"CERTAIN","recommendation":"KEEP","detail":"Retain the generic error existential; any Error is only spelling clarification.","verified":true},{"id":"typing-021","file":"Sources/greendot/URLOpener.swift","line":31,"severity":"LOW","confidence":"CERTAIN","recommendation":"KEEP","detail":"Keep non-fatal try? for optional diagnostics/cleanup/presentation plumbing.","verified":true},{"id":"typing-022","file":"Sources/StatusCore/Models.swift","line":105,"severity":"LOW","confidence":"CERTAIN","recommendation":"KEEP","detail":"Preserve these optionals/defaults and test future migrations explicitly.","verified":true}]}
+{"findings": [
+  {"id":"weak-typing-001","file":"Sources/StatusCore/StatuspageParser.swift","line":47,"severity":"HIGH","confidence":"HIGH","recommendation":"VALIDATE_COMPONENT_STATUS","detail":"A missing or wrong-type component status defaults to operational and can make a red page display green.","verified":false},
+  {"id":"weak-typing-002","file":"Sources/StatusCore/InstatusParser.swift","line":24,"severity":"HIGH","confidence":"HIGH","recommendation":"VALIDATE_COMPONENT_STATUS","detail":"A missing or wrong-type component status defaults to OPERATIONAL and can make an unhealthy page display green.","verified":false},
+  {"id":"weak-typing-003","file":"Sources/StatusCore/OktaParser.swift","line":70,"severity":"MEDIUM","confidence":"HIGH","recommendation":"REJECT_MALFORMED_REQUIRED_JSON","detail":"Malformed required incident JSON becomes an empty green component tree.","verified":false},
+  {"id":"weak-typing-004","file":"Sources/StatusCore/IcingaParser.swift","line":107,"severity":"MEDIUM","confidence":"MEDIUM","recommendation":"VALIDATE_INTEGRAL_NUMBER","detail":"Numeric state is narrowed to Int without an explicit integral or range check.","verified":false},
+  {"id":"weak-typing-005","file":"Sources/StatusCore/StatusioParser.swift","line":50,"severity":"MEDIUM","confidence":"MEDIUM","recommendation":"VALIDATE_INTEGRAL_NUMBER","detail":"Numeric status code is narrowed to Int without an explicit integral or range check.","verified":false},
+  {"id":"weak-typing-006","file":"Sources/StatusCore/AwsParser.swift","line":5,"severity":"MEDIUM","confidence":"HIGH","recommendation":"NARROW_ROOT_ARRAY","detail":"AWS, Google, and Salesforce accept Any root elements and discard non-object records, allowing an empty green result.","verified":false},
+  {"id":"weak-typing-007","file":"Sources/StatusCore/Monitor.swift","line":29,"severity":"LOW","confidence":"MEDIUM","recommendation":"REVIEW_SENDABLE_CALLBACK","detail":"A public mutable non-Sendable callback is outside the lock of an unchecked Sendable class.","verified":false},
+  {"id":"weak-typing-008","file":"Sources/StatusCore/ProviderProbe.swift","line":202,"severity":"LOW","confidence":"HIGH","recommendation":"REMOVE_NEEDLESS_BRIDGE","detail":"NSOrderedSet and a conditional cast deduplicate an array that currently gets at most one element.","verified":false}
+]}
 ```

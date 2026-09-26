@@ -1,154 +1,86 @@
+ponytail full-intensity: apply the YAGNI ladder; prefer reuse, standard library, and native code; keep diffs small; retain trust-boundary validation, security, and accessibility.
+
 # LOC Limits Assessment
 
 ## Executive Summary
 
-This is a read-only size audit at commit `310032b`. The audit measured every Swift file under `Package.swift`, `Sources`, `Tests`, and `UITests`. `cloc` code counts exclude blank lines and comments; `wc -l` is the physical-line baseline.
+This report measures the tracked Swift source and test files at commit `9320756`. The Swift package defines the production and unit-test targets (`Package.swift:4`), and the UI test source is separate (`UITests/GreenDotUITests/GreenDotUITests.swift:7`). I excluded `Package.swift` as configuration. I counted each nonblank line that contains code, including string literals, and excluded comment-only lines. A function count includes its declaration and closing brace. `wc -l` supplied the physical-line baseline. The repository config includes `Sources` and `Tests` for SwiftLint (`.swiftlint.yml:1`), but neither SwiftLint nor `cloc` was available here; the counts below come from a read-only local lexer and manual boundary checks.
 
-- Six findings: one HIGH, one MEDIUM, and four LOW. All six were
-  `verified: false` in the initial assessment; independent verification later
-  confirmed all six, as recorded below.
-- Four files exceed 300 code LOC. The production offender is `Sources/StatusCore/Monitor.swift`; the other three are tests and are LOW by policy.
-- Two functions exceed 50 logical body lines: `ProviderProbe.probeHit` (57) and `PerformanceHarnessTests.measureRemaining` (51).
-- The affected files contain 1,342 code LOC and 1,493 physical lines. This is 142 code LOC above the file threshold in total; the two function bodies exceed their threshold by eight logical lines in total.
+- **11 threshold signals:** nine files over 300 code LOC and two methods over 50 counted code LOC. Severity: **HIGH 0, MEDIUM 1, LOW 10**. The nine files hold 2,935 code LOC; eight are tests. The two methods are in test files (`Sources/greendot/AppDelegate.swift:5`, `Tests/greendotTests/StatusPageEditorTests.swift:72`, `Tests/StatusCoreTests/RssRedirectTests.swift:38`).
+- **Top priorities:** (1) split the polling and toast concern out of `AppDelegate.swift` when that area next changes (`Sources/greendot/AppDelegate.swift:269`); (2) consider separating the mixed probe/store tests when editing them (`Tests/StatusCoreTests/ProbeAndMonitorTests.swift:69`, `Tests/StatusCoreTests/ProbeAndMonitorTests.swift:219`); (3) consider separating the startup tests from panel tests when editing them (`Tests/greendotTests/PanelLifecycleTests.swift:163`, `Tests/greendotTests/PanelLifecycleTests.swift:267`). Only the first is a production concern.
+- **Estimated impact:** one production file of 341 code LOC, eight test files of 2,594 code LOC, and two test methods. A file split relocates code; it does not imply safe LOC deletion. The two 51-line methods have 49 code lines inside their braces (`Tests/greendotTests/StatusPageEditorTests.swift:72`, `Tests/StatusCoreTests/RssRedirectTests.swift:38`).
 
-Top priorities:
+### All files over 300 code LOC
 
-1. `loc-001`: split `Monitor` by its existing mutation, polling, and presentation boundaries while retaining its locking and persistence behavior.
-2. `loc-002`: decompose provider dispatch from attempt/result accounting in `ProviderProbe.probeHit`.
-3. `loc-004`: optionally extract the four independent measurements from the 51-line performance helper. This is a LOW test-only cleanup, not a release blocker.
-
-### Measurement baseline
-
-Commands used:
-
-- `cloc --by-file --include-lang=Swift --exclude-dir=.git,.build,greendot.app,cleanup-reports . --csv` (`cloc` 2.10).
-- `find ... -name '*.swift' ... | xargs wc -l` for physical lines.
-- `swiftlint lint --quiet --config .swiftlint.yml --reporter json` (`SwiftLint` 0.65.1), followed by manual brace/signature inspection. The configured `included` paths are `Sources` and `Tests`; `UITests` was manually inspected because the config excludes it.
-
-`Resources/*`, `greendot.app`, `.build`, `cleanup-reports`, and the generated UI project (`UITests/project.yml`) were excluded. No excluded directory contained a Swift source file included in these totals.
-
-| Scope | Swift files | Physical lines | Blank | Comments | Code LOC |
-|---|---:|---:|---:|---:|---:|
-| `Sources` | 34 | 3,131 | 314 | 27 | 2,790 |
-| `Tests` | 23 | 3,911 | 399 | 10 | 3,502 |
-| `UITests` | 1 | 329 | 37 | 3 | 289 |
-| `Package.swift` | 1 | 27 | 1 | 1 | 25 |
-| **Total** | **59** | **7,398** | **751** | **41** | **6,606** |
-
-### Files above 300 code LOC
-
-| File | Code LOC | Physical lines | Concern count | Severity | Recommendation |
+| File and evidence | Code LOC | Physical LOC | Concern count | Severity | Recommendation |
 |---|---:|---:|---:|---|---|
-| `Sources/StatusCore/Monitor.swift` | 352 | 384 | 4 | HIGH | SPLIT |
-| `Tests/greendotTests/PerformanceHarnessTests.swift` | 368 | 397 | 5 | LOW | EXEMPT |
-| `Tests/greendotTests/StatusPageEditorTests.swift` | 316 | 359 | 3 | LOW | EXEMPT |
-| `Tests/StatusCoreTests/MonitorRefreshTransactionTests.swift` | 306 | 353 | 3 | LOW | EXEMPT |
+| `Tests/greendotTests/AppDelegateReloadTests.swift:8` | 344 | 400 | 1 reload concern | LOW | EXEMPT |
+| `Tests/StatusCoreTests/ComponentToggleTests.swift:5` | 342 | 388 | 1 component concern | LOW | EXEMPT |
+| `Sources/greendot/AppDelegate.swift:5` | 341 | 380 | 4 | MEDIUM | SPLIT |
+| `Tests/greendotTests/PerformanceHarnessTests.swift:10` | 328 | 351 | 1 benchmark harness | LOW | EXEMPT |
+| `Tests/greendotTests/PanelLifecycleTests.swift:8` | 326 | 357 | 3 | LOW | SPLIT when touched |
+| `Tests/StatusCoreTests/ProbeAndMonitorTests.swift:5` | 321 | 364 | 3 | LOW | SPLIT when touched |
+| `Tests/StatusCoreTests/StateFileSplitTests.swift:4` | 317 | 400 | 1 state persistence concern | LOW | EXEMPT |
+| `Tests/greendotTests/StatusPageEditorTests.swift:8` | 312 | 357 | 1 editor concern | LOW | EXEMPT |
+| `Tests/StatusCoreTests/MonitorRefreshTransactionTests.swift:5` | 304 | 355 | 1 transaction concern | LOW | EXEMPT |
 
-The four files account for 1,342 code LOC and 1,493 physical lines. Test files are retained as LOW even where they contain several scenario groups because they are cohesive test subjects or intentionally aggregated benchmarks.
+Concern counts group related behavior; they are review judgments, not a metric. The cited lines show each grouping. A 300-line limit alone does not justify moving a cohesive test suite into more files.
 
 ## Critical Findings
 
-### loc-001 — `Monitor` is a multi-concern production type
-
-`Sources/StatusCore/Monitor.swift:3` contains 352 code LOC (384 physical lines), exceeding the 300-code-LOC limit. Four concerns are interleaved:
-
-1. State and transition synchronization (`stateLock`, `transitionLock`, revisions, and poll identity).
-2. Persistent page mutations (`load`, first-run handling, add/edit/remove, notification and component changes, and `commitWatchedPageMutation`).
-3. Asynchronous provider polling and stale-result reconciliation (`pollAll`, `pollResult`, `startPoll`, `applyPollResults`, `mergePollResults`, and `expectedPagesByID`).
-4. User-facing status and toast policy (`barSeverity`, `displayedSeverity`, and `pollToast`).
-
-This is a true production maintainability risk because the same type owns file persistence, concurrent transitions, network fan-out, and result merging. The existing private extension already exposes natural boundaries, so the recommended action is `SPLIT`, not an arbitrary line-count cut.
-
-Proposed structure:
-
-- `Monitor.swift`: stored state, initialisers, `pages`, and the lock primitives.
-- `Monitor+Mutations.swift`: `load`, `enableLaunchAtLoginOnFirstRun`, `add`, `edit`, `remove`, `toggleNotifications`, `toggleComponent`, `setAllComponents`, `commitWatchedPageMutation`, and `trimmed`.
-- `Monitor+Polling.swift`: `pollAll`, `pollResult`, `startPoll`, `applyPollResults`, `mergePollResults`, `pollToast`, and `expectedPagesByID`.
-- `Monitor+Presentation.swift`: `barSeverity` and `displayedSeverity`.
-
-Keep the lock and persistence fields in the main type during the first split. A later `MonitorState`/actor refactor should be considered only after the overlapping-poll, cancellation, and mutation tests continue to pass; moving synchronization while splitting files would increase behavioral risk.
+None. The sole production file above 300 code LOC is 41 lines over the threshold and has an existing same-type extension pattern (`Sources/greendot/AppDelegate.swift:5`, `Sources/greendot/AppDelegate+Config.swift:13`). I found no production method above 50 counted code LOC; the closest measured method is `probeMicrosoftHub` at 50 (`Sources/StatusCore/ProviderProbe+RSS.swift:158`).
 
 ## Medium Findings
 
-### Functions above 50 logical body lines
+### loc-001 — AppDelegate holds several concerns in one file
 
-| File | Function (declaration line) | Logical body LOC | Body lines inspected | Concern count | Severity | Recommendation |
-|---|---|---:|---|---:|---|---|
-| `Sources/StatusCore/ProviderProbe.swift` | `probeHit` (34) | 57 | 41–102 | 3 | MEDIUM | DECOMPOSE |
-| `Tests/greendotTests/PerformanceHarnessTests.swift` | `measureRemaining` (189) | 51 | 190–244 | 4 | LOW | DECOMPOSE |
+`Sources/greendot/AppDelegate.swift:5` has 341 code LOC. It initializes the app and timers (`Sources/greendot/AppDelegate.swift:36`), wires menu and editor actions (`Sources/greendot/AppDelegate.swift:137`, `Sources/greendot/AppDelegate.swift:169`), installs UI-test hooks (`Sources/greendot/AppDelegate.swift:207`), and handles reachability, toasts, and poll refresh (`Sources/greendot/AppDelegate.swift:270`, `Sources/greendot/AppDelegate.swift:281`, `Sources/greendot/AppDelegate.swift:350`). These are four practical navigation areas, though one app delegate still coordinates them.
 
-### loc-002 — `ProviderProbe.probeHit` combines dispatch, attempts, and failure policy
+**SPLIT proposal:** keep launch, menu, editor, and UI-test hook code in `Sources/greendot/AppDelegate.swift`; keep existing config handling in `Sources/greendot/AppDelegate+Config.swift:13`; move the reachability, toast, and poll methods from `Sources/greendot/AppDelegate.swift:269` into `Sources/greendot/AppDelegate+Polling.swift`. This uses the existing extension pattern. The stored poll invocation state must stay in the main type (`Sources/greendot/AppDelegate.swift:15`); a cross-file extension needs deliberate access to it. Preserve the stale-poll check and error gate (`Sources/greendot/AppDelegate.swift:353`, `Sources/greendot/AppDelegate.swift:365`). This is a navigation change with concurrency risk, so make it only with nearby polling work and run the reload and refresh tests (`Tests/greendotTests/AppDelegateReloadTests.swift:51`, `Tests/greendotTests/AppDelegateRefreshErrorTests.swift:87`). Do not introduce a new state object solely to satisfy the line cap.
 
-`Sources/StatusCore/ProviderProbe.swift:34` has a body of 57 logical lines (non-blank, non-comment lines 41–102), confirmed by SwiftLint and manual brace inspection. Three concerns are in one function:
+## Low / Debatable Findings
 
-1. Provider ordering and early-success dispatch.
-2. Standard Statuspage/Instatus request construction and parsing.
-3. Statuspal handling plus `sawHTTP`/`sawNetworkError` aggregation and final error selection.
+### loc-002 through loc-009 — test-file size
 
-Use `DECOMPOSE` around result values rather than copying the three local closures. A suitable shape is a small `ProbeContext(base:client:previousBody:previousSnapshot:)`, a `ProbeFlags` value, and helpers with roles equivalent to `standardAttempt(for:context:) async throws -> AttemptResult`, `record(_:flags:) -> ProbeHit?`, and `probeStatuspal(context:flags:) async throws -> ProbeHit?`. `probeHit` should then only order providers, return the first hit, and map the final flags to `ProbeError`. This also gives the existing six-parameter `probeStatuspal` a coherent context without changing provider semantics.
+The eight test files in the table exceed 300 code LOC. Six are cohesive suites and should be **EXEMPT**: reload behavior spans three related test classes (`Tests/greendotTests/AppDelegateReloadTests.swift:8`, `Tests/greendotTests/AppDelegateReloadTests.swift:218`, `Tests/greendotTests/AppDelegateReloadTests.swift:352`); component toggling shares local fixtures (`Tests/StatusCoreTests/ComponentToggleTests.swift:5`, `Tests/StatusCoreTests/ComponentToggleTests.swift:204`); benchmark measurements share one gated entry point (`Tests/greendotTests/PerformanceHarnessTests.swift:26`); state-file behavior includes the related launch flag (`Tests/StatusCoreTests/StateFileSplitTests.swift:4`, `Tests/StatusCoreTests/StateFileSplitTests.swift:270`); editor behavior uses a local pending-save gate (`Tests/greendotTests/StatusPageEditorTests.swift:8`, `Tests/greendotTests/StatusPageEditorTests.swift:328`); and transaction tests share race fixtures (`Tests/StatusCoreTests/MonitorRefreshTransactionTests.swift:5`, `Tests/StatusCoreTests/MonitorRefreshTransactionTests.swift:337`). Splitting these now adds files without a demonstrated navigation or behavior gain.
 
-## Low / Debatable
+Two test files mix subjects. **SPLIT when touched**, with no immediate change: `PanelLifecycleTests.swift` combines panel behavior, status-dot rendering, and app startup (`Tests/greendotTests/PanelLifecycleTests.swift:9`, `Tests/greendotTests/PanelLifecycleTests.swift:110`, `Tests/greendotTests/PanelLifecycleTests.swift:163`). If a startup test changes, move the startup and seed tests to `Tests/greendotTests/AppDelegateStartupTests.swift`, keeping their fixtures with them (`Tests/greendotTests/PanelLifecycleTests.swift:267`, `Tests/greendotTests/PanelLifecycleTests.swift:328`). `ProbeAndMonitorTests.swift` combines provider, directory-client, and store cases (`Tests/StatusCoreTests/ProbeAndMonitorTests.swift:15`, `Tests/StatusCoreTests/ProbeAndMonitorTests.swift:69`, `Tests/StatusCoreTests/ProbeAndMonitorTests.swift:219`). If store tests change, place the store-load cases in the existing `Tests/StatusCoreTests/PageStoreValidationTests.swift:4` and review the file-local fixtures before moving them (`Tests/StatusCoreTests/ProbeAndMonitorTests.swift:325`).
 
-The following findings are real threshold measurements but are test-only. They are LOW unless a future change makes the test fixtures cross responsibility boundaries.
+### All methods over 50 counted code LOC
 
-### loc-003 — Performance benchmark harness file
+| File and method | Counted LOC | Physical span | Body-only code LOC | Recommendation |
+|---|---:|---:|---:|---|
+| `Tests/greendotTests/StatusPageEditorTests.swift:72` `testFailedEditKeepsEditorOpenAndRetainsEnteredValues` | 51 | 72–128 | 49 | EXEMPT: one end-to-end failure case; keep its state and assertions together (`Tests/greendotTests/StatusPageEditorTests.swift:90`, `Tests/greendotTests/StatusPageEditorTests.swift:114`). |
+| `Tests/StatusCoreTests/RssRedirectTests.swift:38` `testSameHostRedirectPolicy` | 51 | 38–88 | 49 | EXEMPT: each assertion checks a redirect or feed-URL boundary (`Tests/StatusCoreTests/RssRedirectTests.swift:46`, `Tests/StatusCoreTests/RssRedirectTests.swift:70`). |
 
-`Tests/greendotTests/PerformanceHarnessTests.swift:9` has 368 code LOC and 397 physical lines. SwiftLint reports a 355-code-line class body. Its five concerns are parser timings, poll timings, menu build/cache timings, status-dot rendering, and persistence/provider-cache/pulse metrics. These are intentionally grouped behind the `make bench` harness and share benchmark fixtures/output, so splitting solely to meet 300 LOC would add navigation cost. Recommendation: `EXEMPT` for now. If benchmark domains grow, split into `ParserPerformanceTests`, `PollPerformanceTests`, and `MenuAndIconPerformanceTests` with shared `BenchmarkFixtures`.
-
-### loc-004 — `measureRemaining` is one logical line over the function limit
-
-`Tests/greendotTests/PerformanceHarnessTests.swift:189` spans 51 logical body lines (190–244). It measures four independent metrics: Statuspal request count, regex compilation reuse, unchanged-poll parse reuse, and reachable pulse refresh calls. Recommendation: `DECOMPOSE` when this harness is next edited into helpers equivalent to `measureStatuspalProbe() async throws -> Int`, `measureRegexCompilation() -> Int`, `measureSecondPollParseCount() async throws -> Int`, and `measureReachablePulseRefresh() -> Int`; otherwise this one-line test-only overflow is LOW.
-
-### loc-005 — Status page editor integration test suite
-
-`Tests/greendotTests/StatusPageEditorTests.swift:7` has 316 code LOC and 359 physical lines. Three related test concerns account for the size: persistence-failure add/edit flows (lines 17–127), stale/replacement/pending/cancel panel lifecycle (129–248 and 291–320), and view-tree helpers plus `PendingSaveGate` test support (250–288 and 330–359). All tests target the same editor/panel behavior and no individual function exceeds 50 logical lines. Recommendation: `EXEMPT`; if the suite grows, split `StatusPageEditorPersistenceTests`, `StatusPageEditorLifecycleTests`, and `StatusPageEditorTestSupport` rather than cutting by line number.
-
-### loc-006 — Monitor refresh transaction test suite
-
-`Tests/StatusCoreTests/MonitorRefreshTransactionTests.swift:5` has 306 code LOC and 353 physical lines. SwiftLint reports a 301-code-line class body. Three related concerns are covered: persistence/error boundaries (42–68 and 295–312), overlapping/cancelled poll ordering (70–160 and 251–293), and edit/toggle conflict protection plus shared fixtures (162–249 and 314–352). The suite is cohesive around refresh transactions and has no function over 50 logical lines. Recommendation: `EXEMPT`; if it becomes harder to navigate, use `MonitorPollConcurrencyTests`, `MonitorPollMutationTests`, and a shared fixture file.
-
-### Files close to the limit
-
-These files are below 300 code LOC and are not findings. They are listed to prevent premature splitting: `Tests/greendotTests/PanelLifecycleTests.swift` (297), `UITests/GreenDotUITests/GreenDotUITests.swift` (289), `Tests/StatusCoreTests/ProbeAndMonitorTests.swift` (270), and `Tests/StatusCoreTests/PollPerformanceTests.swift` (262). Manual inspection of the UI test found no function over 50 logical lines.
+These are two-line counting-edge cases: removing the declaration and closing brace puts both bodies below 50. Decomposing either test would add helpers without reducing the test's logical scope. Keep the redirect assertions because they cover trust-boundary policy (`Sources/StatusCore/HTTPClient.swift:16`, `Sources/StatusCore/ProviderProbe+RSS.swift:118`). Keep the icon accessibility assertion if panel tests ever move (`Tests/greendotTests/PanelLifecycleTests.swift:138`).
 
 ## Recommendations
 
-1. Apply `SPLIT` to `Monitor` using same-type extensions/files first. Preserve the current public API and keep lock ownership in one place; validate persistence failure, cancellation, overlapping poll, and mutation-preservation tests after each move.
-2. Apply `DECOMPOSE` to `ProviderProbe.probeHit` with a context/flags value and one standard-provider attempt helper. Keep Statuspal's special discovery path explicit.
-3. Treat the three oversized test files as threshold exemptions. Their size comes from cohesive scenario coverage, fixtures, or benchmark aggregation, not a production god object.
-4. On the next performance-harness change, apply the optional `measureRemaining` helper extraction. Do not split benchmark files solely to remove one logical line.
-5. Keep using cloc code LOC as the audit measure. SwiftLint's default `file_length` metric is not the 300 code-LOC rule, so SwiftLint output alone does not detect `Monitor.swift`.
+1. **SPLIT, MEDIUM, conditional:** use the existing extension layout for polling and toasts during the next relevant production change; preserve poll ordering and error behavior (`Sources/greendot/AppDelegate.swift:269`, `Sources/greendot/AppDelegate.swift:353`, `Sources/greendot/AppDelegate+Config.swift:13`). This is the only production size action supported by a clear concern boundary.
+2. **SPLIT, LOW, conditional:** move startup tests away from panel tests, or store-load tests into the existing store suite, only when those tests need maintenance (`Tests/greendotTests/PanelLifecycleTests.swift:163`, `Tests/StatusCoreTests/ProbeAndMonitorTests.swift:219`, `Tests/StatusCoreTests/PageStoreValidationTests.swift:4`). Keep test fixtures near their users.
+3. **EXEMPT, LOW:** leave the six cohesive large test suites and both 51-line test methods intact (`Tests/StatusCoreTests/ComponentToggleTests.swift:5`, `Tests/greendotTests/StatusPageEditorTests.swift:72`, `Tests/StatusCoreTests/RssRedirectTests.swift:38`). Their size alone is insufficient reason for a diff.
 
-### Priority ranking
+## Out of Scope / Flagged for Review
 
-| Rank | Finding | Severity | Action | Reason |
-|---:|---|---|---|---|
-| 1 | loc-001 | HIGH | SPLIT | Central production type mixes four stateful concerns. |
-| 2 | loc-002 | MEDIUM | DECOMPOSE | Provider dispatch and error policy are coupled in a 57-line function. |
-| 3 | loc-004 | LOW | DECOMPOSE | Four independent benchmark measurements in a 51-line helper. |
-| 4 | loc-003 | LOW | EXEMPT | Intentional multi-metric benchmark harness. |
-| 5 | loc-006 | LOW | EXEMPT | Cohesive monitor transaction scenarios and fixtures. |
-| 6 | loc-005 | LOW | EXEMPT | Cohesive editor/panel integration scenarios and support. |
-
-## Out of Scope
-
-- No source, test, dependency, configuration, Git, archive, generated-project, resource, or binary files were modified.
-- This report does not assess runtime correctness, dead code, duplication, type quality, security, performance results, or formal test validity.
-- No lizard-based measurement was possible because lizard is not installed; SwiftLint plus manual boundary inspection was used for function bodies.
-- The initial threshold findings were not independent verification or release
-  approval. The later independent disposition and final JSON flags below
-  supersede that initial state.
-
-## Independent Verification Disposition
-
-The mandatory gate selected 6 of 6 records. Independent verifiers confirmed 6; those records now have `verified: true`. 0 lower-confidence records remain provisional.
-
-Verification evidence: [verification-batch-1.md](verification-batch-1.md), [verification-batch-3.md](verification-batch-3.md).
-
-Final machine-readable severity counts: HIGH 0, MEDIUM 2, LOW 4. The original prose above records the specialist's pre-verification assessment; this disposition and the JSON block below are authoritative after verification.
+- This is a static LOC and concern-boundary review. It does not assert a runtime defect or test pass status. The available build and lint commands depend on Swift tools (`Makefile:10`, `Makefile:19`), which were unavailable in this Linux worktree.
+- `UITests/GreenDotUITests/GreenDotUITests.swift:7` is 289 code LOC despite 329 physical lines, so it is below the file threshold. `Sources/StatusCore/ProviderProbe+RSS.swift:3` is 292 code LOC despite 318 physical lines; its largest measured method has 50 counted code LOC (`Sources/StatusCore/ProviderProbe+RSS.swift:158`). Neither is a threshold finding.
+- No generated Swift file was identified among the tracked source/test paths. `Package.swift:1` is package configuration and is excluded from the file-size table. No recommendation here removes input validation, redirect checks, accessibility assertions, or other security behavior (`Sources/StatusCore/HTTPClient.swift:16`, `Tests/greendotTests/PanelLifecycleTests.swift:138`).
 
 ## Machine-Readable Findings
 
 ```json
-{"findings":[{"id":"loc-001","file":"Sources/StatusCore/Monitor.swift","line":3,"severity":"MEDIUM","confidence":"CERTAIN","recommendation":"SPLIT","detail":"Monitor combines four stated production concerns in 352 code lines.","verified":true},{"id":"loc-002","file":"Sources/StatusCore/ProviderProbe.swift","line":34,"severity":"MEDIUM","confidence":"CERTAIN","recommendation":"DECOMPOSE","detail":"probeHit is a 57-code-line orchestration/error-selection function with the stated responsibilities.","verified":true},{"id":"loc-003","file":"Tests/greendotTests/PerformanceHarnessTests.swift","line":9,"severity":"LOW","confidence":"CERTAIN","recommendation":"EXEMPT","detail":"Benchmark harness is intentionally grouped; do not split solely for the file threshold.","verified":true},{"id":"loc-004","file":"Tests/greendotTests/PerformanceHarnessTests.swift","line":189,"severity":"LOW","confidence":"CERTAIN","recommendation":"DECOMPOSE","detail":"Optional helper extraction is suitable on the next benchmark edit.","verified":true},{"id":"loc-005","file":"Tests/greendotTests/StatusPageEditorTests.swift","line":7,"severity":"LOW","confidence":"CERTAIN","recommendation":"EXEMPT","detail":"Related editor integration tests may remain together below a future navigation threshold.","verified":true},{"id":"loc-006","file":"Tests/StatusCoreTests/MonitorRefreshTransactionTests.swift","line":5,"severity":"LOW","confidence":"CERTAIN","recommendation":"EXEMPT","detail":"Cohesive monitor transaction tests may remain together as a low-risk exception.","verified":true}]}
+{"findings":[
+  {"id":"loc-001","file":"Sources/greendot/AppDelegate.swift","line":5,"severity":"MEDIUM","confidence":"LIKELY","recommendation":"SPLIT","detail":"Sources/greendot/AppDelegate.swift:5 has 341 code LOC and four concern areas; split polling and toast methods into a same-type extension when touched.","verified":false},
+  {"id":"loc-002","file":"Tests/greendotTests/AppDelegateReloadTests.swift","line":8,"severity":"LOW","confidence":"CERTAIN","recommendation":"EXEMPT","detail":"Tests/greendotTests/AppDelegateReloadTests.swift:8 has 344 code LOC of related reload tests.","verified":false},
+  {"id":"loc-003","file":"Tests/StatusCoreTests/ComponentToggleTests.swift","line":5,"severity":"LOW","confidence":"CERTAIN","recommendation":"EXEMPT","detail":"Tests/StatusCoreTests/ComponentToggleTests.swift:5 has 342 code LOC of related component tests.","verified":false},
+  {"id":"loc-004","file":"Tests/greendotTests/PerformanceHarnessTests.swift","line":10,"severity":"LOW","confidence":"CERTAIN","recommendation":"EXEMPT","detail":"Tests/greendotTests/PerformanceHarnessTests.swift:10 has 328 code LOC in one benchmark harness.","verified":false},
+  {"id":"loc-005","file":"Tests/greendotTests/PanelLifecycleTests.swift","line":8,"severity":"LOW","confidence":"LIKELY","recommendation":"SPLIT","detail":"Tests/greendotTests/PanelLifecycleTests.swift:8 has 326 code LOC across panel, icon, and startup tests; split by subject when touched.","verified":false},
+  {"id":"loc-006","file":"Tests/StatusCoreTests/ProbeAndMonitorTests.swift","line":5,"severity":"LOW","confidence":"LIKELY","recommendation":"SPLIT","detail":"Tests/StatusCoreTests/ProbeAndMonitorTests.swift:5 has 321 code LOC across probe, directory-client, and store tests; reuse the existing store suite when touched.","verified":false},
+  {"id":"loc-007","file":"Tests/StatusCoreTests/StateFileSplitTests.swift","line":4,"severity":"LOW","confidence":"CERTAIN","recommendation":"EXEMPT","detail":"Tests/StatusCoreTests/StateFileSplitTests.swift:4 has 317 code LOC of related state persistence tests.","verified":false},
+  {"id":"loc-008","file":"Tests/greendotTests/StatusPageEditorTests.swift","line":8,"severity":"LOW","confidence":"CERTAIN","recommendation":"EXEMPT","detail":"Tests/greendotTests/StatusPageEditorTests.swift:8 has 312 code LOC of related editor tests.","verified":false},
+  {"id":"loc-009","file":"Tests/StatusCoreTests/MonitorRefreshTransactionTests.swift","line":5,"severity":"LOW","confidence":"CERTAIN","recommendation":"EXEMPT","detail":"Tests/StatusCoreTests/MonitorRefreshTransactionTests.swift:5 has 304 code LOC of related transaction tests.","verified":false},
+  {"id":"loc-010","file":"Tests/greendotTests/StatusPageEditorTests.swift","line":72,"severity":"LOW","confidence":"CERTAIN","recommendation":"EXEMPT","detail":"Tests/greendotTests/StatusPageEditorTests.swift:72 has 51 counted method lines but 49 body-only lines; keep the single failure scenario intact.","verified":false},
+  {"id":"loc-011","file":"Tests/StatusCoreTests/RssRedirectTests.swift","line":38,"severity":"LOW","confidence":"CERTAIN","recommendation":"EXEMPT","detail":"Tests/StatusCoreTests/RssRedirectTests.swift:38 has 51 counted method lines but 49 body-only lines; keep redirect policy assertions intact.","verified":false}
+]}
 ```

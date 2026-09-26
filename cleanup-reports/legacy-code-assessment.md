@@ -1,85 +1,62 @@
+PONYTAIL MODE ACTIVE — level: full
+
 # Legacy Code Assessment
 
 ## Executive Summary
 
-- Findings: 5 total; HIGH 0, MEDIUM 4, LOW 1.
-- Classifications: SAFE-TO-REMOVE 0, NEEDS-VERIFICATION 5, ACTIVE-DEPRECATED 0.
-- Safe removal estimate: 0 LOC. The only conditional removal is the Statuspal `.eu` branch, estimated at 4-8 LOC, and it must not be removed without checking user pages and provider support.
-- The current tree has no deprecated annotation, TODO removal marker, old provider implementation, migration already run, re-export shim, or concluded feature flag that can be safely deleted.
-- Build evidence: `swift build` passed. `swift test` passed 150 tests with 1 benchmark test skipped because `GREENDOT_BENCH` was not set.
+- Total findings: 5. Severity: HIGH=0, MEDIUM=1, LOW=4. No path is safe to remove now: the version-1 file upgrade remains documented (`docs/settings-files.md:191`), older field defaults remain documented (`docs/settings-files.md:71`), and the two UI compatibility behaviors have tests (`Tests/greendotTests/PanelLifecycleTests.swift:9`, `Tests/greendotTests/ComponentSelectionIndexTests.swift:48`).
+- Top priorities: retain the version-1 upgrade until support ends (`docs/settings-files.md:197`); retain decoders for older and hand-edited files (`Sources/StatusCore/Models.swift:56`, `Sources/StatusCore/Models.swift:170`); keep the AppKit lifetime fix until its exact menu action has a macOS regression check (`Sources/greendot/AppDelegate.swift:196`).
+- Estimated impact: 0 production LOC can be removed safely now. The five findings span eight source files (`Sources/StatusCore/PageStore.swift:149`, `Sources/StatusCore/StateFile.swift:43`, `Sources/StatusCore/Models.swift:56`, `Sources/greendot/AppDelegate.swift:196`, `Sources/greendot/AppDelegate+Config.swift:33`, `Sources/greendot/StatusPageEditor.swift:65`, `Sources/greendot/ComponentSelectionIndex.swift:60`, `Sources/greendot/ComponentPicker.swift:90`). The version-1 path has about 14 directly identifiable production lines in its legacy decoder and stripping branches; this is only a conditional estimate because version-2 files can still carry stale fields (`Sources/StatusCore/PageStore.swift:149`, `Sources/StatusCore/StateFile.swift:52`, `Sources/StatusCore/Models.swift:176`, `Tests/StatusCoreTests/LegacyFieldTests.swift:45`).
+- Pre-flight: this is a Swift Package Manager project for macOS 13 (`Package.swift:1`, `Package.swift:6`). The repo defines `swift build`, `swift test`, and `swiftlint lint` commands (`Makefile:8`, `Makefile:11`, `Makefile:17`). This Linux worker has `rg` and `git`, but no `swift`, `swiftlint`, or `cloc`; the assessment uses read-only source, test, and history inspection. No build or runtime test was run.
 
-Top priorities:
+## Critical Findings
 
-1. Keep the AppKit panel retention and next-run-loop handoff. Git history identifies it as a crash fix, and current lifecycle tests exercise replacement and close paths.
-2. Keep the `Codable` defaults and version guard until the supported `config.json` population is known. They protect persisted data from earlier schema revisions.
-3. Decide whether Statuspal `.eu` remains a supported user path. The repository has implementation support but no `.eu` regression test or documented support decision.
-
-## Critical
-
-None found.
+None. No source path has a confirmed safe removal; the version-1 migration is still part of the documented upgrade (`docs/settings-files.md:197`).
 
 ## Medium Findings
 
-### legacy-001 - AppKit panel keep-alive workaround is active
+### legacy-001 — Version-1 single-file migration is still active
 
-`Sources/greendot/AppDelegate.swift:182-188` and `Sources/greendot/StatusPageEditor.swift:24-70` retain the previous editor through a replacement and defer `show()` to the next main-run-loop turn. The comments call out an AppKit `SIGSEGV` when the previous dialog is released during a status-item menu action. Commit `889a31d` introduced this workaround after the second-page Edit crash; `9a721e6` separately fixed the released-when-closed window crash. Current `PanelLifecycleTests` and `StatusPageEditorTests` cover repeated replacement and close behavior.
+**Class: ACTIVE-DEPRECATED. Recommendation: KEEP.** The current config format is version 2 (`Sources/StatusCore/PageStore.swift:4`, `docs/settings-files.md:49`), but `PageStore.load` accepts older versions and preserves inline machine state only for version 1 (`Sources/StatusCore/PageStore.swift:93`, `Sources/StatusCore/PageStore.swift:97`, `Sources/StatusCore/PageStore.swift:149`). The version-1 launch flag and page snapshot are decoded from `config.json` (`Sources/StatusCore/StateFile.swift:43`, `Sources/StatusCore/Models.swift:176`). The next save writes `config.json` and `state.json` separately (`Sources/StatusCore/PageStore.swift:198`, `Sources/StatusCore/PageStore.swift:200`); this upgrade is explicitly documented as deferred until the next save (`docs/settings-files.md:204`) and checked by a fixture test (`Tests/StatusCoreTests/StateFileSplitTests.swift:81`). Removing this path now could discard an existing user's cached snapshot or launch setting. Decide a supported-format cutoff and migration policy before changing it. Estimated safe reduction: 0 LOC (`docs/settings-files.md:197`, `Tests/StatusCoreTests/StateFileSplitTests.swift:88`).
 
-This is a live platform compatibility workaround, not obsolete code. Removing or simplifying it can reintroduce a crash on the macOS 13+ deployment range. Keep it; only revisit after a deliberate AppKit lifecycle replacement and a macOS-version test matrix. No removable LOC is counted.
+## Low / Debatable Findings
 
-### legacy-002 - WatchedPage decoder preserves earlier config fields
+### legacy-002 — Older watched-page field defaults
 
-`Sources/StatusCore/Models.swift:154-166` uses `decodeIfPresent` defaults for `notificationsEnabled`, `disabledComponentNames`, and `snapshot`. `disabledComponentNames` was added by commit `0931789`, while the initial `b18e16f` config format did not contain that field. The current `testOldConfigWithoutDisabledNamesStillLoads` fixture confirms the top-level old shape, although it does not yet include a populated old page snapshot.
+**Class: NEEDS-VERIFICATION. Recommendation: KEEP.** `WatchedPage` gives a missing ID a new UUID and defaults missing notification and disabled-component fields (`Sources/StatusCore/Models.swift:170`, `Sources/StatusCore/Models.swift:174`). Missing fields and ID repair are part of the current hand-edit contract (`docs/settings-files.md:71`, `docs/settings-files.md:74`), and the store checks whether to persist repaired IDs (`Sources/StatusCore/PageStore.swift:101`, `Sources/StatusCore/PageStore.swift:174`). These defaults also support older saved files, but no inventory of user files establishes that the old cases have ended. Removing them would make documented incomplete files fail or change their behavior (`docs/settings-files.md:65`). Estimated safe reduction: 0 LOC.
 
-This is persisted-user-data compatibility. Removing the defaults would turn an older `config.json` into a corrupt-store error or lose the intended defaults. Keep it. If a future controlled migration proves that old files cannot exist, replace this shim only with an explicit migration and a tested backup/rollback plan. No removable LOC is counted.
+### legacy-003 — Older component snapshot defaults
 
-### legacy-003 - ComponentStatus decoder preserves pre-nesting snapshots
+**Class: NEEDS-VERIFICATION. Recommendation: KEEP.** `ComponentStatus` supplies `id = name`, empty children, and `isGroup = false` when older snapshots lack those fields (`Sources/StatusCore/Models.swift:56`, `Sources/StatusCore/Models.swift:58`). The cache still decodes page snapshots from `state.json` (`Sources/StatusCore/StateFile.swift:17`, `Sources/StatusCore/PageStore.swift:134`) and can decode inline snapshots while loading version 1 (`Sources/StatusCore/Models.swift:176`). Removing these defaults could reject saved snapshots with the older shape. Confirm a supported cache-format cutoff before removal. Estimated safe reduction: 0 LOC.
 
-`Sources/StatusCore/Models.swift:34-46` accepts missing `id`, `children`, and `isGroup` values. Commit `0588846` changed `ComponentStatus` from three fields with synthesized `Codable` to nested component groups and added these defaults. Existing snapshots written before that change can therefore still decode.
+### legacy-004 — AppKit panel lifetime workaround
 
-This is an active persisted-snapshot compatibility path. It has no external API deprecation marker, but deleting it can make a previously saved page unloadable. Keep it and add a fixture containing a pre-`0588846` populated snapshot before considering any schema migration. No removable LOC is counted.
+**Class: NEEDS-VERIFICATION. Recommendation: REVIEW.** The menu action retains the prior editor until the next main-queue turn because releasing it in that action caused an AppKit deallocation crash (`Sources/greendot/AppDelegate.swift:177`, `Sources/greendot/AppDelegate.swift:196`). Reload uses the same retained-editor pattern (`Sources/greendot/AppDelegate+Config.swift:33`, `Sources/greendot/AppDelegate+Config.swift:38`), and panel replacement also retains its prior panel (`Sources/greendot/StatusPageEditor.swift:31`, `Sources/greendot/StatusPageEditor.swift:65`). A panel replacement test exists (`Tests/greendotTests/PanelLifecycleTests.swift:9`), but it constructs panels directly, not the `AppDelegate.openEditor` menu path (`Tests/greendotTests/PanelLifecycleTests.swift:12`, `Sources/greendot/AppDelegate.swift:169`). Keep the workaround unless an exact-path macOS test and a supported-version check prove it unnecessary. Estimated safe reduction: 0 LOC.
 
-### legacy-004 - AppConfig version gate is an active format boundary
+### legacy-005 — Previous picker rule for repeated component IDs
 
-`Sources/StatusCore/PageStore.swift:3-12,44-62,73-76` persists `version`, sets `currentVersion` to `1`, and rejects versions newer than the current version. The field has existed since the initial `b18e16f` format; commit `ce7eea9` made validation apply on load and save. There is no old migration implementation to remove.
-
-Do not remove the version field or change the guard based only on the current repository. Existing users can have persisted files, and the public `AppConfig` type exposes this format. Keep it; if version 2 is introduced, add an explicit migration before changing the accepted range. No removable LOC is counted.
-
-## Low / Debatable
-
-### legacy-005 - Statuspal `.eu` support may be an unverified alternate-domain fallback
-
-`Sources/StatusCore/ProviderProbe.swift:171-196,222-226` recognizes `*.statuspal.eu`, scrapes the same host form, and tries both `statuspal.io` and `statuspal.eu` API prefixes. This support is present from the initial `b18e16f` implementation, but the current tests and changelog exercise/document `.statuspal.io` only. The repository does not establish that `.eu` is retired, nor that no user has such a watched page.
-
-Classify as NEEDS-VERIFICATION and review provider/user support before changing it. If `.eu` is intentionally unsupported, remove the host check, API prefix, and regex alternative together and add a migration/error path for affected saved pages; otherwise add a `.eu` regression fixture. Conditional reduction is approximately 4-8 LOC, not a safe current removal.
+**Class: NEEDS-VERIFICATION. Recommendation: KEEP.** `ComponentSelectionIndex` explicitly preserves the previous picker's last-preorder rule when two components share an ID (`Sources/greendot/ComponentSelectionIndex.swift:60`, `Sources/greendot/ComponentSelectionIndex.swift:61`). The current picker indexes checkboxes by component ID (`Sources/greendot/ComponentPicker.swift:90`, `Sources/greendot/ComponentPicker.swift:93`), and tests assert the repeated-ID result in the index and visible picker (`Tests/greendotTests/ComponentSelectionIndexTests.swift:48`, `Tests/greendotTests/ComponentPickerStateTests.swift:102`). This is active behavior for ambiguous provider data, not an unused old path. Change it only with a new repeated-ID rule and picker tests. Estimated safe reduction: 0 LOC.
 
 ## Recommendations
 
-1. Make no legacy-code deletion in this pass; all five findings are either active compatibility behavior or need external evidence.
-2. Add one realistic old `config.json` fixture with a populated pre-nesting snapshot and missing component-toggle fields. This will protect the two decoder shims from accidental cleanup.
-3. Document the supported config version and migration policy next to `AppConfig.currentVersion`; preserve forward-version rejection.
-4. Add an explicit Statuspal `.eu` test if the domain remains supported. If product policy retires it, perform a user-config inventory and controlled migration before removing it.
-5. Keep the UI-test environment paths and benchmark gate (`GREENDOT_*` variables), `DirectoryHTTPClient` host-specific/hostless fixture lookup, and preferred-provider fallback. They are all referenced by current tests or the Makefile and have no evidence of being concluded experiments.
+1. Keep the version-1 reader while the published upgrade path remains supported (`docs/settings-files.md:191`, `Sources/StatusCore/PageStore.swift:149`). If support ends, first define what happens to an unsaved version-1 file and to copied version-2 files with stale inline fields (`docs/settings-files.md:204`, `docs/settings-files.md:210`).
+2. Keep missing-field defaults while incomplete config files and older cached snapshots can be loaded (`docs/settings-files.md:65`, `Sources/StatusCore/Models.swift:56`, `Sources/StatusCore/Models.swift:170`).
+3. Keep the UI compatibility behavior until tests cover the actual menu replacement and repeated-ID picker paths on macOS (`Sources/greendot/AppDelegate.swift:169`, `Sources/greendot/ComponentPicker.swift:90`, `Tests/greendotTests/ComponentPickerStateTests.swift:102`).
 
-## Out of Scope / Retained Active Paths
+## Out of Scope / Flagged for Review
 
-- `Sources/StatusCore/DirectoryHTTPClient.swift:16-24` has host-specific lookup followed by a hostless lookup. Both are current contracts: `testDirectoryClientPrefersHostFolder` covers the first and `testDirectoryClientReadsSummaryPath` covers the second. It is not safe-to-remove legacy code.
-- `Sources/StatusCore/ProviderProbe.swift:89-113` tries a preferred provider first and falls back to the other providers. `testPreferredProviderMissFallsBackToOthers` covers this current behavior; no provider implementation is obsolete in the current tree.
-- `GREENDOT_CONFIG_DIR`, `GREENDOT_FIXTURE_DIR`, `GREENDOT_SKIP_LOGIN_ITEM`, `GREENDOT_SKIP_SEED`, `GREENDOT_POLL_SECONDS`, `GREENDOT_UI_TEST`, dump/log variables, and `GREENDOT_BENCH` are set by current UI tests or `Makefile`. No flag is always-on, always-off, or concluded in repository history.
-- `Sources/greendot/MenuBarController.swift` and `Sources/greendot/Notifier.swift` were deleted in current history (`16d3c75` and `1f9e871`) and have no current references; they are not remaining legacy code.
-- Generated `.build`, `greendot.app`, generated UI project files, and existing cleanup reports were excluded as requested. Rejected design alternatives in `docs/superpowers/specs/2026-08-21-status-menu-design.md` are decision records, not runtime legacy paths.
-
-## Independent Verification Disposition
-
-The mandatory gate selected 4 of 5 records. Independent verifiers confirmed 3; those records now have `verified: true`. 1 lower-confidence record remains provisional.
-
-The verifier found `legacy-001` only partial. It has been narrowed to `UNCERTAIN` / `REVIEW`, with the counterevidence recorded in the machine-readable detail.
-
-Verification evidence: [verification-batch-1.md](verification-batch-1.md), [verification-batch-2.md](verification-batch-2.md).
-
-Final machine-readable severity counts: HIGH 0, MEDIUM 4, LOW 1. The original prose above records the specialist's pre-verification assessment; this disposition and the JSON block below are authoritative after verification.
+- No concluded old/new feature flag was identified. `GREENDOT_UI_TEST`, `GREENDOT_SKIP_LOGIN_ITEM`, and `GREENDOT_SKIP_SEED` are used by the current UI test launch (`Sources/greendot/AppDelegate.swift:208`, `UITests/GreenDotUITests/GreenDotUITests.swift:35`, `UITests/GreenDotUITests/GreenDotUITests.swift:40`). `GREENDOT_BENCH` gates the current benchmark (`Makefile:15`, `Tests/greendotTests/PerformanceHarnessTests.swift:26`). The poll and config directory overrides remain documented (`README.md:55`). These are current controls, not known dead flags.
+- Statuspal `.eu` support and provider fallback attempts are live probe behavior, with no evidence that the domain or fallback is obsolete (`Sources/StatusCore/ProviderProbe.swift:183`, `Sources/StatusCore/ProviderProbe.swift:203`, `Sources/StatusCore/ProviderProbe.swift:205`). The format-version guard protects the persisted-file boundary (`Sources/StatusCore/PageStore.swift:97`, `Tests/StatusCoreTests/ProbeAndMonitorTests.swift:234`). Do not treat these as legacy removals.
+- The directly marked legacy fields are the launch flag and inline snapshot (`Sources/StatusCore/StateFile.swift:52`, `Sources/StatusCore/Models.swift:176`). Static review cannot establish whether external users still hold version-1 files (`docs/settings-files.md:204`).
 
 ## Machine-Readable Findings
 
 ```json
-{"findings":[{"id":"legacy-001","file":"Sources/greendot/AppDelegate.swift","line":182,"severity":"MEDIUM","confidence":"UNCERTAIN","recommendation":"REVIEW","classification":"NEEDS-VERIFICATION","detail":"History and analogous lifecycle tests support the workaround, but exact AppDelegate wiring is not directly tested. Independent verifier disposition: PARTIAL. AppDelegate.swift:169-188 retains previous and defers show; git commit 889a31d records the SIGSEGV rationale. Current tests cover analogous replacements but not private AppDelegate.openEditor and its identity guard.","verified":false},{"id":"legacy-002","file":"Sources/StatusCore/Models.swift","line":164,"severity":"MEDIUM","confidence":"CERTAIN","recommendation":"KEEP","classification":"NEEDS-VERIFICATION","detail":"The decoder preserves missing later component-toggle keys; notifications were already present in the initial repository schema.","verified":true},{"id":"legacy-003","file":"Sources/StatusCore/Models.swift","line":44,"severity":"MEDIUM","confidence":"CERTAIN","recommendation":"KEEP","classification":"NEEDS-VERIFICATION","detail":"The custom decoder is active compatibility for pre-nesting snapshots.","verified":true},{"id":"legacy-004","file":"Sources/StatusCore/PageStore.swift","line":74,"severity":"MEDIUM","confidence":"CERTAIN","recommendation":"KEEP","classification":"NEEDS-VERIFICATION","detail":"The version guard is an active forward-compatibility boundary until explicit migration exists.","verified":true},{"id":"legacy-005","file":"Sources/StatusCore/ProviderProbe.swift","line":193,"severity":"LOW","confidence":"UNCERTAIN","recommendation":"REVIEW","classification":"NEEDS-VERIFICATION","detail":"Statuspal .eu host and API fallback support is current but untested and undocumented beyond code, so external user/provider support must be checked before any removal.","verified":false}]}
+{"findings":[
+  {"id":"legacy-001","file":"Sources/StatusCore/PageStore.swift","line":149,"severity":"MEDIUM","confidence":"CERTAIN","recommendation":"KEEP","detail":"Version-1 inline state still loads and migrates on the next save; removal needs a supported-format policy.","verified":false},
+  {"id":"legacy-002","file":"Sources/StatusCore/Models.swift","line":170,"severity":"LOW","confidence":"CERTAIN","recommendation":"KEEP","detail":"Missing watched-page fields are accepted for older and hand-edited config files.","verified":false},
+  {"id":"legacy-003","file":"Sources/StatusCore/Models.swift","line":56,"severity":"LOW","confidence":"LIKELY","recommendation":"KEEP","detail":"Missing component fields are defaulted while cached and version-1 snapshots can still load.","verified":false},
+  {"id":"legacy-004","file":"Sources/greendot/AppDelegate.swift","line":196,"severity":"LOW","confidence":"LIKELY","recommendation":"REVIEW","detail":"The retained editor works around an AppKit deallocation crash; the exact menu path needs a macOS test before removal.","verified":false},
+  {"id":"legacy-005","file":"Sources/greendot/ComponentSelectionIndex.swift","line":60,"severity":"LOW","confidence":"CERTAIN","recommendation":"KEEP","detail":"The last-preorder repeated-ID rule is active picker behavior with regression tests.","verified":false}
+]}
 ```
