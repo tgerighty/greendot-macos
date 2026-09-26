@@ -24,7 +24,8 @@ final class DirectStatusParserTests: XCTestCase {
 
     func testAdobeClosedHistoryIsGreen() throws {
         let data = Data("""
-        {"incidentEvent":{"incidents":{"1":{"products":{"9":{"id":"9","name":"Acrobat","history":{"10":{"status":"Closed","severity":"Major"}}}}}}}}
+        {"incidentEvent":{"incidents":{"1":{"products":{"9":{"id":"9","name":"Acrobat",\
+        "history":{"10":{"status":"Closed","severity":"Major"}}}}}}}}
         """.utf8)
         let snap = try AdobeParser.parse(
             data: data,
@@ -126,8 +127,9 @@ final class DirectStatusProbeTests: XCTestCase {
         {"data":{"Expense":{"Service":"Expense","Current Status":{"status":"normal","incidents":[]}}}}
         """.utf8)
         var inner = MapHTTPClient()
-        for dc in ["us", "us2", "eu2", "apj1", "usg"] {
-            inner.byURL["https://open.concur.com/api/v2/status_history?data_center=\(dc)"] = (body, 200)
+        for datacenter in ["us", "us2", "eu2", "apj1", "usg"] {
+            let url = "https://open.concur.com/api/v2/status_history?data_center=\(datacenter)"
+            inner.byURL[url] = (body, 200)
         }
         let snap = try await ProviderProbe.probe(
             pageURL: URL(string: "https://open.concur.com")!,

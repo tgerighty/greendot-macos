@@ -7,7 +7,9 @@ final class OktaParserTests: XCTestCase {
     func testActiveDisruptionBuildsCellChildren() throws {
         let html = wrap(
             incidents: """
-            [{"Id":"a9C1","Name":"I-1","Incident_Title__c":"Login failures","Status__c":"Investigating","Category__c":"Service Disruption","Impacted_Cells__c":"okta.com:9;oktapreview.com:1"}]
+            [{"Id":"a9C1","Name":"I-1","Incident_Title__c":"Login failures",\
+            "Status__c":"Investigating","Category__c":"Service Disruption",\
+            "Impacted_Cells__c":"okta.com:9;oktapreview.com:1"}]
             """,
             outages: "[]"
         )
@@ -33,7 +35,9 @@ final class OktaParserTests: XCTestCase {
     func testResolvedOnlyIsGreenEmptyTree() throws {
         let html = wrap(
             incidents: """
-            [{"Id":"a9C2","Name":"I-2","Incident_Title__c":"Old issue","Status__c":"Resolved","Category__c":"Service Disruption","Impacted_Cells__c":"okta.com:1"}]
+            [{"Id":"a9C2","Name":"I-2","Incident_Title__c":"Old issue",\
+            "Status__c":"Resolved","Category__c":"Service Disruption",\
+            "Impacted_Cells__c":"okta.com:1"}]
             """,
             outages: "[]"
         )
@@ -46,7 +50,9 @@ final class OktaParserTests: XCTestCase {
     func testDegradationAndPlannedOutageAreYellow() throws {
         let html = wrap(
             incidents: """
-            [{"Id":"a9C3","Name":"I-3","Incident_Title__c":"Slow SSO","Status__c":"Monitoring","Category__c":"Service Degradation","Impacted_Cells__c":"okta.com:2"}]
+            [{"Id":"a9C3","Name":"I-3","Incident_Title__c":"Slow SSO",\
+            "Status__c":"Monitoring","Category__c":"Service Degradation",\
+            "Impacted_Cells__c":"okta.com:2"}]
             """,
             outages: """
             [{"Id":"P-1","OutageDetails__c":"Cell OK9 maintenance"}]

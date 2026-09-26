@@ -5,6 +5,16 @@ extension ProviderProbe {
         context: ProbeContext,
         flags: inout ProbeFlags
     ) async throws -> ProbeHit? {
+        if let hit = try await probePlatformLandings(context: context, flags: &flags) {
+            return hit
+        }
+        return try await probeDirectLandings(context: context, flags: &flags)
+    }
+
+    static func probePlatformLandings(
+        context: ProbeContext,
+        flags: inout ProbeFlags
+    ) async throws -> ProbeHit? {
         if let hit = try await probeAWSIfLanding(context: context, flags: &flags) {
             return hit
         }
@@ -26,9 +36,13 @@ extension ProviderProbe {
         if let hit = try await probeGoogleIfLanding(context: context, flags: &flags) {
             return hit
         }
-        if let hit = try await probeAppleIfLanding(context: context, flags: &flags) {
-            return hit
-        }
+        return try await probeAppleIfLanding(context: context, flags: &flags)
+    }
+
+    static func probeDirectLandings(
+        context: ProbeContext,
+        flags: inout ProbeFlags
+    ) async throws -> ProbeHit? {
         if let hit = try await probeStripeIfLanding(context: context, flags: &flags) {
             return hit
         }

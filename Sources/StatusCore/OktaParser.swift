@@ -2,7 +2,9 @@ import Foundation
 
 public enum OktaParser {
     public static func parse(data: Data, sourceURL: URL) throws -> PageSnapshot {
-        let html = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
+        guard let html = String(bytes: data, encoding: .utf8) else {
+            throw ParserError.notThisProvider
+        }
         guard let incidentJSON = embeddedJSON(named: "incidents", in: html) else {
             throw ParserError.notThisProvider
         }

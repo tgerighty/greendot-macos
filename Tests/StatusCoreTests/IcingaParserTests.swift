@@ -77,22 +77,25 @@ final class IcingaParserTests: XCTestCase {
         """.utf8)
         let services = Data("""
         {"results":[
-          {"attrs":{"name":"warn","display_name":"Warn","host_name":"a","__name":"a!warn","state":1.0,"downtime_depth":0.0}},
-          {"attrs":{"name":"unknown","display_name":"Unk","host_name":"a","__name":"a!unknown","state":3.0,"downtime_depth":0.0}},
-          {"attrs":{"name":"crit","display_name":"Crit","host_name":"a","__name":"a!crit","state":2.0,"downtime_depth":2.0}}
+          {"attrs":{"name":"warn","display_name":"Warn","host_name":"a",\
+          "__name":"a!warn","state":1.0,"downtime_depth":0.0}},
+          {"attrs":{"name":"unknown","display_name":"Unk","host_name":"a",\
+          "__name":"a!unknown","state":3.0,"downtime_depth":0.0}},
+          {"attrs":{"name":"crit","display_name":"Crit","host_name":"a",\
+          "__name":"a!crit","state":2.0,"downtime_depth":2.0}}
         ]}
         """.utf8)
         let snap = try IcingaParser.parse(hosts: hosts, services: services, sourceURL: sourceURL)
         XCTAssertEqual(snap.components.map(\.id), ["a", "b", "c"])
 
-        let a = snap.components[0]
-        XCTAssertEqual(a.children[0].statusText, "Operational")
-        XCTAssertEqual(child(a, "a!warn")?.severity, .yellow)
-        XCTAssertEqual(child(a, "a!warn")?.statusText, "Degraded")
-        XCTAssertEqual(child(a, "a!unknown")?.severity, .yellow)
-        XCTAssertEqual(child(a, "a!unknown")?.statusText, "Unknown")
-        XCTAssertEqual(child(a, "a!crit")?.severity, .yellow)
-        XCTAssertEqual(child(a, "a!crit")?.statusText, "Maintenance")
+        let host = snap.components[0]
+        XCTAssertEqual(host.children[0].statusText, "Operational")
+        XCTAssertEqual(child(host, "a!warn")?.severity, .yellow)
+        XCTAssertEqual(child(host, "a!warn")?.statusText, "Degraded")
+        XCTAssertEqual(child(host, "a!unknown")?.severity, .yellow)
+        XCTAssertEqual(child(host, "a!unknown")?.statusText, "Unknown")
+        XCTAssertEqual(child(host, "a!crit")?.severity, .yellow)
+        XCTAssertEqual(child(host, "a!crit")?.statusText, "Maintenance")
 
         XCTAssertEqual(snap.components[1].children[0].severity, .yellow)
         XCTAssertEqual(snap.components[1].children[0].statusText, "Unreachable")

@@ -8,7 +8,8 @@ final class IcingaProbeTests: XCTestCase {
     {"results":[{"attrs":{"name":"web-1","display_name":"Web 1","state":0.0,"downtime_depth":0.0}}]}
     """.utf8)
     private let servicesJSON = Data("""
-    {"results":[{"attrs":{"name":"http","display_name":"HTTP","host_name":"web-1","__name":"web-1!http","state":0.0,"downtime_depth":0.0}}]}
+    {"results":[{"attrs":{"name":"http","display_name":"HTTP","host_name":"web-1",\
+    "__name":"web-1!http","state":0.0,"downtime_depth":0.0}}]}
     """.utf8)
 
     func testIcingaAPIFetchesHostsAndServices() async throws {
