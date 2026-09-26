@@ -44,10 +44,6 @@ extension ProviderProbe {
         return prefix.range(of: "<([a-zA-Z_][\\w.-]*:)?(rss|feed)(\\s|>|/)", options: options) != nil
     }
 
-    static func decodedText(_ data: Data) -> String? {
-        decodeXMLBytes(data)
-    }
-
     static func decodedPrefix(_ data: Data, maxBytes: Int) -> String? {
         let slice = Data(data.prefix(maxBytes))
         if let text = decodeUTF16Bytes(slice) { return text }
@@ -60,7 +56,7 @@ extension ProviderProbe {
         return String(data: slice, encoding: .isoLatin1)
     }
 
-    static func decodeXMLBytes(_ data: Data) -> String? {
+    static func decodedText(_ data: Data) -> String? {
         if let text = decodeUTF16Bytes(data) { return text }
         return String(data: data, encoding: .utf8)
             ?? String(data: data, encoding: .isoLatin1)
@@ -185,12 +181,7 @@ private extension ProviderProbe {
             }
         }
         let body = hubCacheBody(parts: parts, statuses: statuses)
-        if let previousBody = context.previousBody,
-           let previousSnapshot = context.previousSnapshot,
-           !previousSnapshot.isUnreachable,
-           body == previousBody {
-            return ProbeHit(snapshot: previousSnapshot, body: body)
-        }
+        if let hit = context.cachedHit(for: body) { return hit }
         var groups: [ComponentStatus] = []
         var parsedAny = false
         for (index, feed) in feeds.enumerated() {
@@ -278,12 +269,7 @@ private extension ProviderProbe {
 
     static func feedHit(_ data: Data, sourceURL: URL, context: ProbeContext) -> ProbeHit? {
         let body = feedCacheBody(data, sourceURL: sourceURL)
-        if let previousBody = context.previousBody,
-           let previousSnapshot = context.previousSnapshot,
-           !previousSnapshot.isUnreachable,
-           body == previousBody {
-            return ProbeHit(snapshot: previousSnapshot, body: body)
-        }
+        if let hit = context.cachedHit(for: body) { return hit }
         do {
             recordParse()
             let snapshot = try RssParser.parse(data: data, sourceURL: sourceURL)

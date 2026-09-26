@@ -240,12 +240,7 @@ extension ProviderProbe {
             flags.recordHTTP(status: status)
             let body = Data("HTTP \(status)\n".utf8) + data
             guard status == 200 else { return nil }
-            if let previousBody = context.previousBody,
-               let previousSnapshot = context.previousSnapshot,
-               !previousSnapshot.isUnreachable,
-               body == previousBody {
-                return ProbeHit(snapshot: previousSnapshot, body: body)
-            }
+            if let hit = context.cachedHit(for: body) { return hit }
             do {
                 recordParse()
                 let snapshot = try parse(data, normalizedBase(sourceURL))

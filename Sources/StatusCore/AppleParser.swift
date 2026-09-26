@@ -6,7 +6,7 @@ public enum AppleParser {
               let services = json["services"] as? [[String: Any]] else {
             throw ParserError.notThisProvider
         }
-        let components = services.compactMap(serviceGroup)
+        let components = try services.compactMap(serviceGroup)
         return PageSnapshot(
             name: "Apple",
             url: ProviderProbe.normalizedBase(sourceURL),
@@ -18,8 +18,11 @@ public enum AppleParser {
         )
     }
 
-    private static func serviceGroup(_ item: [String: Any]) -> ComponentStatus? {
+    private static func serviceGroup(_ item: [String: Any]) throws -> ComponentStatus? {
         guard let name = JSONScalar.nonempty(item["serviceName"] as? String) else { return nil }
+        guard item["events"] == nil || item["events"] is [[String: Any]] else {
+            throw ParserError.invalidJSON
+        }
         let events = (item["events"] as? [[String: Any]] ?? []).compactMap { event -> ComponentStatus? in
             let status = (event["eventStatus"] as? String ?? event["dateStatus"] as? String ?? "").lowercased()
             if status == "resolved" || status == "completed" { return nil }

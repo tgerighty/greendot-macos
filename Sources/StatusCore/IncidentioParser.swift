@@ -11,6 +11,9 @@ public enum IncidentioParser {
             ?? "Status page"
         let pageURL = (summary["public_url"] as? String).flatMap(URL.init(string:))
             ?? ProviderProbe.normalizedBase(sourceURL)
+        guard summary["ongoing_incidents"] == nil || summary["ongoing_incidents"] is [[String: Any]] else {
+            throw ParserError.invalidJSON
+        }
         let components = (summary["ongoing_incidents"] as? [[String: Any]] ?? []).compactMap(incidentGroup)
         return PageSnapshot(
             name: name,

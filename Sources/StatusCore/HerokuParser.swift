@@ -16,6 +16,9 @@ public enum HerokuParser {
                 id: name
             )
         }
+        guard json["incidents"] == nil || json["incidents"] is [[String: Any]] else {
+            throw ParserError.invalidJSON
+        }
         let incidents = (json["incidents"] as? [[String: Any]] ?? []).compactMap { item -> ComponentStatus? in
             guard let id = JSONScalar.stringID(item["id"]) else { return nil }
             let name = JSONScalar.nonempty(item["title"] as? String) ?? id
@@ -26,6 +29,9 @@ public enum HerokuParser {
                 id: id,
                 isGroup: true
             )
+        }
+        guard json["scheduled"] == nil || json["scheduled"] is [[String: Any]] else {
+            throw ParserError.invalidJSON
         }
         let inProgress = (json["scheduled"] as? [[String: Any]] ?? []).compactMap { item -> ComponentStatus? in
             guard (item["state"] as? String)?.lowercased() == "in-progress" else { return nil }

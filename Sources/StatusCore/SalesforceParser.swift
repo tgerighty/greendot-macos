@@ -2,13 +2,10 @@ import Foundation
 
 public enum SalesforceParser {
     public static func parse(data: Data, sourceURL: URL) throws -> PageSnapshot {
-        guard let items = try JSONSerialization.jsonObject(with: data) as? [Any] else {
+        guard let items = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
             throw ParserError.notThisProvider
         }
-        let components = items.compactMap { item -> ComponentStatus? in
-            guard let incident = item as? [String: Any] else { return nil }
-            return incidentGroup(incident)
-        }
+        let components = items.compactMap(incidentGroup)
         return PageSnapshot(
             name: "Salesforce",
             url: sourceURL,
@@ -41,8 +38,8 @@ public enum SalesforceParser {
                 return trimmed.split(whereSeparator: \.isNewline).first.map(String.init) ?? trimmed
             }
         }
-        let type = nonempty(incident["type"] as? String)
-        let external = nonempty(incident["externalId"] as? String)
+        let type = JSONScalar.nonempty(incident["type"] as? String)
+        let external = JSONScalar.nonempty(incident["externalId"] as? String)
         if let type, let external { return "\(type) \(external)" }
         if let type { return "\(type) \(id)" }
         return external ?? id
@@ -67,13 +64,8 @@ public enum SalesforceParser {
     private static func intID(_ value: Any?) -> String? {
         if let number = value as? Int { return String(number) }
         if let number = value as? NSNumber { return number.stringValue }
-        if let text = nonempty(value as? String), text.allSatisfy(\.isNumber) { return text }
+        if let text = JSONScalar.nonempty(value as? String), text.allSatisfy(\.isNumber) { return text }
         return nil
     }
 
-    private static func nonempty(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
 }

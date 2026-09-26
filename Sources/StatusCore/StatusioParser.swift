@@ -7,7 +7,7 @@ public enum StatusioParser {
               let overall = result["status_overall"] as? [String: Any] else {
             throw ParserError.notThisProvider
         }
-        let mapped = StatusMapping.statusio(intValue(overall["status_code"]))
+        let mapped = StatusMapping.statusio(JSONScalar.intValue(overall["status_code"]))
         let components = (result["status"] as? [[String: Any]] ?? []).compactMap(component)
         let leaves = ComponentTree.enabledLeafSeverity(in: components, disabledKeys: [])
         let overallSeverity = Aggregator.fromSeverities([mapped.severity, leaves])
@@ -23,23 +23,23 @@ public enum StatusioParser {
     }
 
     private static func component(_ item: [String: Any]) -> ComponentStatus? {
-        guard let name = nonempty(item["name"] as? String) else { return nil }
-        let mapped = StatusMapping.statusio(intValue(item["status_code"]))
+        guard let name = JSONScalar.nonempty(item["name"] as? String) else { return nil }
+        let mapped = StatusMapping.statusio(JSONScalar.intValue(item["status_code"]))
         let children = (item["containers"] as? [[String: Any]] ?? []).compactMap { child -> ComponentStatus? in
-            guard let childName = nonempty(child["name"] as? String) else { return nil }
-            let childMapped = StatusMapping.statusio(intValue(child["status_code"]))
+            guard let childName = JSONScalar.nonempty(child["name"] as? String) else { return nil }
+            let childMapped = StatusMapping.statusio(JSONScalar.intValue(child["status_code"]))
             return ComponentStatus(
                 name: childName,
                 severity: childMapped.severity,
                 statusText: childMapped.text,
-                id: stringID(child["id"]) ?? childName
+                id: JSONScalar.stringID(child["id"]) ?? childName
             )
         }
         return ComponentStatus(
             name: name,
             severity: mapped.severity,
             statusText: mapped.text,
-            id: stringID(item["id"]) ?? name,
+            id: JSONScalar.stringID(item["id"]) ?? name,
             children: children,
             isGroup: true
         )
@@ -48,8 +48,14 @@ public enum StatusioParser {
 
 enum JSONScalar {
     static func intValue(_ value: Any?) -> Int? {
-        if let number = value as? Int { return number }
-        if let number = value as? NSNumber { return number.intValue }
+        if let number = value as? NSNumber {
+            // Prefer the numeric value so integral JSON decimals ("1.0") stay Int.
+            let dbl = number.doubleValue
+            if dbl.rounded() == dbl, dbl >= Double(Int.min), dbl <= Double(Int.max) {
+                return Int(dbl)
+            }
+            return Int(number.stringValue)
+        }
         return nil
     }
 
@@ -65,7 +71,3 @@ enum JSONScalar {
         return trimmed.isEmpty ? nil : trimmed
     }
 }
-
-private func intValue(_ value: Any?) -> Int? { JSONScalar.intValue(value) }
-private func stringID(_ value: Any?) -> String? { JSONScalar.stringID(value) }
-private func nonempty(_ value: String?) -> String? { JSONScalar.nonempty(value) }

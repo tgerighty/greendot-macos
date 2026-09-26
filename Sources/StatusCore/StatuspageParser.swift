@@ -44,7 +44,7 @@ public enum StatuspageParser {
             return Row(
                 id: id,
                 name: name,
-                status: (item["status"] as? String) ?? "operational",
+                status: (item["status"] as? String) ?? "unknown",
                 isGroup: item["group"] as? Bool == true,
                 groupID: item["group_id"] as? String
             )

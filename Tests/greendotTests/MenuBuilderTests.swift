@@ -216,28 +216,17 @@ final class MenuBuilderTests: XCTestCase {
         return inner
     }
 
-    private static func greenPage(url: String, name: String, provider: StatusProvider) -> WatchedPage {
-        let pageURL = URL(string: url)!
-        return WatchedPage(
-            url: pageURL,
-            name: name,
-            snapshot: PageSnapshot(
-                name: name,
-                url: pageURL,
-                provider: provider,
-                overall: .green,
-                components: [ComponentStatus(name: "API", severity: .green, statusText: "Operational")],
-                incidents: [],
-                isUnreachable: false
-            )
-        )
-    }
-
     private static func mixedProviderPages() -> [WatchedPage] {
         [
-            greenPage(url: "https://www.githubstatus.com", name: "GitHub", provider: .statuspage),
-            greenPage(url: "https://instat.us", name: "Instatus", provider: .instatus),
-            greenPage(url: "https://acme.statuspal.io", name: "Acme", provider: .statuspal)
+            BenchmarkFixtures.greenPage(
+                host: "www.githubstatus.com", name: "GitHub", provider: .statuspage
+            ),
+            BenchmarkFixtures.greenPage(
+                host: "instat.us", name: "Instatus", provider: .instatus
+            ),
+            BenchmarkFixtures.greenPage(
+                host: "acme.statuspal.io", name: "Acme", provider: .statuspal
+            )
         ]
     }
 

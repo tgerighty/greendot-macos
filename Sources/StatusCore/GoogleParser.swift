@@ -2,13 +2,10 @@ import Foundation
 
 public enum GoogleParser {
     public static func parse(data: Data, sourceURL: URL) throws -> PageSnapshot {
-        guard let items = try JSONSerialization.jsonObject(with: data) as? [Any] else {
+        guard let items = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
             throw ParserError.notThisProvider
         }
-        let components = items.compactMap { item -> ComponentStatus? in
-            guard let incident = item as? [String: Any] else { return nil }
-            return activeIncident(incident)
-        }
+        let components = items.compactMap(activeIncident)
         return PageSnapshot(
             name: pageName(sourceURL),
             url: ProviderProbe.normalizedBase(sourceURL),
