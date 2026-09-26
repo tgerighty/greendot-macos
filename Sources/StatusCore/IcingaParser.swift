@@ -105,9 +105,7 @@ public enum IcingaParser {
     }
 
     private static func intValue(_ value: Any?) -> Int? {
-        if let number = value as? NSNumber { return Int(exactly: number.doubleValue) }
-        if let value = value as? String { return Int(value) }
-        return nil
+        JSONScalar.intValue(value) ?? (value as? String).flatMap(Int.init)
     }
 
     private static func isPositive(_ value: Any?) -> Bool {
