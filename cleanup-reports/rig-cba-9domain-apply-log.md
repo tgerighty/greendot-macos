@@ -14,7 +14,7 @@ Source: the nine current `*-assessment.md` files at base `9320756a8a8bfdacbc4d45
 | dedup-011 | Reused `BenchmarkFixtures.greenPage` in menu tests. | Existing menu tests pass; `9acbb11` passes 494 tests. |
 | weak-typing-001–006 | Invalid component statuses are yellow; invalid required Okta JSON and incident roots throw; numeric status conversion requires an exact integer. | `4349f6a` adds seven boundary tests (15 observed failures before fix); `72c394e` passes 501 tests. Final suite: 502 tests passed. |
 | weak-typing-008 | Removed the Statuspal collection bridge. | Same change as ai-slop-003; `38d5574` passes 494 tests. |
-| defensive-002–004 | Same parser boundary fixes as weak-typing-001–003, 006, plus present malformed incident collections in incident.io, Apple, and Heroku. Okta now rejects malformed planned outages. | `4349f6a` and `ab4b257` reproduce failures; `72c394e` and `e933c51` pass 502 tests. |
+| defensive-002–004 | Same parser boundary fixes as weak-typing-001–003, 006, plus present malformed incident collections in incident.io, Apple, and Heroku. Okta rejects malformed planned outages; Heroku rejects malformed scheduled data. | `4349f6a`, `ab4b257`, and `5fd4336` reproduce failures; `72c394e`, `e933c51`, and `7f9475f` pass 502 tests. |
 
 ## Skipped, by report
 
@@ -47,4 +47,5 @@ No item was marked RESOLVED-UPSTREAM or MISSING-ON-TIP: the cited paths existed 
 - macOS isolated test copy: baseline 494 tests passed; after subtractive and structural phases 494 passed; after parser fixes 502 passed.
 - `swift test --parallel` compiled every package target, with no new type errors.
 - `git diff --check` passed. SwiftLint was unavailable on the Linux worker and macOS test host; the PR Sonar extras lane supplies its gate result.
+- An independent read-only review found the Heroku scheduled-data gap. The focused red test reproduced it, the fix passed the full suite, and the reviewer reported no remaining concrete findings in changed paths.
 - No Vitest project exists, so the cluster Vitest runner does not apply.
