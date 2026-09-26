@@ -48,7 +48,14 @@ public enum StatusioParser {
 
 enum JSONScalar {
     static func intValue(_ value: Any?) -> Int? {
-        if let number = value as? NSNumber { return Int(number.stringValue) }
+        if let number = value as? NSNumber {
+            // Prefer the numeric value so integral JSON decimals ("1.0") stay Int.
+            let dbl = number.doubleValue
+            if dbl.rounded() == dbl, dbl >= Double(Int.min), dbl <= Double(Int.max) {
+                return Int(dbl)
+            }
+            return Int(number.stringValue)
+        }
         return nil
     }
 
