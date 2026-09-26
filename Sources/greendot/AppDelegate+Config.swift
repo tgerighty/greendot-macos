@@ -26,6 +26,9 @@ extension AppDelegate {
     /// and nothing is written until a reload succeeds.
     @MainActor
     func reloadConfig() {
+        guard !reloadingConfig else { return }
+        reloadingConfig = true
+        defer { reloadingConfig = false }
         // A first-run seed still probing must not append OpenAI to the config the user just loaded.
         startupTask?.cancel()
         startupTask = nil

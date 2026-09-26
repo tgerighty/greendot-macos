@@ -55,7 +55,13 @@ extension Monitor {
         }
     }
 
-    public func edit(id: UUID, url: URL, name: String?) async throws {
+    public func edit(
+        id: UUID,
+        url: URL,
+        name: String?,
+        disabledComponentNames: Set<String>? = nil,
+        enabledRegions: [String]? = nil
+    ) async throws {
         try Task.checkCancellation()
         guard withStateLock({ config.pages.contains { $0.id == id } }) else {
             throw MonitorError.pageNotFound(id)
@@ -69,6 +75,12 @@ extension Monitor {
             next.pages[index].url = ProviderProbe.persistedPageURL(url)
             next.pages[index].name = trimmed(name) ?? snapshot.name
             next.pages[index].snapshot = snapshot
+            if let disabledComponentNames {
+                next.pages[index].disabledComponentNames = disabledComponentNames
+            }
+            if let enabledRegions {
+                next.pages[index].enabledRegions = enabledRegions
+            }
             try Task.checkCancellation()
         }
     }
@@ -143,10 +155,27 @@ extension Monitor {
     ) throws {
         var next = withStateLock { config }
         try body(&next)
-        try store.save(next)
+        let adoptedDisk: Bool
+        do {
+            try store.save(next)
+            adoptedDisk = false
+        } catch StoreError.changedOnDisk {
+            // The file on disk is newer. Remember it before applying the edit, so a failed
+            // edit cannot write the old pages back over that file.
+            let loaded = try store.load()
+            withStateLock {
+                config = loaded
+                lastBodies.removeAll()
+            }
+            next = loaded
+            try body(&next)
+            try store.save(next)
+            adoptedDisk = true
+        }
         let nextPageIDs = Set(next.pages.map(\.id))
         withStateLock {
             config = next
+            if adoptedDisk { lastBodies.removeAll() }
             pageInputRevisions = pageInputRevisions.filter { nextPageIDs.contains($0.key) }
             for pageID in nextPageIDs where pageInputRevisions[pageID] == nil {
                 pageInputRevisions[pageID] = 0

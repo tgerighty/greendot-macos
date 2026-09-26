@@ -4,6 +4,15 @@
 
 ### Added
 
+- A page can list `enabledRegions`. greendot counts a component only when its name or id contains one of those strings. Children of a matching component count too. An empty list mutes every component. A missing list keeps the component mute list. A vendor region that is not in the list stays muted, including a region added later.
+- Azure has its own status page at https://azure.status.microsoft/en-us/status. greendot reads the Azure RSS feed for that page. The Microsoft page still includes Azure unless that group is muted.
+- SAP Concur at https://open.concur.com/. Each datacenter is a group. A service is a leaf. `normal` is green, `degradation` is yellow, and `disruption` is red.
+- Adobe at https://status.adobe.com/. A product is a leaf only while its latest history entry is not closed or dismissed. Major or critical severity is red. Any other open severity is yellow. No open product is green.
+- Azure DevOps at https://status.dev.azure.com/. Each service is a group. Each geography is a leaf. `healthy` is green, `degraded` is yellow, and `unhealthy` is red.
+- n8n at https://status.n8n.cloud/. Each monitor is a leaf. `success` is green, `warning` is yellow, and `danger` is red.
+- Zscaler at https://trust.zscaler.com/. The cloud banner is the page status. `none` is green and shows no components. `disruption` is red. Any other severity is yellow.
+- Qlik Cloud at https://status.qlikcloud.com/. greendot reads the Statuspage JSON for that page.
+- BitBar at https://status.bitbar.com/. greendot reads the Statuspage JSON on bitbar.status.smartbear.com.
 - Salesforce Trust at https://status.salesforce.com/. Active incidents are groups. Impacted services are children. Empty is green.
 - Status.io pages (for example GitLab, Databricks, Neon, Dynatrace). Components are groups. Regions or containers are children.
 - Slack at https://slack-status.com/. Active incidents are groups. Empty is green.
@@ -19,6 +28,7 @@
 
 ### Changed
 
+- greendot does not show a dialog when `config.json` changes on disk. It loads the file. An open Add, Edit, or Remove window waits until that window closes. Component choices in that window are written when the window closes, not on each click.
 - About greendot shows the number of merges into `main` as the version, and the short Git commit of `main` as the build number.
 - A page gives one notification for each unhealthy period. greendot shows the notification with a sound when the page stops being green. While the page stays unhealthy, a change of colour rewrites the notification on screen. That change makes no sound, and it does not open a notification you clicked away. greendot uses a sound again when the page becomes green. A page that goes out of reach for one poll and comes back to the same colour thus gives one notification, not three.
 - greendot asks the system whether the Mac has a network route, instead of inferring it from every page failing in the same poll. When the system reports no route, greendot makes no requests, shows the network notification at once rather than at the next poll, and accepts one watched page as enough to claim the outage, because a site outage is no longer an alternative explanation. It polls again as soon as the route returns.

@@ -29,7 +29,28 @@ extension ProviderProbe {
         if let hit = try await probeAppleIfLanding(context: context, flags: &flags) {
             return hit
         }
-        return try await probeStripeIfLanding(context: context, flags: &flags)
+        if let hit = try await probeStripeIfLanding(context: context, flags: &flags) {
+            return hit
+        }
+        if let hit = try await probeBitBarIfLanding(context: context, flags: &flags) {
+            return hit
+        }
+        if let hit = try await probeConcurIfLanding(context: context, flags: &flags) {
+            return hit
+        }
+        if let hit = try await probeAdobeIfLanding(context: context, flags: &flags) {
+            return hit
+        }
+        if let hit = try await probeAzureDevOpsIfLanding(context: context, flags: &flags) {
+            return hit
+        }
+        if let hit = try await probeN8nIfLanding(context: context, flags: &flags) {
+            return hit
+        }
+        if let hit = try await probeZscalerIfLanding(context: context, flags: &flags) {
+            return hit
+        }
+        return try await probeQlikIfLanding(context: context, flags: &flags)
     }
 
     static func probeSlackIfLanding(
@@ -102,6 +123,27 @@ extension ProviderProbe {
         throw flags.finalError
     }
 
+    static func probeBitBarIfLanding(
+        context: ProbeContext,
+        flags: inout ProbeFlags
+    ) async throws -> ProbeHit? {
+        guard isBitBarLanding(context.base) || isBitBarLanding(context.pageURL) else { return nil }
+        if let hit = try await probeJSON(
+            bitBarStatuspageURL,
+            sourceURL: context.base,
+            context: context,
+            flags: &flags,
+            parse: { data, url in
+                var snap = try StatuspageParser.parse(data: data, sourceURL: url)
+                snap.url = normalizedBase(url)
+                return snap
+            }
+        ) {
+            return hit
+        }
+        throw flags.finalError
+    }
+
     static func probeStripeIfLanding(
         context: ProbeContext,
         flags: inout ProbeFlags
@@ -157,6 +199,12 @@ extension ProviderProbe {
         let host = url.host?.lowercased() ?? ""
         guard host == "apple.com" || host == "www.apple.com" else { return false }
         return url.path.lowercased().contains("support/systemstatus")
+    }
+
+    static func isBitBarLanding(_ url: URL) -> Bool {
+        let host = url.host?.lowercased() ?? ""
+        guard host == "status.bitbar.com" else { return false }
+        return url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).isEmpty
     }
 
     static func isStripeLanding(_ url: URL) -> Bool {
@@ -218,4 +266,5 @@ private extension ProviderProbe {
     static let herokuCurrentURL = URL(string: "https://status.heroku.com/api/v4/current-status")!
     static let appleStatusURL = URL(string: "https://www.apple.com/support/systemstatus/data/system_status_en_US.js")!
     static let stripeStatuspageURL = URL(string: "https://www.stripestatus.com/api/v2/summary.json")!
+    static let bitBarStatuspageURL = URL(string: "https://bitbar.status.smartbear.com/api/v2/summary.json")!
 }

@@ -17,6 +17,31 @@ final class RssHubProbeTests: XCTestCase {
     <rss version="2.0"><channel><title>Azure Status</title></channel></rss>
     """
 
+    func testAzureStatusPageReadsTheAzureFeed() async throws {
+        let azureIncident = """
+        <rss version="2.0"><channel><title>Azure Status</title>
+        <item><title>Issues accessing resources in West Europe</title><status>ServiceDegradation</status></item>
+        </channel></rss>
+        """
+        var client = MapHTTPClient()
+        client.byURL["https://rssfeed.azure.status.microsoft/en-us/status/feed/"] = (Data(azureIncident.utf8), 200)
+        let snap = try await ProviderProbe.probe(
+            pageURL: URL(string: "https://azure.status.microsoft/en-us/status")!,
+            client: client
+        )
+        XCTAssertEqual(snap.components.map(\.name), ["Issues accessing resources in West Europe"])
+        var page = WatchedPage(
+            url: URL(string: "https://azure.status.microsoft/en-us/status")!,
+            name: "Azure",
+            enabledRegions: ["West Europe"]
+        )
+        page.snapshot = snap
+        XCTAssertEqual(page.displaySeverity, .yellow)
+
+        page.enabledRegions = ["UK South"]
+        XCTAssertEqual(page.displaySeverity, .green)
+    }
+
     func testMicrosoftHubAzureIncidentWithoutStatusIsYellow() async throws {
         let azureIncident = """
         <rss version="2.0"><channel><title>Azure Status</title>

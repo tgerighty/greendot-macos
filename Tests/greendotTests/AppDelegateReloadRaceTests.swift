@@ -39,8 +39,9 @@ final class AppDelegateReloadRaceTests: XCTestCase {
         XCTAssertNil(monitor.pages.first?.snapshot)
     }
 
-    /// The poll finishes first, so the identity check passes. The store still refuses the write.
-    func testPollThatFinishesBeforeReloadKeepsTheEditedFileAndReportsIt() async throws {
+    /// The poll finishes first, so the identity check passes. The store refuses to overwrite
+    /// the edited file, and the app loads that file instead of showing the changed-config alert.
+    func testPollThatFinishesBeforeReloadKeepsTheEditedFileAndLoadsIt() async throws {
         _ = NSApplication.shared
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -62,16 +63,54 @@ final class AppDelegateReloadRaceTests: XCTestCase {
 
         let poll = Task { await delegate.pollAndRefresh(monitor) }
         await client.waitUntilRequestCount(1)
-        let edited = try Self.writeEditedConfig(config, to: store)
+        try Self.writeEditedConfig(config, to: store)
         client.complete(request: 1, with: Data(Self.githubSummaryJSON.utf8))
         await poll.value
 
-        XCTAssertEqual(presented as? StoreError, .changedOnDisk)
-        XCTAssertEqual(try Data(contentsOf: store.configURL), edited)
-        XCTAssertEqual(monitor.pages.map(\.name), ["Original"])
+        XCTAssertNil(presented)
+        let saved = try JSONDecoder().decode(AppConfig.self, from: Data(contentsOf: store.configURL))
+        XCTAssertEqual(saved.pages.map(\.name), ["Edited"])
+        XCTAssertEqual(monitor.pages.map(\.name), ["Edited"])
         XCTAssertNil(monitor.pages.first?.snapshot)
+    }
 
-        delegate.reloadConfig()
+    func testOpenEditorWaitsUntilCloseBeforeLoadingTheChangedFile() async throws {
+        _ = NSApplication.shared
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        var config = AppConfig()
+        config.pages = [
+            WatchedPage(url: try XCTUnwrap(URL(string: "https://www.githubstatus.com")), name: "Original")
+        ]
+        try store.save(config)
+        let client = ControllableHTTPClient()
+        let monitor = Monitor(store: store, client: client)
+        try monitor.load()
+        let delegate = AppDelegate(toastDelivery: InMemoryToastDelivery())
+        defer { delegate.pollTimer?.invalidate(); client.failAll(); delegate.editor = nil }
+        delegate.store = store
+        delegate.monitor = monitor
+        var presented: Error?
+        delegate.presentError = { presented = $0 }
+        delegate.editor = StatusPageEditor(
+            monitor: monitor,
+            editingPageID: nil,
+            onChange: {},
+            presentError: { _ in }
+        )
+
+        let poll = Task { await delegate.pollAndRefresh(monitor) }
+        await client.waitUntilRequestCount(1)
+        try Self.writeEditedConfig(config, to: store)
+        client.complete(request: 1, with: Data(Self.githubSummaryJSON.utf8))
+        await poll.value
+
+        XCTAssertNil(presented)
+        XCTAssertEqual(monitor.pages.map(\.name), ["Original"])
+
+        delegate.editor = nil
+        delegate.reloadIfConfigChanged()
         XCTAssertEqual(monitor.pages.map(\.name), ["Edited"])
     }
 

@@ -121,6 +121,31 @@ final class SaaSPlatformProbeTests: XCTestCase {
         XCTAssertEqual(snap.name, "incident.io")
     }
 
+    func testBitBarLandingReadsSmartBearStatuspage() async throws {
+        let json = """
+        {
+          "page": {"name": "Bitbar Testing Cloud", "url": "https://bitbar.status.smartbear.com"},
+          "status": {"indicator": "none"},
+          "components": [{"id": "broker", "name": "Appium Broker EU", "status": "operational"}],
+          "incidents": []
+        }
+        """
+        var inner = MapHTTPClient()
+        inner.byURL["https://bitbar.status.smartbear.com/api/v2/summary.json"] = (Data(json.utf8), 200)
+        let recording = RecordingHTTPClient(inner)
+        let snap = try await ProviderProbe.probe(
+            pageURL: URL(string: "https://status.bitbar.com")!,
+            client: recording
+        )
+        XCTAssertEqual(snap.provider, .statuspage)
+        XCTAssertEqual(snap.name, "Bitbar Testing Cloud")
+        XCTAssertEqual(snap.overall, .green)
+        XCTAssertEqual(snap.url, URL(string: "https://status.bitbar.com")!)
+        XCTAssertEqual(recording.requested.map(\.absoluteString), [
+            "https://bitbar.status.smartbear.com/api/v2/summary.json"
+        ])
+    }
+
     func testStripeLandingUsesStatuspageJSON() async throws {
         let json = """
         {

@@ -9,6 +9,7 @@ final class StatusPageEditor {
     private let presentError: (Error) -> Void
     private let clearToast: (UUID) -> Void
     private let refreshToast: (UUID) -> Void
+    private let onUncommittedClose: () -> Void
     private var panel: PagePanelController?
 
     init(
@@ -17,7 +18,8 @@ final class StatusPageEditor {
         onChange: @escaping () -> Void,
         presentError: @escaping (Error) -> Void,
         clearToast: @escaping (UUID) -> Void = { _ in },
-        refreshToast: @escaping (UUID) -> Void = { _ in }
+        refreshToast: @escaping (UUID) -> Void = { _ in },
+        onUncommittedClose: @escaping () -> Void = {}
     ) {
         self.monitor = monitor
         self.editingPageID = editingPageID
@@ -25,6 +27,7 @@ final class StatusPageEditor {
         self.presentError = presentError
         self.clearToast = clearToast
         self.refreshToast = refreshToast
+        self.onUncommittedClose = onUncommittedClose
     }
 
     func show() {
@@ -46,17 +49,27 @@ final class StatusPageEditor {
         let currentPageID = page?.id
         let currentPanel = PagePanelController(
             page: page,
-            onSave: { [weak self] url, name in
+            onSave: { [weak self] url, name, disabled, regions in
                 guard let self else { return false }
-                return await self.save(pageID: currentPageID, url: url, name: name)
+                return await self.save(
+                    pageID: currentPageID,
+                    url: url,
+                    name: name,
+                    disabledComponentNames: disabled,
+                    enabledRegions: regions
+                )
             },
-            onToggleComponent: toggleComponentHandler(pageID: currentPageID),
-            onSetAll: setAllComponentsHandler(pageID: currentPageID),
+            onToggleComponent: { _ in true },
+            onSetAll: { _ in true },
             onRemove: currentPageID.map { pageID in
                 { [weak self] in
                     guard let self else { return false }
                     return self.remove(pageID: pageID)
                 }
+            },
+            onClose: { [weak self] committed in
+                guard let self, !committed else { return }
+                self.onUncommittedClose()
             }
         )
         panel = currentPanel
@@ -77,31 +90,23 @@ final class StatusPageEditor {
 }
 
 private extension StatusPageEditor {
-    func toggleComponentHandler(pageID: UUID?) -> ((String) -> Bool)? {
-        guard let pageID else { return nil }
-        return { [weak self] name in
-            guard let self else { return false }
-            return self.performChange(reconcilingToastFor: pageID) {
-                try self.monitor.toggleComponent(id: pageID, name: name)
-            }
-        }
-    }
-
-    func setAllComponentsHandler(pageID: UUID?) -> ((Bool) -> Bool)? {
-        guard let pageID else { return nil }
-        return { [weak self] enabled in
-            guard let self else { return false }
-            return self.performChange(reconcilingToastFor: pageID) {
-                try self.monitor.setAllComponents(id: pageID, enabled: enabled)
-            }
-        }
-    }
-
-    func save(pageID: UUID?, url: URL, name: String?) async -> Bool {
+    func save(
+        pageID: UUID?,
+        url: URL,
+        name: String?,
+        disabledComponentNames: Set<String>?,
+        enabledRegions: [String]?
+    ) async -> Bool {
         do {
             if let pageID {
                 let previous = monitor.pages.first { $0.id == pageID }
-                try await monitor.edit(id: pageID, url: url, name: name)
+                try await monitor.edit(
+                    id: pageID,
+                    url: url,
+                    name: name,
+                    disabledComponentNames: disabledComponentNames,
+                    enabledRegions: enabledRegions
+                )
                 let current = monitor.pages.first { $0.id == pageID }
                 if current?.displaySeverity == .green {
                     clearToast(pageID)

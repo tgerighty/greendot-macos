@@ -36,6 +36,60 @@ final class ChangedOnDiskTests: XCTestCase {
         XCTAssertEqual(try Self.inode(store.stateURL), stateBefore)
     }
 
+    func testUserEditAdoptsTheChangedFileAndKeepsTheEdit() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        var config = AppConfig()
+        let page = try Self.page(name: "GitHub")
+        config.pages = [page]
+        try store.save(config)
+        let monitor = Monitor(store: store, client: MapHTTPClient())
+        try monitor.load()
+
+        var edited = config
+        edited.pages[0].name = "Edited"
+        try PageStore(directory: dir).save(edited)
+
+        XCTAssertNoThrow(try monitor.toggleNotifications(id: page.id))
+
+        XCTAssertEqual(monitor.pages.map(\.name), ["Edited"])
+        XCTAssertEqual(monitor.pages.map(\.notificationsEnabled), [false])
+        let saved = try store.load()
+        XCTAssertEqual(saved.pages.map(\.name), ["Edited"])
+        XCTAssertEqual(saved.pages.map(\.notificationsEnabled), [false])
+    }
+
+    func testEditAppliesComponentSelectionToTheChangedFile() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        var config = AppConfig()
+        let page = try Self.page(name: "GitHub")
+        config.pages = [page]
+        try store.save(config)
+        let monitor = Monitor(
+            store: store,
+            client: MapHTTPClient(byPath: ["/api/v2/summary.json": (Self.statuspageJSON, 200)])
+        )
+        try monitor.load()
+
+        var edited = config
+        edited.pages[0].name = "Edited"
+        try PageStore(directory: dir).save(edited)
+
+        try await monitor.edit(
+            id: page.id,
+            url: page.url,
+            name: "From editor",
+            disabledComponentNames: ["API"]
+        )
+
+        let saved = try store.load()
+        XCTAssertEqual(saved.pages.map(\.name), ["From editor"])
+        XCTAssertEqual(saved.pages[0].disabledComponentNames, ["API"])
+    }
+
     func testReloadAdoptsChangedFileAndAllowsSaves() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }

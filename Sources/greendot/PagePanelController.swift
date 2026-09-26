@@ -11,8 +11,10 @@ final class PagePanelController: NSObject, NSWindowDelegate {
     private let window: NSWindow
     private let urlField = NSTextField(string: "")
     private let nameField = NSTextField(string: "")
-    private let onSave: (URL, String?) async -> Bool
+    private let onSave: (URL, String?, Set<String>?, [String]?) async -> Bool
+    private let onClose: (Bool) -> Void
     private let onRemove: (() -> Bool)?
+    private var committedClose = false
     private var saveButton: NSButton?
     private var removeButton: NSButton?
     private var operationInFlight = false
@@ -22,12 +24,14 @@ final class PagePanelController: NSObject, NSWindowDelegate {
 
     init(
         page: WatchedPage?,
-        onSave: @escaping (URL, String?) async -> Bool,
+        onSave: @escaping (URL, String?, Set<String>?, [String]?) async -> Bool,
         onToggleComponent: ((String) -> Bool)? = nil,
         onSetAll: ((Bool) -> Bool)? = nil,
-        onRemove: (() -> Bool)? = nil
+        onRemove: (() -> Bool)? = nil,
+        onClose: @escaping (Bool) -> Void = { _ in }
     ) {
         self.onSave = onSave
+        self.onClose = onClose
         self.onRemove = onRemove
         if let page {
             self.picker = ComponentPicker(
@@ -65,6 +69,9 @@ final class PagePanelController: NSObject, NSWindowDelegate {
     func close() {
         invalidatePendingOperations()
         window.delegate = nil
+        if !committedClose {
+            onClose(false)
+        }
         window.orderOut(nil)
     }
 
@@ -76,6 +83,9 @@ final class PagePanelController: NSObject, NSWindowDelegate {
 
     func windowWillClose(_: Notification) {
         invalidatePendingOperations()
+        let committed = committedClose
+        committedClose = true
+        onClose(committed)
     }
 
     private func buildView(page: WatchedPage?, listHeight: CGFloat) -> NSView {
@@ -161,15 +171,18 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         }
         let generation = operationGeneration
         let name = nameField.stringValue
+        let disabled = picker?.selectedDisabledNames()
+        let regions = picker?.selectedEnabledRegions()
         setOperationInFlight(true)
         let save = onSave
         saveTask = Task { [weak self] in
-            let saved = await save(url, name)
+            let saved = await save(url, name, disabled, regions)
             await MainActor.run { [weak self] in
                 guard let self, self.operationGeneration == generation else { return }
                 self.saveTask = nil
                 self.setOperationInFlight(false)
                 if saved {
+                    self.committedClose = true
                     self.window.close()
                 }
             }
@@ -186,6 +199,7 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         let removed = onRemove?() ?? false
         setOperationInFlight(false)
         if removed {
+            committedClose = true
             window.close()
         }
     }

@@ -36,7 +36,7 @@ public enum StoreError: Error, Equatable, LocalizedError {
         case .corrupt:
             return "The saved status list could not be read."
         case .changedOnDisk:
-            return "config.json changed on disk. Click Reload Config to use the new file."
+            return "config.json changed on disk."
         }
     }
 }
@@ -180,6 +180,15 @@ public final class PageStore: @unchecked Sendable {
             guard seen.insert(parsed).inserted else { return true }
         }
         return false
+    }
+
+    /// True when config.json differs from the bytes this store last read or wrote.
+    public func hasConfigChangedOnDisk() -> Bool {
+        knownConfigLock.lock()
+        let known = lastKnownConfigData
+        knownConfigLock.unlock()
+        guard let known, let disk = try? Data(contentsOf: configURL) else { return false }
+        return disk != known
     }
 
     public func save(_ config: AppConfig) throws {

@@ -45,10 +45,11 @@ final class StatusPageEditorToastTests: XCTestCase {
         let monitor = seed.monitor
         let pageID = seed.pageID
         var cleared: [UUID] = []
+        var changed = 0
         let editor = StatusPageEditor(
             monitor: monitor,
             editingPageID: pageID,
-            onChange: {},
+            onChange: { changed += 1 },
             presentError: { error in XCTFail("unexpected error: \(error)") },
             clearToast: { cleared.append($0) }
         )
@@ -56,6 +57,13 @@ final class StatusPageEditorToastTests: XCTestCase {
         defer { editor.close() }
 
         try XCTUnwrap(Self.button("component-API", in: Self.panelView())).performClick(nil)
+        XCTAssertTrue(cleared.isEmpty)
+        XCTAssertEqual(monitor.pages[0].displaySeverity, .red)
+
+        try XCTUnwrap(Self.button("save-button", in: Self.panelView())).performClick(nil)
+        for _ in 0..<100 where changed == 0 {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
 
         XCTAssertEqual(cleared, [pageID])
         XCTAssertEqual(monitor.pages[0].displaySeverity, .green)
@@ -67,10 +75,11 @@ final class StatusPageEditorToastTests: XCTestCase {
         let monitor = seed.monitor
         let pageID = seed.pageID
         var cleared: [UUID] = []
+        var changed = 0
         let editor = StatusPageEditor(
             monitor: monitor,
             editingPageID: pageID,
-            onChange: {},
+            onChange: { changed += 1 },
             presentError: { error in XCTFail("unexpected error: \(error)") },
             clearToast: { cleared.append($0) }
         )
@@ -78,6 +87,13 @@ final class StatusPageEditorToastTests: XCTestCase {
         defer { editor.close() }
 
         try XCTUnwrap(Self.button("component-all", in: Self.panelView())).performClick(nil)
+        XCTAssertTrue(cleared.isEmpty)
+        XCTAssertEqual(monitor.pages[0].displaySeverity, .red)
+
+        try XCTUnwrap(Self.button("save-button", in: Self.panelView())).performClick(nil)
+        for _ in 0..<100 where changed == 0 {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
 
         XCTAssertEqual(cleared, [pageID])
         XCTAssertEqual(monitor.pages[0].displaySeverity, .green)
@@ -111,10 +127,11 @@ final class StatusPageEditorToastTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: seed.directory) }
         var cleared: [UUID] = []
         var refreshed: [UUID] = []
+        var changed = 0
         let editor = StatusPageEditor(
             monitor: seed.monitor,
             editingPageID: seed.pageID,
-            onChange: {},
+            onChange: { changed += 1 },
             presentError: { error in XCTFail("unexpected error: \(error)") },
             clearToast: { cleared.append($0) },
             refreshToast: { refreshed.append($0) }
@@ -123,6 +140,14 @@ final class StatusPageEditorToastTests: XCTestCase {
         defer { editor.close() }
 
         try XCTUnwrap(Self.button("component-API", in: Self.panelView())).performClick(nil)
+        XCTAssertTrue(cleared.isEmpty)
+        XCTAssertTrue(refreshed.isEmpty)
+        XCTAssertEqual(seed.monitor.pages[0].displaySeverity, .red)
+
+        try XCTUnwrap(Self.button("save-button", in: Self.panelView())).performClick(nil)
+        for _ in 0..<100 where changed == 0 {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
 
         XCTAssertTrue(cleared.isEmpty)
         XCTAssertEqual(refreshed, [seed.pageID])
@@ -177,9 +202,17 @@ final class StatusPageEditorToastTests: XCTestCase {
         defer { editor.close() }
 
         try XCTUnwrap(Self.button("component-API", in: Self.panelView())).performClick(nil)
+        XCTAssertEqual(presented, 0)
+        XCTAssertTrue(cleared.isEmpty)
+
+        try XCTUnwrap(Self.button("save-button", in: Self.panelView())).performClick(nil)
+        for _ in 0..<100 where presented == 0 {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
 
         XCTAssertEqual(presented, 1)
         XCTAssertTrue(cleared.isEmpty)
+        XCTAssertEqual(monitor.pages[0].displaySeverity, .red)
     }
 
     private struct Seed {
