@@ -7,6 +7,7 @@ struct ParseMetrics {
     let statuspage: Double
     let instatus: Double
     let statuspal: Double
+    let awsLarge: Double
 }
 
 struct PollMetrics {
@@ -41,6 +42,8 @@ struct BenchmarkRunMetrics {
     let componentPicker80: Double
     let componentPicker160: Double
     let displaySeverity: Double
+    let regionFilter400: Double
+    let regionFilter800: Double
     let iconElapsedMs: Double
     let iconUniqueCount: Int
     let storeSaveMs: Double
@@ -54,6 +57,7 @@ extension PerformanceHarnessTests {
             "BENCH parse_statuspage_ms=\(fmt(metrics.parse.statuspage))",
             "BENCH parse_instatus_ms=\(fmt(metrics.parse.instatus))",
             "BENCH parse_statuspal_ms=\(fmt(metrics.parse.statuspal))",
+            "BENCH parse_aws_events_200_services_8_iters_30_ms=\(fmt(metrics.parse.awsLarge))",
             "BENCH pollAll_3page_delay_ms=\(fmt(metrics.poll.elapsedMs))",
             "BENCH pollAll_3page_delay_expected_sequential_ms=\(fmt(3 * Self.delayMs))",
             "BENCH pollAll_3page_get_count=\(metrics.poll.getCount)",
@@ -63,6 +67,8 @@ extension PerformanceHarnessTests {
             "BENCH component_picker_local_nested_80_clicks_20_ms=\(fmt(metrics.componentPicker80))",
             "BENCH component_picker_local_nested_160_clicks_20_ms=\(fmt(metrics.componentPicker160))",
             "BENCH display_severity_840_components_reads_500_ms=\(fmt(metrics.displaySeverity))",
+            "BENCH region_filter_scan_leaves_400_clicks_1_ms=\(fmt(metrics.regionFilter400))",
+            "BENCH region_filter_scan_leaves_800_clicks_1_ms=\(fmt(metrics.regionFilter800))",
             "BENCH status_dot_ms=\(fmt(metrics.iconElapsedMs))",
             "BENCH status_dot_unique_images=\(metrics.iconUniqueCount)",
             "BENCH store_save_ms=\(fmt(metrics.storeSaveMs))",
@@ -77,12 +83,15 @@ extension PerformanceHarnessTests {
 
     func assertBenchmarkMetrics(_ metrics: BenchmarkRunMetrics) {
         XCTAssertGreaterThan(metrics.parse.statuspage, 0)
+        XCTAssertGreaterThan(metrics.parse.awsLarge, 0)
         XCTAssertGreaterThan(metrics.poll.elapsedMs, 0)
         XCTAssertGreaterThan(metrics.menu.uncachedBuildMs, 0)
         XCTAssertGreaterThan(metrics.menu.cachedBuildMs, 0)
         XCTAssertGreaterThan(metrics.componentPicker80, 0)
         XCTAssertGreaterThan(metrics.componentPicker160, 0)
         XCTAssertGreaterThan(metrics.displaySeverity, 0)
+        XCTAssertGreaterThan(metrics.regionFilter400, 0)
+        XCTAssertGreaterThan(metrics.regionFilter800, 0)
         XCTAssertEqual(metrics.poll.getCount, 3, "Known-provider poll must use one GET per page")
         XCTAssertEqual(metrics.poll.mixedGetCount, 3, "Mixed-provider poll must use one GET per page")
         XCTAssertEqual(metrics.menu.uniqueCount, 1, "Repeated cached builds must reuse one menu")
