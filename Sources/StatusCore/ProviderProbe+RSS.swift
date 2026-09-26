@@ -41,10 +41,6 @@ extension ProviderProbe {
         return prefix.range(of: "<([a-zA-Z_][\\w.-]*:)?(rss|feed)(\\s|>|/)", options: options) != nil
     }
 
-    static func decodedText(_ data: Data) -> String? {
-        decodeXMLBytes(data)
-    }
-
     static func decodedPrefix(_ data: Data, maxBytes: Int) -> String? {
         let slice = Data(data.prefix(maxBytes))
         if let text = decodeUTF16Bytes(slice) { return text }
@@ -57,7 +53,7 @@ extension ProviderProbe {
         return String(data: slice, encoding: .isoLatin1)
     }
 
-    static func decodeXMLBytes(_ data: Data) -> String? {
+    static func decodedText(_ data: Data) -> String? {
         if let text = decodeUTF16Bytes(data) { return text }
         return String(data: data, encoding: .utf8)
             ?? String(data: data, encoding: .isoLatin1)

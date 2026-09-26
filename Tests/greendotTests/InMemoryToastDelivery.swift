@@ -4,15 +4,8 @@ import StatusCore
 
 final class InMemoryToastDelivery: ToastDelivery {
     private let lock = NSLock()
-    private var storedStartCount = 0
     private var storedToasts: [Toast] = []
     private var storedClearedPageIDs: [UUID] = []
-
-    var startCount: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return storedStartCount
-    }
 
     var toasts: [Toast] {
         lock.lock()
@@ -26,11 +19,7 @@ final class InMemoryToastDelivery: ToastDelivery {
         return storedClearedPageIDs
     }
 
-    func start() {
-        lock.lock()
-        storedStartCount += 1
-        lock.unlock()
-    }
+    func start() {}
 
     func deliver(_ toast: Toast) {
         lock.lock()

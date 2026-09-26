@@ -199,9 +199,8 @@ public enum ProviderProbe {
                 flags.sawNetworkError = true
             }
         }
-        let unique = Array(NSOrderedSet(array: subdomains)) as? [String] ?? subdomains
         let apiHosts = ["https://statuspal.io/api/v2/status_pages/", "https://statuspal.eu/api/v2/status_pages/"]
-        for subdomain in unique {
+        for subdomain in subdomains {
             for prefix in apiHosts {
                 guard let url = URL(string: prefix + subdomain + "/summary") else { continue }
                 if let hit = flags.record(try await attempt(

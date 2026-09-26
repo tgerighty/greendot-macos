@@ -201,7 +201,6 @@ extension Monitor {
             current: {
                 var copy = current
                 copy.overall = currentPage.displaySeverity
-                copy.isUnreachable = current.isUnreachable
                 return copy
             }(),
             notificationsEnabled: currentPage.notificationsEnabled,
