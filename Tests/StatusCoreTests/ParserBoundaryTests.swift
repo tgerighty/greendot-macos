@@ -25,6 +25,11 @@ final class ParserBoundaryTests: XCTestCase {
         }
     }
 
+    func testOktaRejectsPresentMalformedPlannedOutages() {
+        let html = "<span data-id=\"incidents\">[]</span><span data-id=\"planned-outages\">bad</span>"
+        XCTAssertThrowsError(try OktaParser.parse(data: Data(html.utf8), sourceURL: url))
+    }
+
     func testIcingaFractionalStateIsUnknown() throws {
         let hosts = Data(#"{"results":[{"attrs":{"name":"api","state":0.5}}]}"#.utf8)
         let services = Data(#"{"results":[]}"#.utf8)
