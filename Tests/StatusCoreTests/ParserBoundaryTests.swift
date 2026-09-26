@@ -38,9 +38,11 @@ final class ParserBoundaryTests: XCTestCase {
     }
 
     func testStatusioFractionalCodeIsUnknown() throws {
-        let data = Data(#"{"result":{"status_overall":{"status_code":100.5}}}"#.utf8)
-        let snapshot = try StatusioParser.parse(data: data, sourceURL: url)
-        XCTAssertEqual(snapshot.overall, .yellow)
+        for code in ["100.5", "100.000000000000001"] {
+            let data = Data("{\"result\":{\"status_overall\":{\"status_code\":\(code)}}}".utf8)
+            let snapshot = try StatusioParser.parse(data: data, sourceURL: url)
+            XCTAssertEqual(snapshot.overall, .yellow, code)
+        }
     }
 
     func testIncidentRootsRejectNonObjectMembers() {
