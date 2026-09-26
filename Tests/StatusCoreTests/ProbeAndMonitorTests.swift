@@ -1,5 +1,6 @@
 import XCTest
 @testable import StatusCore
+import TestSupport
 
 final class ProbeAndMonitorTests: XCTestCase {
     private let statuspageJSON = """
@@ -152,6 +153,20 @@ final class ProbeAndMonitorTests: XCTestCase {
         }
     }
 
+    func testProbePropagatesCancellation() async {
+        do {
+            _ = try await ProviderProbe.probe(
+                pageURL: URL(string: "https://offline.example")!,
+                client: CancellationHTTPClient()
+            )
+            XCTFail("expected CancellationError")
+        } catch is CancellationError {
+            // Cancellation must not be converted into an unreachable result.
+        } catch {
+            XCTFail("expected CancellationError, got \(error)")
+        }
+    }
+
     func testStoreRoundTripAddEditRemove() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -189,14 +204,14 @@ final class ProbeAndMonitorTests: XCTestCase {
         ])
         let monitor = Monitor(store: PageStore(directory: dir), client: okClient)
         try await monitor.add(url: URL(string: "https://www.githubstatus.com")!, name: nil)
-        XCTAssertEqual(monitor.barSeverity(), .green)
+        XCTAssertEqual(monitor.displayedSeverity(at: Date()), .green)
 
         let down = MapHTTPClient()
         let retry = Monitor(store: PageStore(directory: dir), client: down)
         try retry.load()
-        let toasts = await retry.pollAll()
+        let toasts = try await retry.pollAll()
         XCTAssertEqual(retry.pages[0].snapshot?.overall, .grey)
-        XCTAssertEqual(retry.barSeverity(), .grey)
+        XCTAssertEqual(retry.displayedSeverity(at: Date()), .grey)
         XCTAssertEqual(toasts.count, 1)
         XCTAssertEqual(toasts[0].body, "Unreachable")
     }
@@ -218,9 +233,17 @@ final class ProbeAndMonitorTests: XCTestCase {
 
     func testPageStoreLoadUnsupportedVersionThrows() throws {
         try assertLoadThrows(
-            Data(#"{"version":99,"pages":[],"didSetLaunchAtLogin":false}"#.utf8),
+            Data(#"{"version":3,"pages":[],"didSetLaunchAtLogin":false}"#.utf8),
             StoreError.corrupt
         )
+    }
+
+    func testPageStoreLoadAcceptsCurrentVersion() throws {
+        let dir = try writeConfig(Data(#"{"version":2,"pollSeconds":60,"pages":[]}"#.utf8))
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let config = try PageStore(directory: dir).load()
+        XCTAssertTrue(config.pages.isEmpty)
+        XCTAssertEqual(config.version, 2)
     }
 
     func testMonitorLoadThrowsOnCorruptStoreAndLeavesPagesEmpty() throws {
@@ -268,7 +291,7 @@ final class ProbeAndMonitorTests: XCTestCase {
         let loaded = Monitor(store: store, client: client)
         try loaded.load()
         XCTAssertEqual(loaded.pages[0].token, "page-read-token")
-        _ = await loaded.pollAll()
+        _ = try await loaded.pollAll()
         XCTAssertEqual(client.lastHeaders, RequestHeaders.authorization(token: "page-read-token"))
     }
 
@@ -326,6 +349,60 @@ final class ProbeAndMonitorTests: XCTestCase {
     }
 }
 
+extension ProbeAndMonitorTests {
+    func testProbeTreatsHTTP429AsUnreachable() async {
+        await assertProbeError(.unreachable, status: 429)
+    }
+
+    func testProbeTreatsRepresentative5xxAsUnreachable() async {
+        await assertProbeError(.unreachable, status: 503)
+    }
+
+    func testProbeTreatsMissingHTTPStatusAsUnreachable() async {
+        await assertProbeError(.unreachable, status: 0)
+    }
+
+    func testProbeKeepsHTTP404AsUnsupported() async {
+        await assertProbeError(.unsupported, status: 404)
+    }
+
+    func testProbeTreatsStatuspalDiscoveryServerErrorAsUnreachable() async {
+        var client = MapHTTPClient()
+        let pageURL = testURL(host: "example.com")
+        client.byURL[pageURL.absoluteString] = (Data(), 503)
+
+        do {
+            _ = try await ProviderProbe.probe(
+                pageURL: pageURL,
+                client: client
+            )
+            XCTFail("expected unreachable")
+        } catch {
+            XCTAssertEqual(error as? ProbeError, .unreachable)
+        }
+    }
+
+    private func assertProbeError(_ expected: ProbeError, status: Int) async {
+        let pageURL = testURL(host: "example.com")
+        let summaryURL = pageURL
+            .appendingPathComponent("api")
+            .appendingPathComponent("v2")
+            .appendingPathComponent("summary.json")
+        var client = MapHTTPClient()
+        client.byURL[summaryURL.absoluteString] = (Data(), status)
+
+        do {
+            _ = try await ProviderProbe.probe(
+                pageURL: pageURL,
+                client: client
+            )
+            XCTFail("expected \(expected)")
+        } catch {
+            XCTAssertEqual(error as? ProbeError, expected)
+        }
+    }
+}
+
 private func writeConfig(_ data: Data) throws -> URL {
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -358,5 +435,11 @@ private func assertSaveThrows(json: String, _ work: (Monitor) throws -> Void) as
 private struct FailingHTTPClient: HTTPClient {
     func get(_ url: URL) async throws -> (Data, Int) {
         throw URLError(.cannotConnectToHost)
+    }
+}
+
+private struct CancellationHTTPClient: HTTPClient {
+    func get(_: URL) async throws -> (Data, Int) {
+        throw CancellationError()
     }
 }

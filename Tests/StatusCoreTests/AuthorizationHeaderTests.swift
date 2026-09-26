@@ -1,5 +1,6 @@
 import XCTest
 @testable import StatusCore
+import TestSupport
 
 /// FT-45-01 / FT-45-02: probe Authorization header for page read token (REQ-45).
 final class AuthorizationHeaderTests: XCTestCase {

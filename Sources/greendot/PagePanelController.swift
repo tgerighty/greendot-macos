@@ -6,23 +6,33 @@ private final class KeyablePanel: NSWindow {
     override var canBecomeMain: Bool { true }
 }
 
+@MainActor
 final class PagePanelController: NSObject, NSWindowDelegate {
     private let window: NSWindow
     private let urlField = NSTextField(string: "")
     private let nameField = NSTextField(string: "")
     private let tokenField = NSSecureTextField(string: "")
-    private let onSave: (URL, String?, String?) -> Void
-    private let onRemove: (() -> Void)?
+    private let onSave: (URL, String?, Set<String>?, [String]?, String?) async -> Bool
+    private let onClose: (Bool) -> Void
+    private let onRemove: (() -> Bool)?
+    private var committedClose = false
+    private var saveButton: NSButton?
+    private var removeButton: NSButton?
+    private var operationInFlight = false
+    private var operationGeneration: UInt64 = 0
+    private var saveTask: Task<Void, Never>?
     private var picker: ComponentPicker?
 
     init(
         page: WatchedPage?,
-        onSave: @escaping (URL, String?, String?) -> Void,
+        onSave: @escaping (URL, String?, Set<String>?, [String]?, String?) async -> Bool,
         onToggleComponent: ((String) -> Bool)? = nil,
         onSetAll: ((Bool) -> Bool)? = nil,
-        onRemove: (() -> Void)? = nil
+        onRemove: (() -> Bool)? = nil,
+        onClose: @escaping (Bool) -> Void = { _ in }
     ) {
         self.onSave = onSave
+        self.onClose = onClose
         self.onRemove = onRemove
         if let page {
             self.picker = ComponentPicker(
@@ -58,19 +68,32 @@ final class PagePanelController: NSObject, NSWindowDelegate {
     }
 
     func close() {
+        invalidatePendingOperations()
         window.delegate = nil
+        if !committedClose {
+            onClose(false)
+        }
         window.orderOut(nil)
     }
 
     /// Same path as the window close button / Save / Cancel.
     func closeWindow() {
+        invalidatePendingOperations()
         window.close()
+    }
+
+    func windowWillClose(_: Notification) {
+        invalidatePendingOperations()
+        let committed = committedClose
+        committedClose = true
+        onClose(committed)
     }
 
     private func buildView(page: WatchedPage?, listHeight: CGFloat) -> NSView {
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: window.frame.height))
         configureFields(page: page)
         let save = button(page == nil ? "Add" : "Save", id: "save-button", action: #selector(saveTapped))
+        saveButton = save
         save.keyEquivalent = "\r"
         let cancel = button("Cancel", id: "cancel-button", action: #selector(cancelTapped))
         [urlField, nameField, tokenField, save, cancel].forEach {
@@ -81,6 +104,7 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         if page != nil, let picker {
             constraints.append(contentsOf: picker.install(in: view, below: tokenField, listHeight: listHeight))
             let remove = button("Remove Status Page", id: "remove-page-button", action: #selector(removeTapped))
+            removeButton = remove
             remove.bezelStyle = .rounded
             remove.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(remove)
@@ -148,6 +172,7 @@ final class PagePanelController: NSObject, NSWindowDelegate {
     }
 
     @objc private func saveTapped() {
+        guard !operationInFlight else { return }
         let raw = urlField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         var text = raw
         if !text.contains("://") {
@@ -157,9 +182,25 @@ final class PagePanelController: NSObject, NSWindowDelegate {
             NSSound.beep()
             return
         }
-        let tokenRaw = tokenField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        onSave(url, nameField.stringValue, tokenRaw.isEmpty ? nil : tokenRaw)
-        window.close()
+        let generation = operationGeneration
+        let name = nameField.stringValue
+        let token = tokenField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let disabled = picker?.selectedDisabledNames()
+        let regions = picker?.selectedEnabledRegions()
+        setOperationInFlight(true)
+        let save = onSave
+        saveTask = Task { [weak self] in
+            let saved = await save(url, name, disabled, regions, token.isEmpty ? nil : token)
+            await MainActor.run { [weak self] in
+                guard let self, self.operationGeneration == generation else { return }
+                self.saveTask = nil
+                self.setOperationInFlight(false)
+                if saved {
+                    self.committedClose = true
+                    self.window.close()
+                }
+            }
+        }
     }
 
     @objc private func cancelTapped() {
@@ -167,7 +208,29 @@ final class PagePanelController: NSObject, NSWindowDelegate {
     }
 
     @objc private func removeTapped() {
-        onRemove?()
-        window.close()
+        guard !operationInFlight else { return }
+        setOperationInFlight(true)
+        let removed = onRemove?() ?? false
+        setOperationInFlight(false)
+        if removed {
+            committedClose = true
+            window.close()
+        }
+    }
+
+    private func invalidatePendingOperations() {
+        operationGeneration &+= 1
+        saveTask?.cancel()
+        saveTask = nil
+        setOperationInFlight(false)
+    }
+
+    private func setOperationInFlight(_ inFlight: Bool) {
+        operationInFlight = inFlight
+        urlField.isEnabled = !inFlight
+        nameField.isEnabled = !inFlight
+        tokenField.isEnabled = !inFlight
+        saveButton?.isEnabled = !inFlight
+        removeButton?.isEnabled = !inFlight
     }
 }

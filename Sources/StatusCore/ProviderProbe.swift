@@ -1,73 +1,50 @@
 import Foundation
+import os
 
 public enum ProbeError: Error, Equatable, LocalizedError {
     case unsupported
     case unreachable
+    case unauthorized
 
     public var errorDescription: String? {
         switch self {
         case .unsupported:
-            return "This URL is not a known status page format (Statuspage, Statuspal, or Instatus)."
+            return "This URL is not a known status page format "
+                + "(Statuspage, Statuspal, Instatus, Flashduty, AWS, Icinga, Okta, "
+                + "Salesforce, Status.io, Slack, Heroku, Google, Apple, incident.io, or RSS/Atom)."
         case .unreachable:
             return "Could not reach that URL."
+        case .unauthorized:
+            return "That URL requires a username and password in the URL (https://user:password@host/...)."
         }
     }
 }
 
 public enum ProviderProbe {
-    public static func probe(pageURL: URL, client: HTTPClient) async throws -> PageSnapshot {
-        try await probe(pageURL: pageURL, token: nil, client: client)
+    static var parseCount: Int { parseBox.withLock { $0 } }
+    static var regexCompileCount: Int { regexBox.withLock { $0 } }
+
+    static func resetCounts() {
+        parseBox.withLock { $0 = 0 }
+        regexBox.withLock { $0 = 0 }
     }
 
-    /// Sends the token as a Bearer header on each GET. A nil token or an empty token sends no Authorization header.
-    public static func probe(pageURL: URL, token: String? = nil, client: HTTPClient) async throws -> PageSnapshot {
-        let base = normalizedBase(pageURL)
-        let headers = RequestHeaders.authorization(token: token)
-        var sawHTTP = false
-        var sawNetworkError = false
+    public static func probe(
+        pageURL: URL,
+        token: String? = nil,
+        client: HTTPClient,
+        prefer: StatusProvider? = nil
+    ) async throws -> PageSnapshot {
+        try await probeHit(pageURL: pageURL, client: client, token: token, prefer: prefer).snapshot
+    }
 
-        func take(_ result: AttemptResult) -> PageSnapshot? {
-            switch result {
-            case .hit(let snapshot):
-                return snapshot
-            case .miss:
-                sawHTTP = true
-                return nil
-            case .networkError:
-                sawNetworkError = true
-                return nil
-            }
-        }
-
-        if let snapshot = take(await attempt(
-            base.appendingPathComponent("api/v2/summary.json"),
-            client: client,
-            headers: headers,
-            parse: { try StatuspageParser.parse(data: $0, sourceURL: base) }
-        )) {
-            return snapshot
-        }
-        if let snapshot = take(await attempt(
-            base.appendingPathComponent("summary.json"),
-            client: client,
-            headers: headers,
-            parse: { try InstatusParser.parse(data: $0, sourceURL: base) }
-        )) {
-            return snapshot
-        }
-        if let snapshot = await probeStatuspal(
-            base: base,
-            client: client,
-            headers: headers,
-            flags: &sawHTTP,
-            network: &sawNetworkError
-        ) {
-            return snapshot
-        }
-        if !sawHTTP && sawNetworkError {
-            throw ProbeError.unreachable
-        }
-        throw ProbeError.unsupported
+    static func probeOrder(preferring prefer: StatusProvider?) -> [StatusProvider] {
+        let order: [StatusProvider] = [
+            .statuspage, .instatus, .flashduty, .statuspal, .statusio, .incidentio,
+            .aws, .icinga, .okta, .salesforce, .slack, .heroku, .google, .apple, .rss
+        ]
+        guard let prefer, prefer != .statuspage else { return order }
+        return [prefer] + order.filter { $0 != prefer }
     }
 
     public static func normalizedBase(_ url: URL) -> URL {
@@ -83,85 +60,210 @@ public enum ProviderProbe {
         return parts.url ?? url
     }
 
-    private enum AttemptResult {
-        case hit(PageSnapshot)
+    /// URL stored on a watched page. Keeps query and path, including a trailing slash.
+    public static func persistedPageURL(_ url: URL) -> URL {
+        var text = url.absoluteString
+        if URLComponents(url: url, resolvingAgainstBaseURL: false)?.scheme == nil {
+            text = "https://" + text
+        }
+        var parts = URLComponents(string: text) ?? URLComponents()
+        parts.fragment = nil
+        return parts.url ?? url
+    }
+
+    enum AttemptResult {
+        case hit(ProbeHit)
         case miss
         case networkError
     }
 
-    private static func attempt(
+    struct ProbeContext: Sendable {
+        let base: URL
+        let pageURL: URL
+        let client: HTTPClient
+        let previousBody: Data?
+        let previousSnapshot: PageSnapshot?
+
+        func cachedHit(for body: Data) -> ProbeHit? {
+            guard let previousBody,
+                  let previousSnapshot,
+                  !previousSnapshot.isUnreachable,
+                  body == previousBody else { return nil }
+            return ProbeHit(snapshot: previousSnapshot, body: body)
+        }
+    }
+
+    struct ProbeFlags {
+        var sawNetworkError = false
+
+        mutating func recordHTTP(status: Int) {
+            if ProviderProbe.isReachabilityStatus(status) {
+                sawNetworkError = true
+            }
+        }
+
+        mutating func record(_ result: AttemptResult) -> ProbeHit? {
+            switch result {
+            case .hit(let hit):
+                return hit
+            case .miss:
+                return nil
+            case .networkError:
+                sawNetworkError = true
+                return nil
+            }
+        }
+
+        var finalError: ProbeError {
+            sawNetworkError ? .unreachable : .unsupported
+        }
+    }
+
+    static func isReachabilityStatus(_ status: Int) -> Bool {
+        status == 0 || status == 429 || (500...599).contains(status)
+    }
+
+    static func standardAttempt(
+        for provider: StatusProvider,
+        context: ProbeContext
+    ) async throws -> AttemptResult {
+        let endpoint: URL
+        let parse: (Data) throws -> PageSnapshot
+        switch provider {
+        case .statuspage:
+            endpoint = context.base.appendingPathComponent("api/v2/summary.json")
+            parse = { try StatuspageParser.parse(data: $0, sourceURL: context.base) }
+        case .instatus:
+            endpoint = context.base.appendingPathComponent("summary.json")
+            parse = { try InstatusParser.parse(data: $0, sourceURL: context.base) }
+        case .flashduty:
+            endpoint = context.base.appendingPathComponent("api/widget/v1/summary.json")
+            parse = { try FlashdutyParser.parse(data: $0, sourceURL: context.base) }
+        case .statuspal, .rss, .aws, .icinga, .okta, .salesforce,
+             .statusio, .slack, .heroku, .google, .apple, .incidentio,
+             .concur, .adobe, .azuredevops, .n8n, .zscaler:
+            // unreachable: routed elsewhere
+            return .miss
+        }
+        return try await attempt(
+            endpoint,
+            client: context.client,
+            previousBody: context.previousBody,
+            previousSnapshot: context.previousSnapshot,
+            parse: parse
+        )
+    }
+
+    static func attempt(
         _ url: URL,
         client: HTTPClient,
-        headers: [String: String],
+        previousBody: Data?,
+        previousSnapshot: PageSnapshot?,
         parse: (Data) throws -> PageSnapshot
-    ) async -> AttemptResult {
+    ) async throws -> AttemptResult {
         do {
-            let (data, status) = try await client.get(url, headers: headers)
-            guard status == 200 else { return .miss }
+            let (data, status) = try await client.get(url)
+            try Task.checkCancellation()
+            guard status == 200 else {
+                return isReachabilityStatus(status) ? .networkError : .miss
+            }
+            if let previousBody, let previousSnapshot,
+               !previousSnapshot.isUnreachable,
+               data == previousBody {
+                return .hit(ProbeHit(snapshot: previousSnapshot, body: data))
+            }
             do {
-                return .hit(try parse(data))
+                parseBox.withLock { $0 += 1 }
+                return .hit(ProbeHit(snapshot: try parse(data), body: data))
             } catch {
                 return .miss
             }
         } catch {
+            try throwIfCancelled(error)
             return .networkError
         }
     }
 
-    private static func probeStatuspal(
-        base: URL,
-        client: HTTPClient,
-        headers: [String: String],
-        flags sawHTTP: inout Bool,
-        network sawNetworkError: inout Bool
-    ) async -> PageSnapshot? {
-        let host = base.host ?? ""
+    static func probeStatuspal(
+        context: ProbeContext,
+        flags: inout ProbeFlags
+    ) async throws -> ProbeHit? {
+        let host = context.base.host ?? ""
         var subdomains: [String] = []
         if host.hasSuffix(".statuspal.io") || host.hasSuffix(".statuspal.eu") {
             subdomains.append(host.split(separator: ".").first.map(String.init) ?? host)
         }
-        do {
-            let htmlHit = try await client.get(base, headers: headers)
-            sawHTTP = true
-            if htmlHit.1 == 200,
-               let html = String(data: htmlHit.0, encoding: .utf8),
-               html.lowercased().contains("statuspal"),
-               let extracted = extractStatuspalSubdomain(from: html) {
-                subdomains.append(extracted)
+        if subdomains.isEmpty {
+            do {
+                let htmlHit = try await context.client.get(context.base)
+                try Task.checkCancellation()
+                flags.recordHTTP(status: htmlHit.1)
+                if htmlHit.1 == 200,
+                   let html = String(data: htmlHit.0, encoding: .utf8),
+                   html.lowercased().contains("statuspal"),
+                   let extracted = extractStatuspalSubdomain(from: html) {
+                    subdomains.append(extracted)
+                }
+            } catch {
+                try throwIfCancelled(error)
+                flags.sawNetworkError = true
             }
-        } catch {
-            sawNetworkError = true
         }
-        let unique = Array(NSOrderedSet(array: subdomains)) as? [String] ?? subdomains
         let apiHosts = ["https://statuspal.io/api/v2/status_pages/", "https://statuspal.eu/api/v2/status_pages/"]
-        for subdomain in unique {
+        for subdomain in subdomains {
             for prefix in apiHosts {
                 guard let url = URL(string: prefix + subdomain + "/summary") else { continue }
-                switch await attempt(url, client: client, headers: headers, parse: {
-                    try StatuspalParser.parse(data: $0, sourceURL: base)
-                }) {
-                case .hit(let snapshot):
-                    return snapshot
-                case .miss:
-                    sawHTTP = true
-                case .networkError:
-                    sawNetworkError = true
-                }
+                if let hit = flags.record(try await attempt(
+                    url,
+                    client: context.client,
+                    previousBody: context.previousBody,
+                    previousSnapshot: context.previousSnapshot,
+                    parse: { try StatuspalParser.parse(data: $0, sourceURL: context.base) }
+                )) { return hit }
             }
         }
         return nil
     }
 
-    static func extractStatuspalSubdomain(from html: String) -> String? {
-        let pattern = "statuspal\\.(?:io|eu)/api/v2/status_pages/([A-Za-z0-9_-]+)"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
-            return nil
+    static func throwIfCancelled(_ error: Error) throws {
+        guard !(error is CancellationError || Task.isCancelled) else {
+            throw CancellationError()
         }
+    }
+
+    private static let statuspalRegex: NSRegularExpression? = {
+        regexBox.withLock { $0 += 1 }
+        return try? NSRegularExpression(
+            pattern: "statuspal\\.(?:io|eu)/api/v2/status_pages/([A-Za-z0-9_-]+)",
+            options: [.caseInsensitive]
+        )
+    }()
+
+    static func extractStatuspalSubdomain(from html: String) -> String? {
+        guard let regex = statuspalRegex else { return nil }
         let range = NSRange(html.startIndex..<html.endIndex, in: html)
         guard let match = regex.firstMatch(in: html, range: range),
               let inner = Range(match.range(at: 1), in: html) else {
             return nil
         }
         return String(html[inner])
+    }
+}
+
+struct ProbeHit: Sendable {
+    let snapshot: PageSnapshot
+    let body: Data
+}
+
+private let parseBox = OSAllocatedUnfairLock(initialState: 0)
+private let regexBox = OSAllocatedUnfairLock(initialState: 0)
+
+extension ProviderProbe {
+    static func recordParse() {
+        parseBox.withLock { $0 += 1 }
+    }
+
+    static func recordRegex() {
+        regexBox.withLock { $0 += 1 }
     }
 }

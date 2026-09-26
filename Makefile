@@ -4,7 +4,7 @@ BIN := greendot
 SWIFTFLAGS ?=
 BINDIR = $(shell swift build -c $(CONFIG) $(SWIFTFLAGS) --show-bin-path)
 
-.PHONY: build test app install clean uitest lint
+.PHONY: build test app install clean uitest lint bench
 
 build:
 	swift build -c $(CONFIG) $(SWIFTFLAGS)
@@ -12,15 +12,23 @@ build:
 test:
 	swift test $(SWIFTFLAGS)
 
+bench:
+	GREENDOT_BENCH=1 swift test -c $(CONFIG) --filter PerformanceHarnessTests $(SWIFTFLAGS)
+
 lint:
 	swiftlint lint --strict
 
-GIT_HASH = $(shell git rev-parse --short HEAD)
+GIT_HASH = $(shell git rev-parse --short main 2>/dev/null)
+MERGE_COUNT = $(shell git rev-list --count --merges --first-parent main 2>/dev/null)
 
 app: build
+	@test -n "$(GIT_HASH)" || { echo "ERROR: cannot resolve short hash of main; fetch main before make app" >&2; exit 1; }
+	@test -n "$(MERGE_COUNT)" || { echo "ERROR: cannot count first-parent merges on main; fetch main before make app" >&2; exit 1; }
 	rm -rf "$(APP)"
 	mkdir -p "$(APP)/Contents/MacOS" "$(APP)/Contents/Resources"
 	cp Resources/Info.plist "$(APP)/Contents/Info.plist"
+	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(MERGE_COUNT)" "$(APP)/Contents/Info.plist"
+	/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(MERGE_COUNT)" "$(APP)/Contents/Info.plist"
 	/usr/libexec/PlistBuddy -c "Add :GitCommitHash string $(GIT_HASH)" "$(APP)/Contents/Info.plist"
 	cp Resources/AppIcon.icns "$(APP)/Contents/Resources/AppIcon.icns"
 	cp "$(BINDIR)/$(BIN)" "$(APP)/Contents/MacOS/$(BIN)"

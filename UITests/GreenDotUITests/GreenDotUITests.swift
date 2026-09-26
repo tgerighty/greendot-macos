@@ -47,6 +47,9 @@ final class GreenDotUITests: XCTestCase {
 
     override func tearDownWithError() throws {
         app?.terminate()
+        if let app {
+            XCTAssertTrue(app.wait(for: .notRunning, timeout: 5))
+        }
         try? FileManager.default.removeItem(at: configDirectory)
     }
 
@@ -197,6 +200,10 @@ final class GreenDotUITests: XCTestCase {
         XCTAssertTrue(app.wait(for: .notRunning, timeout: 5))
     }
 
+}
+
+private extension GreenDotUITests {
+
     private func addPage(url: String, expectedName: String) throws {
         clickMenu("Add Status Page…")
         XCTAssertTrue(app.windows["Add Status Page"].waitForExistence(timeout: 5))
@@ -292,7 +299,7 @@ final class GreenDotUITests: XCTestCase {
         }
     }
 
-    private static let githubJSON = Data("""
+    static var githubJSON: Data { Data("""
         {
           "page": {"name": "GitHub", "url": "https://www.githubstatus.com"},
           "status": {"indicator": "none", "description": "All Systems Operational"},
@@ -303,9 +310,9 @@ final class GreenDotUITests: XCTestCase {
           ],
           "incidents": [{"name": "API blip", "shortlink": "https://www.githubstatus.com"}]
         }
-        """.utf8)
+        """.utf8) }
 
-    private static let boxJSON = Data("""
+    static var boxJSON: Data { Data("""
         {
           "page": {"name": "Box", "url": "https://status.box.com"},
           "status": {"indicator": "none", "description": "All Systems Operational"},
@@ -318,5 +325,5 @@ final class GreenDotUITests: XCTestCase {
           ],
           "incidents": []
         }
-        """.utf8)
+        """.utf8) }
 }

@@ -3,7 +3,7 @@ import XCTest
 
 final class AggregatorTests: XCTestCase {
     func testEmptyListIsGreen() {
-        XCTAssertEqual(Aggregator.barSeverity(from: []), .green)
+        XCTAssertEqual(Aggregator.fromSeverities([]), .green)
     }
 
     func testRedBeatsYellowAndGreen() {
@@ -12,32 +12,32 @@ final class AggregatorTests: XCTestCase {
             snap(.yellow),
             snap(.red)
         ]
-        XCTAssertEqual(Aggregator.barSeverity(from: snapshots), .red)
+        XCTAssertEqual(Aggregator.fromSeverities(snapshots.map(\.overall)), .red)
     }
 
     func testYellowBeatsGreen() {
         XCTAssertEqual(
-            Aggregator.barSeverity(from: [snap(.green), snap(.yellow)]),
+            Aggregator.fromSeverities([snap(.green), snap(.yellow)].map(\.overall)),
             .yellow
         )
     }
 
     func testGreyDoesNotDriveTheBarWhenARealStatusExists() {
         XCTAssertEqual(
-            Aggregator.barSeverity(from: [snap(.green), snap(.grey)]),
+            Aggregator.fromSeverities([snap(.green), snap(.grey)].map(\.overall)),
             .green
         )
     }
 
     func testBarIsGreyWhenEveryPageIsGrey() {
         XCTAssertEqual(
-            Aggregator.barSeverity(from: [snap(.grey), snap(.grey)]),
+            Aggregator.fromSeverities([snap(.grey), snap(.grey)].map(\.overall)),
             .grey
         )
     }
 
     func testEmptyComponentsAreGreen() {
-        XCTAssertEqual(Aggregator.severity(from: []), .green)
+        XCTAssertEqual(Aggregator.fromSeverities([]), .green)
     }
 
     func testComponentRedBeatsYellowAndGreen() {
@@ -46,26 +46,26 @@ final class AggregatorTests: XCTestCase {
             component(.yellow),
             component(.red)
         ]
-        XCTAssertEqual(Aggregator.severity(from: components), .red)
+        XCTAssertEqual(Aggregator.fromSeverities(components.map(\.severity)), .red)
     }
 
     func testComponentYellowBeatsGreen() {
         XCTAssertEqual(
-            Aggregator.severity(from: [component(.green), component(.yellow)]),
+            Aggregator.fromSeverities([component(.green), component(.yellow)].map(\.severity)),
             .yellow
         )
     }
 
     func testGreyDoesNotDriveComponentsWhenARealStatusExists() {
         XCTAssertEqual(
-            Aggregator.severity(from: [component(.green), component(.grey)]),
+            Aggregator.fromSeverities([component(.green), component(.grey)].map(\.severity)),
             .green
         )
     }
 
     func testComponentsAreGreyWhenEveryComponentIsGrey() {
         XCTAssertEqual(
-            Aggregator.severity(from: [component(.grey), component(.grey)]),
+            Aggregator.fromSeverities([component(.grey), component(.grey)].map(\.severity)),
             .grey
         )
     }

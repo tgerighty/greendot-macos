@@ -4,6 +4,23 @@ public enum StatusProvider: String, Codable, Equatable, Sendable {
     case statuspage
     case statuspal
     case instatus
+    case flashduty
+    case aws
+    case icinga
+    case okta
+    case salesforce
+    case statusio
+    case slack
+    case heroku
+    case google
+    case apple
+    case incidentio
+    case concur
+    case adobe
+    case azuredevops
+    case n8n
+    case zscaler
+    case rss
 }
 
 public struct ComponentStatus: Equatable, Sendable {
@@ -85,23 +102,15 @@ public struct PageSnapshot: Codable, Equatable, Sendable {
     }
 }
 
-extension Aggregator {
-    /// Bar colour: red > yellow > green. Grey wins only when no real status exists.
-    public static func barSeverity(from snapshots: [PageSnapshot]) -> Severity {
-        fromSeverities(snapshots.map(\.overall))
-    }
-
-    public static func severity(from components: [ComponentStatus]) -> Severity {
-        fromSeverities(components.map(\.severity))
-    }
-}
-
 public struct WatchedPage: Equatable, Sendable, Identifiable {
     public var id: UUID
     public var url: URL
     public var name: String
     public var notificationsEnabled: Bool
     public var disabledComponentNames: Set<String>
+    /// Regions that count. `nil` keeps the mute list only. An empty list mutes every component.
+    /// A component counts when its name or id contains one of these strings, and so do its children.
+    public var enabledRegions: [String]?
     public var token: String?
     public var snapshot: PageSnapshot?
 
@@ -111,6 +120,7 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
         name: String,
         notificationsEnabled: Bool = true,
         disabledComponentNames: Set<String> = [],
+        enabledRegions: [String]? = nil,
         token: String? = nil,
         snapshot: PageSnapshot? = nil
     ) {
@@ -119,6 +129,7 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
         self.name = name
         self.notificationsEnabled = notificationsEnabled
         self.disabledComponentNames = disabledComponentNames
+        self.enabledRegions = enabledRegions
         self.token = token
         self.snapshot = snapshot
     }
@@ -128,51 +139,68 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
     }
 
     public var displaySeverity: Severity {
-        if snapshot?.isUnreachable == true { return .grey }
-        return Aggregator.severity(from: leaves(enabledComponents))
+        guard let snapshot else { return .grey }
+        if snapshot.isUnreachable { return .grey }
+        if snapshot.components.isEmpty { return snapshot.overall }
+        return ComponentTree.enabledLeafSeverity(
+            in: snapshot.components,
+            disabledKeys: disabledComponentNames,
+            enabledRegions: enabledRegions
+        )
     }
 
     public func isComponentEnabled(_ component: ComponentStatus) -> Bool {
         !disabledComponentNames.contains(component.id) && !disabledComponentNames.contains(component.name)
     }
 
-    private func filterEnabled(_ items: [ComponentStatus]) -> [ComponentStatus] {
+    private func filterEnabled(
+        _ items: [ComponentStatus],
+        ancestorAllowed: Bool = false
+    ) -> [ComponentStatus] {
         items.compactMap { item in
-            guard isComponentEnabled(item) else { return nil }
+            let allowed = RegionFilter.allows(
+                item,
+                regions: enabledRegions,
+                ancestorAllowed: ancestorAllowed
+            )
+            guard allowed, isComponentEnabled(item) else { return nil }
             var copy = item
-            copy.children = filterEnabled(item.children)
+            copy.children = filterEnabled(item.children, ancestorAllowed: enabledRegions != nil)
+            if !copy.children.isEmpty {
+                copy.severity = ComponentTree.enabledLeafSeverity(
+                    in: copy.children,
+                    disabledKeys: []
+                )
+                copy.statusText = copy.severity.displayName
+            } else if item.isGroup, !item.children.isEmpty {
+                copy.severity = .green
+                copy.statusText = copy.severity.displayName
+            }
             return copy
         }
     }
 
-    private func leaves(_ items: [ComponentStatus]) -> [ComponentStatus] {
-        items.flatMap { item in
-            if item.children.isEmpty { return [item] }
-            let childLeaves = leaves(item.children)
-            return childLeaves.isEmpty && !item.isGroup ? [item] : childLeaves
-        }
-    }
 }
 
 extension WatchedPage: Codable {
     enum CodingKeys: String, CodingKey {
-        case id, url, name, notificationsEnabled, disabledComponentNames, token, snapshot
+        case id, url, name, notificationsEnabled, disabledComponentNames, enabledRegions, token, snapshot
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(UUID.self, forKey: .id)
+        let rawID = try container.decodeIfPresent(String.self, forKey: .id)
+        id = rawID.flatMap(UUID.init(uuidString:)) ?? UUID()
         url = try container.decode(URL.self, forKey: .url)
         name = try container.decode(String.self, forKey: .name)
         notificationsEnabled = try container.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true
         disabledComponentNames = try container.decodeIfPresent(Set<String>.self, forKey: .disabledComponentNames) ?? []
-        if let raw = try container.decodeIfPresent(String.self, forKey: .token) {
-            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            token = trimmed.isEmpty ? nil : trimmed
-        } else {
-            token = nil
-        }
-        snapshot = try container.decodeIfPresent(PageSnapshot.self, forKey: .snapshot)
+        enabledRegions = try container.decodeIfPresent([String].self, forKey: .enabledRegions)
+        token = try container.decodeIfPresent(String.self, forKey: .token)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .flatMap { $0.isEmpty ? nil : $0 }
+        // Legacy version-1 field. A wrong type is ignored, not fatal.
+        snapshot = (try? container.decodeIfPresent(PageSnapshot.self, forKey: .snapshot)) ?? nil
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -181,8 +209,10 @@ extension WatchedPage: Codable {
         try container.encode(url, forKey: .url)
         try container.encode(name, forKey: .name)
         try container.encode(notificationsEnabled, forKey: .notificationsEnabled)
-        try container.encode(disabledComponentNames, forKey: .disabledComponentNames)
+        try container.encode(disabledComponentNames.sorted(), forKey: .disabledComponentNames)
+        if let enabledRegions {
+            try container.encode(enabledRegions.sorted(), forKey: .enabledRegions)
+        }
         try container.encodeIfPresent(token, forKey: .token)
-        try container.encodeIfPresent(snapshot, forKey: .snapshot)
     }
 }

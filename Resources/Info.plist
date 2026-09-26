@@ -24,8 +24,6 @@
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
-    <key>NSUserNotificationAlertStyle</key>
-    <string>banner</string>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2026 Terry Gerighty. All rights reserved.</string>
 </dict>

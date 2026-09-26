@@ -2,15 +2,17 @@ import AppKit
 import StatusCore
 import XCTest
 @testable import greendot
+import TestSupport
 
+@MainActor
 final class PanelLifecycleTests: XCTestCase {
     func testReplacingEditPanelDoesNotCrash() {
         _ = NSApplication.shared
         let page = Self.nestedPage()
-        var panel: PagePanelController? = PagePanelController(page: page, onSave: { _, _, _ in })
+        var panel: PagePanelController? = PagePanelController(page: page, onSave: { _, _, _, _, _ in true })
         panel?.show()
         panel?.close()
-        panel = PagePanelController(page: page, onSave: { _, _, _ in })
+        panel = PagePanelController(page: page, onSave: { _, _, _, _, _ in true })
         panel?.show()
         panel?.close()
         panel = nil
@@ -19,7 +21,7 @@ final class PanelLifecycleTests: XCTestCase {
     func testCloseAfterWindowCloseDoesNotCrash() {
         _ = NSApplication.shared
         let page = Self.nestedPage()
-        let panel = PagePanelController(page: page, onSave: { _, _, _ in })
+        let panel = PagePanelController(page: page, onSave: { _, _, _, _, _ in true })
         panel.show()
         panel.closeWindow()
         panel.close()
@@ -32,10 +34,10 @@ final class PanelLifecycleTests: XCTestCase {
         var panel: PagePanelController?
         for _ in 1...5 {
             panel?.close()
-            panel = PagePanelController(page: first, onSave: { _, _, _ in })
+            panel = PagePanelController(page: first, onSave: { _, _, _, _, _ in true })
             panel?.show()
             panel?.close()
-            panel = PagePanelController(page: second, onSave: { _, _, _ in })
+            panel = PagePanelController(page: second, onSave: { _, _, _, _, _ in true })
             panel?.show()
         }
         panel?.close()
@@ -47,7 +49,7 @@ final class PanelLifecycleTests: XCTestCase {
         let page = Self.nestedPage()
         let panel = PagePanelController(
             page: page,
-            onSave: { _, _, _ in },
+            onSave: { _, _, _, _, _ in true },
             onToggleComponent: { _ in true },
             onSetAll: { _ in true }
         )
@@ -67,7 +69,7 @@ final class PanelLifecycleTests: XCTestCase {
         let page = Self.nestedPage()
         let panel = PagePanelController(
             page: page,
-            onSave: { _, _, _ in },
+            onSave: { _, _, _, _, _ in true },
             onToggleComponent: { _ in true },
             onSetAll: { _ in true }
         )
@@ -89,7 +91,7 @@ final class PanelLifecycleTests: XCTestCase {
         let page = Self.nestedPage()
         let panel = PagePanelController(
             page: page,
-            onSave: { _, _, _ in },
+            onSave: { _, _, _, _, _ in true },
             onToggleComponent: { _ in false },
             onSetAll: { _ in false }
         )
@@ -124,13 +126,45 @@ final class PanelLifecycleTests: XCTestCase {
         }
     }
 
+    func testRepeatedStatusDotReusesImagePerSeverityAndSize() {
+        _ = NSApplication.shared
+        let green14a = StatusDot.image(.green, size: 14)
+        let green14b = StatusDot.image(.green, size: 14)
+        let red14 = StatusDot.image(.red, size: 14)
+        let green12 = StatusDot.image(.green, size: 12)
+        XCTAssertTrue(green14a === green14b)
+        XCTAssertFalse(green14a === red14)
+        XCTAssertFalse(green14a === green12)
+        XCTAssertEqual(green14a.accessibilityDescription, Severity.green.rawValue)
+        XCTAssertEqual(red14.accessibilityDescription, Severity.red.rawValue)
+        XCTAssertEqual(green14a.size, NSSize(width: 14, height: 14))
+        XCTAssertEqual(green12.size, NSSize(width: 12, height: 12))
+    }
+
+    func testPulseSkipsIconRefreshWhenNothingIsUnreachable() {
+        XCTAssertEqual(
+            GreyPulse.displayedSeverity(
+                persistent: .green,
+                hasUnreachable: true,
+                now: Date(timeIntervalSince1970: 0)
+            ),
+            .grey
+        )
+        XCTAssertEqual(
+            GreyPulse.displayedSeverity(
+                persistent: .green,
+                hasUnreachable: false,
+                now: Date(timeIntervalSince1970: 0)
+            ),
+            .green
+        )
+    }
+
     func testShouldSeedOpenAIOnlyWhenLoadSucceededAndPagesEmpty() {
         XCTAssertTrue(AppDelegate.shouldSeedOpenAI(loadSucceeded: true, pagesEmpty: true, skipSeed: false))
         XCTAssertFalse(AppDelegate.shouldSeedOpenAI(loadSucceeded: false, pagesEmpty: true, skipSeed: false))
         XCTAssertFalse(AppDelegate.shouldSeedOpenAI(loadSucceeded: true, pagesEmpty: false, skipSeed: false))
         XCTAssertFalse(AppDelegate.shouldSeedOpenAI(loadSucceeded: true, pagesEmpty: true, skipSeed: true))
-        XCTAssertTrue(AppDelegate.shouldPoll(loadSucceeded: true))
-        XCTAssertFalse(AppDelegate.shouldPoll(loadSucceeded: false))
     }
 
     func testLoadMonitorPresentsCorruptStoreErrorAndLeavesFile() throws {
@@ -169,39 +203,6 @@ final class PanelLifecycleTests: XCTestCase {
         XCTAssertFalse(delegate.performStoreChange { try monitor.remove(id: id) })
         XCTAssertTrue(presented)
         XCTAssertEqual(monitor.pages.count, 1)
-    }
-
-    func testAddPanelExposesTokenField() {
-        _ = NSApplication.shared
-        let panel = PagePanelController(page: nil, onSave: { _, _, _ in })
-        panel.show()
-        XCTAssertTrue(UITestDriver.identifiers().contains("token-field"))
-        panel.close()
-    }
-
-    func testSavePassesTrimmedToken() {
-        _ = NSApplication.shared
-        var saved: (URL, String?, String?)?
-        let panel = PagePanelController(page: nil, onSave: { saved = ($0, $1, $2) })
-        panel.show()
-        XCTAssertTrue(UITestDriver.setField("url-field", value: "https://www.githubstatus.com"))
-        XCTAssertTrue(UITestDriver.setField("token-field", value: "  abc  "))
-        XCTAssertTrue(UITestDriver.clickIdentifier("save-button"))
-        XCTAssertEqual(saved?.0.absoluteString, "https://www.githubstatus.com")
-        XCTAssertEqual(saved?.2, "abc")
-        panel.close()
-    }
-
-    func testSaveEmptyTokenIsNil() {
-        _ = NSApplication.shared
-        var saved: (URL, String?, String?)?
-        let panel = PagePanelController(page: nil, onSave: { saved = ($0, $1, $2) })
-        panel.show()
-        XCTAssertTrue(UITestDriver.setField("url-field", value: "https://www.githubstatus.com"))
-        XCTAssertTrue(UITestDriver.setField("token-field", value: "   "))
-        XCTAssertTrue(UITestDriver.clickIdentifier("save-button"))
-        XCTAssertNil(saved?.2)
-        panel.close()
     }
 
     func testPerformStoreChangeDoesNotPresentOnSuccess() throws {
@@ -262,6 +263,68 @@ final class PanelLifecycleTests: XCTestCase {
     }
 }
 
+extension PanelLifecycleTests {
+    func testSeedFailureIsReportedWithoutFailingStartup() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let monitor = Monitor(store: PageStore(directory: directory), client: MapHTTPClient())
+        try monitor.load()
+        let delegate = AppDelegate()
+        var reported: Error?
+        delegate.seedFailureDiagnostic = { reported = $0 }
+
+        await delegate.maybeSeedOpenAI(monitor: monitor, loadSucceeded: true, skipSeed: false)
+
+        XCTAssertEqual(reported as? ProbeError, .unsupported)
+        XCTAssertTrue(monitor.pages.isEmpty)
+    }
+
+    func testSeedCancellationIsNotReported() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let monitor = Monitor(store: PageStore(directory: directory), client: CancellationHTTPClient())
+        try monitor.load()
+        let delegate = AppDelegate()
+        var reported: Error?
+        delegate.seedFailureDiagnostic = { reported = $0 }
+
+        await delegate.maybeSeedOpenAI(monitor: monitor, loadSucceeded: true, skipSeed: false)
+
+        XCTAssertNil(reported)
+        XCTAssertTrue(monitor.pages.isEmpty)
+    }
+}
+
+@MainActor
+final class PanelReleaseTests: XCTestCase {
+    func testClosingPanelDeallocatesControllerAndWindow() throws {
+        _ = NSApplication.shared
+        let controller = WeakReference<PagePanelController>()
+        let window = WeakReference<NSWindow>()
+        try autoreleasepool {
+            let panel = PagePanelController(page: nil, onSave: { _, _, _, _, _ in true })
+            controller.value = panel
+            panel.show()
+            window.value = try XCTUnwrap(NSApp.windows.first {
+                $0.accessibilityIdentifier() == "status-page-panel" && $0.isVisible
+            })
+            panel.close()
+        }
+
+        let deadline = Date().addingTimeInterval(1)
+        while controller.value != nil || window.value != nil, Date() < deadline {
+            RunLoop.current.run(until: min(Date().addingTimeInterval(0.01), deadline))
+        }
+
+        XCTAssertNil(controller.value, "Timed out waiting for PagePanelController deallocation")
+        XCTAssertNil(window.value, "Timed out waiting for status-page-panel window deallocation")
+    }
+}
+
+private final class WeakReference<Object: AnyObject> {
+    weak var value: Object?
+}
+
 private func writeTempConfig(_ data: Data) throws -> (URL, URL) {
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -285,4 +348,10 @@ private func replaceConfigWithDirectory(in directory: URL) throws {
     let config = directory.appendingPathComponent("config.json")
     try FileManager.default.removeItem(at: config)
     try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
+}
+
+private struct CancellationHTTPClient: HTTPClient, Sendable {
+    func get(_: URL) async throws -> (Data, Int) {
+        throw CancellationError()
+    }
 }

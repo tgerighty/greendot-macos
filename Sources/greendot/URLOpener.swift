@@ -1,4 +1,5 @@
 import AppKit
+import StatusCore
 
 enum URLOpener {
     static func open(_ url: URL) {
@@ -10,6 +11,7 @@ enum URLOpener {
     }
 
     static func open(_ url: URL, logPath: String?, workspace: (URL) -> Void) {
+        let url = URLAuth.strippingUserinfo(url)
         guard isAllowed(url) else { return }
         let path = logPath?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !path.isEmpty {

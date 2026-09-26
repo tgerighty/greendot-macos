@@ -1,162 +1,82 @@
 import Foundation
 
 public final class Monitor: @unchecked Sendable {
-    private let store: PageStore
-    private let client: HTTPClient
-    private var config: AppConfig
+
+    public static let defaultConfirmationTimeout: TimeInterval = 3
+    /// The probe is an HTTP request. A longer wait than this holds up the poll for no gain.
+    public static let maxConfirmationTimeout: TimeInterval = 60
+
+    let store: PageStore
+    let client: HTTPClient
+    let reachability: (any NetworkReachability)?
+    /// Caps a mixed-poll confirmation so a slow probe cannot stall the poll.
+    let confirmationTimeout: TimeInterval
+    let stateLock = NSLock()
+    let transitionLock: any NSLocking
+    var config: AppConfig
+    var lastBodies: [UUID: Data] = [:]
+    var pageInputRevisions: [UUID: UInt64] = [:]
+    var latestPollIdentity: UInt64 = 0
+    /// True while the lost network toast is on screen. Survives a config reload, so the toast can be cleared.
+    var networkLossFlag = false
+
+    /// The app clears a stale network toast when a poll lands and this is false.
+    public var showingNetworkLoss: Bool {
+        withStateLock { networkLossFlag }
+    }
+    /// The app polls at once when this changes, rather than waiting for the next timer tick.
+    public var isSystemOnline: Bool { reachability?.isOnline ?? true }
     public var onLaunchAtLoginEnable: (() -> Void)?
 
-    public init(store: PageStore, client: HTTPClient) {
+    public convenience init(
+        store: PageStore,
+        client: HTTPClient,
+        reachability: (any NetworkReachability)? = nil,
+        confirmationTimeout: TimeInterval = defaultConfirmationTimeout
+    ) {
+        self.init(
+            store: store,
+            client: client,
+            transitionLock: NSLock(),
+            reachability: reachability,
+            confirmationTimeout: confirmationTimeout
+        )
+    }
+
+    init(
+        store: PageStore,
+        client: HTTPClient,
+        transitionLock: any NSLocking,
+        reachability: (any NetworkReachability)? = nil,
+        confirmationTimeout: TimeInterval = defaultConfirmationTimeout
+    ) {
         self.store = store
         self.client = client
+        self.transitionLock = transitionLock
+        self.reachability = reachability
+        self.confirmationTimeout = Monitor.validConfirmationTimeout(confirmationTimeout)
         self.config = AppConfig()
     }
 
-    public var pages: [WatchedPage] { config.pages }
-
-    public func load() throws {
-        config = try store.load()
+    /// The poll turns this timeout into nanoseconds, which traps on a negative, a NaN, or a value
+    /// too large for UInt64. A caller can give any TimeInterval, so make it safe here.
+    /// Non-finite or zero and below becomes the default. A larger value becomes the maximum.
+    static func validConfirmationTimeout(_ value: TimeInterval) -> TimeInterval {
+        guard value.isFinite, value > 0 else { return defaultConfirmationTimeout }
+        return min(value, maxConfirmationTimeout)
     }
 
-    public func enableLaunchAtLoginOnFirstRun() {
-        guard !config.didSetLaunchAtLogin else { return }
-        config.didSetLaunchAtLogin = true
-        try? store.save(config)
-        onLaunchAtLoginEnable?()
+    public var pages: [WatchedPage] {
+        withStateLock { config.pages }
     }
 
-    public func add(url: URL, name: String?, token: String? = nil) async throws {
-        let savedToken = trimmed(token)
-        let snapshot = try await ProviderProbe.probe(pageURL: url, token: savedToken, client: client)
-        let page = WatchedPage(
-            url: ProviderProbe.normalizedBase(url),
-            name: trimmed(name) ?? snapshot.name,
-            notificationsEnabled: true,
-            token: savedToken,
-            snapshot: snapshot
-        )
-        try commit { $0.pages.append(page) }
+    public var pollSeconds: TimeInterval {
+        withStateLock { config.pollSeconds }
     }
 
-    public func edit(id: UUID, url: URL, name: String?, token: String? = nil) async throws {
-        let savedToken = trimmed(token)
-        let snapshot = try await ProviderProbe.probe(pageURL: url, token: savedToken, client: client)
-        try commit { next in
-            guard let index = next.pages.firstIndex(where: { $0.id == id }) else { return }
-            next.pages[index].url = ProviderProbe.normalizedBase(url)
-            next.pages[index].name = trimmed(name) ?? snapshot.name
-            next.pages[index].token = savedToken
-            next.pages[index].snapshot = snapshot
-        }
-    }
-
-    public func remove(id: UUID) throws {
-        try commit { $0.pages.removeAll { $0.id == id } }
-    }
-
-    public func toggleNotifications(id: UUID) throws {
-        try commit { next in
-            guard let index = next.pages.firstIndex(where: { $0.id == id }) else { return }
-            next.pages[index].notificationsEnabled.toggle()
-        }
-    }
-
-    public func toggleComponent(id: UUID, name: String) throws {
-        try commit { next in
-            guard let index = next.pages.firstIndex(where: { $0.id == id }) else { return }
-            let tree = next.pages[index].snapshot?.components ?? []
-            let node = ComponentTree.find(name, in: tree)
-            let nodes = node.map(ComponentTree.collect) ?? []
-            let keys = nodes.isEmpty ? [name] : nodes.flatMap { [$0.id, $0.name] }
-            let allOn = nodes.isEmpty
-                ? !next.pages[index].disabledComponentNames.contains(name)
-                : nodes.allSatisfy { next.pages[index].isComponentEnabled($0) }
-            if allOn {
-                next.pages[index].disabledComponentNames.formUnion(keys)
-            } else {
-                keys.forEach { next.pages[index].disabledComponentNames.remove($0) }
-            }
-        }
-    }
-
-    public func setAllComponents(id: UUID, enabled: Bool) throws {
-        try commit { next in
-            guard let index = next.pages.firstIndex(where: { $0.id == id }) else { return }
-            if enabled {
-                next.pages[index].disabledComponentNames.removeAll()
-            } else {
-                next.pages[index].disabledComponentNames = Set(
-                    ComponentTree.componentKeys(next.pages[index].snapshot?.components ?? [])
-                )
-            }
-        }
-    }
-
-    private func commit(_ body: (inout AppConfig) throws -> Void) throws {
-        var next = config
-        try body(&next)
-        try store.save(next)
-        config = next
-    }
-
-    public func pollAll() async -> [Toast] {
-        var toasts: [Toast] = []
-        for index in config.pages.indices {
-            let page = config.pages[index]
-            let previous = page.snapshot
-            let previousDisplay = page.displaySeverity
-            let snapshot: PageSnapshot
-            do {
-                snapshot = try await ProviderProbe.probe(pageURL: page.url, token: page.token, client: client)
-            } catch {
-                snapshot = PageSnapshot(
-                    name: page.name,
-                    url: page.url,
-                    provider: previous?.provider ?? .statuspage,
-                    overall: .grey,
-                    components: previous?.components ?? [],
-                    incidents: [],
-                    isUnreachable: true
-                )
-            }
-            config.pages[index].snapshot = snapshot
-            if previous != nil,
-               previousDisplay != config.pages[index].displaySeverity,
-               let toast = ToastPolicy.toast(
-                previous: previous.map { prev in
-                    var copy = prev
-                    copy.overall = previousDisplay
-                    return copy
-                },
-                current: {
-                    var copy = snapshot
-                    copy.overall = config.pages[index].displaySeverity
-                    copy.isUnreachable = snapshot.isUnreachable
-                    return copy
-                }(),
-                notificationsEnabled: page.notificationsEnabled,
-                pageName: page.name
-               ) {
-                toasts.append(toast)
-            }
-        }
-        try? store.save(config)
-        return toasts
-    }
-
-    public func barSeverity() -> Severity {
-        Aggregator.fromSeverities(config.pages.map(\.displaySeverity))
-    }
-
-    public func displayedSeverity(at now: Date) -> Severity {
-        let persistent = barSeverity()
-        let hasUnreachable = config.pages.contains { $0.snapshot?.isUnreachable == true }
-        return GreyPulse.displayedSeverity(persistent: persistent, hasUnreachable: hasUnreachable, now: now)
-    }
-
-    private func trimmed(_ name: String?) -> String? {
-        guard let name else { return nil }
-        let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value
+    func withStateLock<T>(_ body: () -> T) -> T {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return body()
     }
 }

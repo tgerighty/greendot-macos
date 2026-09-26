@@ -21,7 +21,7 @@ public enum InstatusParser {
         let componentsJSON = json["components"] as? [[String: Any]] ?? []
         let components: [ComponentStatus] = componentsJSON.compactMap { item in
             guard let componentName = item["name"] as? String else { return nil }
-            let raw = (item["status"] as? String) ?? "OPERATIONAL"
+            let raw = (item["status"] as? String) ?? "UNKNOWN"
             let severity: Severity
             switch raw.uppercased() {
             case "OPERATIONAL", "UP": severity = .green

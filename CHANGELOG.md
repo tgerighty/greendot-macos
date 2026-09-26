@@ -4,6 +4,77 @@
 
 ### Added
 
+- A page can list `enabledRegions`. greendot counts a component only when its name or id contains one of those strings. Children of a matching component count too. An empty list mutes every component. A missing list keeps the component mute list. A vendor region that is not in the list stays muted, including a region added later.
+- Azure has its own status page at https://azure.status.microsoft/en-us/status. greendot reads the Azure RSS feed for that page. The Microsoft page still includes Azure unless that group is muted.
+- SAP Concur at https://open.concur.com/. Each datacenter is a group. A service is a leaf. `normal` is green, `degradation` is yellow, and `disruption` is red.
+- Adobe at https://status.adobe.com/. A product is a leaf only while its latest history entry is not closed or dismissed. Major or critical severity is red. Any other open severity is yellow. No open product is green.
+- Azure DevOps at https://status.dev.azure.com/. Each service is a group. Each geography is a leaf. `healthy` is green, `degraded` is yellow, and `unhealthy` is red.
+- n8n at https://status.n8n.cloud/. Each monitor is a leaf. `success` is green, `warning` is yellow, and `danger` is red.
+- Zscaler at https://trust.zscaler.com/. The cloud banner is the page status. `none` is green and shows no components. `disruption` is red. Any other severity is yellow.
+- Qlik Cloud at https://status.qlikcloud.com/. greendot reads the Statuspage JSON for that page.
+- BitBar at https://status.bitbar.com/. greendot reads the Statuspage JSON on bitbar.status.smartbear.com.
+- Salesforce Trust at https://status.salesforce.com/. Active incidents are groups. Impacted services are children. Empty is green.
+- Status.io pages (for example GitLab, Databricks, Neon, Dynatrace). Components are groups. Regions or containers are children.
+- Slack at https://slack-status.com/. Active incidents are groups. Empty is green.
+- Heroku at https://status.heroku.com/. Apps, Data, and Tools are leaves. Upcoming maintenance is ignored.
+- Google Cloud, Firebase, and Google Workspace status dashboards. Only incidents that have no end time. Affected products are children.
+- Apple System Status at https://www.apple.com/support/systemstatus/. Only services that have an active event.
+- incident.io status pages. Ongoing incidents are groups. Empty is green.
+- Stripe at https://status.stripe.com/. greendot reads the Statuspage JSON on www.stripestatus.com.
+- [Settings files](docs/settings-files.md) documents `config.json` and `state.json` in full: where they are, each key in each file, what greendot does with a file that is not complete, how to copy your settings to another Mac, and the upgrade from the single-file format.
+- Reveal Config File and Reload Config in the status menu. Reveal Config File shows `config.json` in the Finder. Reload Config reads the file again, rebuilds the menu, restarts the poll timer, and polls once. A file that greendot cannot read shows an alert, keeps the pages on screen, and stops polling and menu changes until a reload succeeds, so nothing writes the old settings over the file you are fixing. Reveal Config File creates `config.json` first if it does not exist.
+- `state.json` holds the cached poll results and the launch-at-login flag. `config.json` holds only your settings, so you can copy it to another machine or send it to a colleague. greendot reads a version 1 file and splits it on the next save.
+- `pollSeconds` in `config.json` sets the time between polls. The default is 60 seconds. `GREENDOT_POLL_SECONDS` still overrides the file.
+
+### Changed
+
+- greendot does not show a dialog when `config.json` changes on disk. It loads the file. An open Add, Edit, or Remove window waits until that window closes. Component choices in that window are written when the window closes, not on each click.
+- About greendot shows the number of merges into `main` as the version, and the short Git commit of `main` as the build number.
+- A page gives one notification for each unhealthy period. greendot shows the notification with a sound when the page stops being green. While the page stays unhealthy, a change of colour rewrites the notification on screen. That change makes no sound, and it does not open a notification you clicked away. greendot uses a sound again when the page becomes green. A page that goes out of reach for one poll and comes back to the same colour thus gives one notification, not three.
+- greendot asks the system whether the Mac has a network route, instead of inferring it from every page failing in the same poll. When the system reports no route, greendot makes no requests, shows the network notification at once rather than at the next poll, and accepts one watched page as enough to claim the outage, because a site outage is no longer an alternative explanation. It polls again as soon as the route returns.
+- When one poll finds some pages reachable and others newly unreachable, greendot requests one page that answered a second time. If that request fails too, the network went down while the poll was in progress, so the poll shows one network notification instead of a grey notification for each page that failed. This second request is made only on a poll that is newly mixed. A healthy poll, a poll where everything is down, and a site outage that continues for hours each add no requests. A second request that does not answer within three seconds is abandoned and the poll keeps its results, so a slow network cannot invent an outage.
+- When two or more pages are watched and all of them are unreachable, greendot shows one notification: "Greendot has no network connectivity". It shows this notification only when at least one watched page has notifications on. It does not show one grey notification for each page. When any page answers again, greendot shows one notification: "Greendot has regained network connectivity", which clears the first one. A page list that no longer supports the claim, because you removed pages, clears the first notification without claiming a recovery that did not happen. It does not show one green notification for each page. A page that is still not green when the network returns does not get its own notification. It was already not green, and the status menu keeps its colour. The network notification clears even if you remove a page or mute every page while it is on screen, and it clears the notification of a page that went unreachable in an earlier poll.
+- A cached poll result in `state.json` is used only when its URL matches the page URL in `config.json`. A hand-edited URL starts with no cached status.
+- A save that cannot write `state.json` restores the previous `config.json`, so a settings change the app did not accept never stays on disk.
+- greendot sets mode `0600` on `config.json` and `state.json` each time it loads them, so a file copied in with a wider mode is protected at once.
+- A `state.json` that exists but cannot be read no longer counts as a first launch, so greendot does not turn Launch at Login back on.
+- Reload Config cancels a first-run OpenAI seed that is still probing, so the seed cannot append OpenAI to a config you just loaded.
+- Reload Config closes an open Add or Edit panel first, so a save that is still probing cannot write over the config you just loaded.
+- Reload Config reconciles notifications with the new file. It clears the notification of a page that the file removes, mutes, makes green, or gives a new URL, and it updates the colour or name of a page that changes but stays unhealthy.
+- A version 2 `config.json` that still carries version 1 `snapshot` or `didSetLaunchAtLogin` fields ignores them, even when they have the wrong type. Machine-local data comes from `state.json` only.
+- greendot does not write over a `config.json` that changed on disk since it last read or wrote the file. It shows an alert instead. Click Reload Config to use the new file.
+- A hand-edited `config.json` loads. greendot gives a page without an `id` a new one, and gives a repeated `id` a new one. It rewrites the file only when it changed an `id`.
+- `config.json` is pretty-printed with sorted keys and plain slashes. `disabledComponentNames` is written as a sorted array. The same settings always produce the same bytes, so the file diffs cleanly.
+- Nested component checkbox refreshes now calculate subtree states in one pass.
+  Release benchmark, 160-level tree and 20 clicks: 360.462 ms before, 6.781 ms
+  after (five-run median).
+- Display severity now scans enabled components directly without copied tree and
+  leaf arrays. Release benchmark, 840 components and 500 reads: 56.431 ms
+  before, 3.777 ms after (five-run median).
+- `make bench` now benchmarks the release configuration and includes nested
+  component selection and large-tree severity workloads.
+- Red, yellow, and grey status-change notifications stay on screen until you click them away. Green notifications clear themselves after 6 seconds.
+- A persistent alert is cleared when you turn Notifications off for that page, or when a component filter change makes the page green. If the page stays yellow or red, the alert is updated to that colour.
+- A green notification that a quit cut short is cleared the next time greendot starts.
+- Status-change notifications include a status-dot image in the issue colour (red, yellow, green, or grey).
+- A first probe of a `*.statuspal.io` host does not GET the HTML page (the host already names the subdomain). First-probe GETs: 4 before, 3 after (second after run 3).
+- The status menu is reused when the watched pages do not change. 80 identical builds: 80 unique menus before, 1 after (second after run 1).
+- The Statuspal subdomain regex is compiled once. 500 extracts: 500 compiles before, 1 after (second after run 1).
+- A re-poll with an unchanged response body does not parse JSON again. Second poll of three pages: 3 parses before, 0 after (second after run 0).
+- The 4 Hz icon pulse does not refresh when every page is reachable. 240 ticks: 240 refreshes before, 0 after (second after run 0). Unreachable pages still flash grey.
+- Status-dot images are reused per colour and size. 2000 constructions of the four bar colours: 2000 unique images before, 4 after (second after run 4). Construction time 1.14 ms before, 0.37 ms after (second after run 0.39 ms).
+- An unchanged poll does not rewrite `config.json` (1 rewrite before, 0 after). A status change still writes.
+- Refresh waits for the slowest watched page, not the sum of page waits. Three pages with an 80 ms probe delay: 253 ms before, 87 ms after (second after run 87 ms).
+- A later poll of a known Statuspal or Instatus page does not GET the other providers. Mixed three-page re-poll: 7 GETs before, 3 after.
+
+### Added
+
+- Icinga 2 API pages. Paste `https://user:password@host:5665/v1`. Hosts are groups. Each host has a Host check and its services as children. A 401 or 403 is an auth error. Clicks strip the username and password so the browser does not see them.
+- Okta Trust at https://status.okta.com/. Active incidents are groups. Impacted cells are children. Planned outages are yellow. Empty is green.
+- AWS Health status pages. Paste https://health.aws.amazon.com/health/status or https://status.aws.amazon.com/. One page named AWS. Current events are groups. Impacted services are children. Empty is green. RSS on status.aws.amazon.com with no status is yellow.
+- RSS 2.0 and Atom feeds. Paste a feed URL, HTML that advertises a feed, or https://status.cloud.microsoft/. Items are components. A `<status>` tag sets colour; a missing tag is operational. The Microsoft landing page is one watched page with Microsoft 365, Power Platform, and Azure as groups.
+- Flashduty status pages (for example https://status.deepseek.com). The app reads `{page}/api/widget/v1/summary.json`. The bar uses overall status. Active incidents and in-progress maintenance appear in the menu. Component lists stay empty because that feed has no component tree.
+- `make bench` times the shipped parse, poll, menu, and status-dot paths on in-memory fixtures (no live network).
 - About greendot in the status menu and the application menu opens the native About panel. The copyright line is Copyright © 2026 Terry Gerighty. All rights reserved. The build number is the short GitHub commit hash.
 - Click a page row, a component row, or Open Status Page to open that page in the default browser.
 - UI tests exercise every Edit checkbox five times and switch Edit between two pages five times, without moving the pointer (avoids the bottom-left hot corner).
@@ -15,6 +86,32 @@
 
 ### Fixed
 
+- An RSS description with characters that change length when lowercased (for example `İ`) no longer reads the status token from the wrong position or crashes.
+- RSS items that put severity in `<category>` or in the description (for example
+  https://status.x.ai) now set the colour. An active `outage` is red. A
+  `disruption` is yellow. `Status: RESOLVED` in the description stays
+  operational. Unrecognized category tags are ignored, so a region or product
+  name does not turn the bar yellow.
+- Red, yellow, and grey status-change toasts stay on screen until you click them. macOS UserNotifications banners always time out; those colours now use an app-owned panel. Green toasts still clear after 6 seconds.
+- A watched RSS or HTML URL keeps its query string after save, so later polls use the same feed.
+- An HTML page that advertises `feed.xml` as a relative link uses the pasted directory URL, not a slash-stripped host root.
+- A yellow or red toast for one watched page does not replace a toast for a different page that has the same name.
+- When more persistent toasts are raised than fit on screen, the extras wait and return when you click one away. A later change for a waiting page updates that waiting toast. Recovery to green clears the persistent toast for that page.
+- HTML feed links that encode `&` as `&amp;` still fetch the correct URL.
+- HTML feed links with an unquoted `href` work. A `data-href` attribute is not treated as the feed URL.
+- If an HTML status page redirects on the same host, relative feed links use the final URL. A same-host HTTP to HTTPS upgrade is followed. A redirect to another host, to HTTP from HTTPS, or to a different port is not followed. An HTTPS page does not fetch an HTTP or different-port alternate feed.
+- Alternate feed links inside HTML comments, `<script>`, `<style>`, or `<template>` are ignored, including closing tags with spaces before `>`.
+- HTML `rel` matching requires the complete `alternate` token, so `notalternate` is not treated as a feed.
+- Each HTTP redirect is checked against the previous hop, so an HTTP to HTTPS upgrade cannot then drop back to HTTP.
+- If a feed stays the same bytes but moves to another same-origin URL, the stored page URL follows the new location.
+- A `<feed>` root is treated as Atom only when it uses the Atom namespace.
+- The Azure missing-status exception applies only to `azure.status.microsoft` and its subdomains.
+- If an HTML page contains feed-shaped text that is not a real feed, discovery still uses the advertised alternate link.
+- Editing or removing a watched page clears that page's persistent alert. The submenu Remove path does this too.
+- RSS and Atom feeds encoded as UTF-16 are still recognised.
+- Feed sniffing still works when a UTF-8 prefix is cut in the middle of a character.
+- An Atom `rel="hub"` or `rel="enclosure"` link is not stored as the page URL. A later `rel="alternate"` link beats an earlier `rel="self"` link.
+- Click the overall status row (for example Operational) to open the page when a watched page has no components.
 - Menu and Edit store errors no longer leave memory changed when the file write fails.
 - Edit checkboxes stay in the last saved state when a store write fails.
 

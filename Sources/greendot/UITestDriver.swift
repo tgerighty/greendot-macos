@@ -1,5 +1,6 @@
 import AppKit
 
+@MainActor
 enum UITestDriver {
     @discardableResult
     static func clickIdentifier(_ identifier: String) -> Bool {

@@ -6,17 +6,22 @@ let package = Package(
     platforms: [.macOS(.v13)],
     targets: [
         .target(name: "StatusCore"),
+        .target(
+            name: "TestSupport",
+            dependencies: ["StatusCore"],
+            path: "Tests/TestSupport"
+        ),
         .executableTarget(
             name: "greendot",
             dependencies: ["StatusCore"]
         ),
         .testTarget(
             name: "StatusCoreTests",
-            dependencies: ["StatusCore"]
+            dependencies: ["StatusCore", "TestSupport"]
         ),
         .testTarget(
             name: "greendotTests",
-            dependencies: ["greendot", "StatusCore"]
+            dependencies: ["greendot", "StatusCore", "TestSupport"]
         )
     ]
 )

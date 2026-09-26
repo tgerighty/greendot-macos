@@ -1,56 +1,90 @@
 import AppKit
 import StatusCore
 
-struct MenuActions {
+struct StatusMenuState: Equatable {
+    struct Content: Equatable {
+        let pages: [WatchedPage]
+        let launchAtLoginEnabled: Bool
+    }
+
+    var pages: [WatchedPage]
+    var severity: Severity
+    var launchAtLoginEnabled: Bool
+
+    /// Values that affect the built menu. Severity only affects the status-item image.
+    var content: Content {
+        Content(pages: pages, launchAtLoginEnabled: launchAtLoginEnabled)
+    }
+}
+
+struct StatusMenuHandlers {
     var onAdd: () -> Void
-    var onEdit: (WatchedPage) -> Void
+    var onEdit: (UUID) -> Void
     var onRemove: (UUID) -> Void
     var onToggleNotifications: (UUID) -> Void
     var onOpen: (URL) -> Void
     var onRefresh: () -> Void
+    var onRevealConfig: () -> Void
+    var onReloadConfig: () -> Void
     var onToggleLaunchAtLogin: () -> Void
     var onAbout: () -> Void
     var onQuit: () -> Void
 }
 
-enum MenuBuilder {
-    static func build(
-        pages: [WatchedPage],
-        launchAtLoginEnabled: Bool,
-        actions: MenuActions
-    ) -> NSMenu {
+@MainActor
+final class MenuBuilder {
+    private let handlers: StatusMenuHandlers
+    private var cachedContent: StatusMenuState.Content?
+    private var cachedMenu: NSMenu?
+
+    init(handlers: StatusMenuHandlers) {
+        self.handlers = handlers
+    }
+
+    func build(for state: StatusMenuState) -> NSMenu {
+        let content = state.content
+        if cachedContent == content, let cachedMenu {
+            return cachedMenu
+        }
         let menu = NSMenu()
         menu.autoenablesItems = false
 
-        if pages.isEmpty {
+        if state.pages.isEmpty {
             let empty = NSMenuItem(title: "No status pages", action: nil, keyEquivalent: "")
             empty.isEnabled = false
             menu.addItem(empty)
         } else {
-            for page in pages {
-                menu.addItem(pageItem(page, actions: actions))
+            for page in state.pages {
+                menu.addItem(pageItem(page))
             }
         }
 
         menu.addItem(.separator())
-        menu.addItem(actionItem("Add Status Page…", identifier: "add-page", action: actions.onAdd))
-        menu.addItem(actionItem("Refresh", identifier: "refresh", action: actions.onRefresh))
+        menu.addItem(actionItem("Add Status Page…", identifier: "add-page", action: handlers.onAdd))
+        menu.addItem(actionItem("Refresh", identifier: "refresh", action: handlers.onRefresh))
+        menu.addItem(
+            actionItem("Reveal Config File", identifier: "reveal-config", action: handlers.onRevealConfig)
+        )
+        menu.addItem(actionItem("Reload Config", identifier: "reload-config", action: handlers.onReloadConfig))
 
         let login = actionItem(
             "Launch at Login",
             identifier: "launch-at-login",
-            action: actions.onToggleLaunchAtLogin
+            action: handlers.onToggleLaunchAtLogin
         )
-        login.state = launchAtLoginEnabled ? .on : .off
+        login.state = state.launchAtLoginEnabled ? .on : .off
         menu.addItem(login)
 
         menu.addItem(.separator())
-        menu.addItem(actionItem("About greendot", identifier: "about", action: actions.onAbout))
-        menu.addItem(actionItem("Quit greendot", identifier: "quit", action: actions.onQuit))
+        menu.addItem(actionItem("About greendot", identifier: "about", action: handlers.onAbout))
+        menu.addItem(actionItem("Quit greendot", identifier: "quit", action: handlers.onQuit))
+        cachedContent = content
+        cachedMenu = menu
         return menu
     }
 
-    private static func pageItem(_ page: WatchedPage, actions: MenuActions) -> NSMenuItem {
+    private func pageItem(_ page: WatchedPage) -> NSMenuItem {
+        let handlers = self.handlers
         let severity = page.displaySeverity
         let item = NSMenuItem(
             title: page.name,
@@ -59,13 +93,14 @@ enum MenuBuilder {
         )
         item.image = StatusDot.image(severity)
         item.identifier = NSUserInterfaceItemIdentifier("page-\(page.id.uuidString)")
-        item.submenu = pageSubmenu(page, actions: actions)
+        item.submenu = pageSubmenu(page)
         let url = page.snapshot?.url ?? page.url
-        TargetAction.install(item) { actions.onOpen(url) }
+        TargetAction.install(item) { handlers.onOpen(url) }
         return item
     }
 
-    private static func pageSubmenu(_ page: WatchedPage, actions: MenuActions) -> NSMenu {
+    private func pageSubmenu(_ page: WatchedPage) -> NSMenu {
+        let handlers = self.handlers
         let menu = NSMenu()
         menu.autoenablesItems = false
         let snapshot = page.snapshot
@@ -81,37 +116,38 @@ enum MenuBuilder {
         if !components.isEmpty {
             let url = snapshot?.url ?? page.url
             for component in components {
-                menu.addItem(componentItem(component, url: url, onOpen: actions.onOpen))
+                menu.addItem(componentItem(component, url: url, onOpen: handlers.onOpen))
             }
         } else if snapshot?.isUnreachable != true {
             let row = NSMenuItem(
-                title: overallText(page.displaySeverity),
+                title: page.displaySeverity.displayName,
                 action: nil,
                 keyEquivalent: ""
             )
-            row.isEnabled = false
             row.image = StatusDot.image(page.displaySeverity)
+            let url = snapshot?.url ?? page.url
+            TargetAction.install(row) { handlers.onOpen(url) }
             menu.addItem(row)
         }
 
-        addIncidents(snapshot?.incidents ?? [], pageURL: snapshot?.url, onOpen: actions.onOpen, to: menu)
+        addIncidents(snapshot?.incidents ?? [], pageURL: snapshot?.url, onOpen: handlers.onOpen, to: menu)
         menu.addItem(.separator())
         let notify = actionItem("Notifications", identifier: "notify-\(page.id.uuidString)") {
-            actions.onToggleNotifications(page.id)
+            handlers.onToggleNotifications(page.id)
         }
         notify.state = page.notificationsEnabled ? .on : .off
         menu.addItem(notify)
-        menu.addItem(actionItem("Edit…", identifier: "edit-\(page.id.uuidString)") { actions.onEdit(page) })
+        menu.addItem(actionItem("Edit…", identifier: "edit-\(page.id.uuidString)") { handlers.onEdit(page.id) })
         menu.addItem(actionItem("Remove", identifier: "remove-\(page.id.uuidString)") {
-            actions.onRemove(page.id)
+            handlers.onRemove(page.id)
         })
         menu.addItem(actionItem("Open Status Page", identifier: "open-\(page.id.uuidString)") {
-            actions.onOpen(snapshot?.url ?? page.url)
+            handlers.onOpen(snapshot?.url ?? page.url)
         })
         return menu
     }
 
-    private static func addIncidents(
+    private func addIncidents(
         _ incidents: [Incident],
         pageURL: URL?,
         onOpen: @escaping (URL) -> Void,
@@ -130,7 +166,7 @@ enum MenuBuilder {
         }
     }
 
-    private static func componentItem(
+    private func componentItem(
         _ component: ComponentStatus,
         url: URL,
         onOpen: @escaping (URL) -> Void
@@ -153,16 +189,7 @@ enum MenuBuilder {
         return row
     }
 
-    private static func overallText(_ severity: Severity) -> String {
-        switch severity {
-        case .green: return "Operational"
-        case .yellow: return "Degraded"
-        case .red: return "Major outage"
-        case .grey: return "Unreachable"
-        }
-    }
-
-    private static func actionItem(
+    private func actionItem(
         _ title: String,
         identifier: String,
         action: @escaping () -> Void

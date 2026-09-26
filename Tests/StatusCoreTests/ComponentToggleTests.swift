@@ -1,5 +1,6 @@
 import XCTest
 @testable import StatusCore
+import TestSupport
 
 final class ComponentToggleTests: XCTestCase {
     func testDisplaySeverityIgnoresDisabledRedComponent() {
@@ -163,16 +164,16 @@ final class ComponentToggleTests: XCTestCase {
         )
     }
 
-    func testToggleComponentByNameDisablesIdAndDescendantKeys() async throws {
+    func testToggleComponentByNamePersistsStableIDs() async throws {
         let (directory, monitor) = try await boxOutageMonitor()
         defer { try? FileManager.default.removeItem(at: directory) }
         let id = monitor.pages[0].id
 
         try monitor.toggleComponent(id: id, name: "Box Web Application")
-        XCTAssertEqual(
-            monitor.pages[0].disabledComponentNames,
-            ["g1", "Box Web Application", "c1", "Login/SSO", "c2", "Search"]
-        )
+        XCTAssertEqual(monitor.pages[0].disabledComponentNames, ["g1", "c1", "c2"])
+        let loaded = Monitor(store: PageStore(directory: directory), client: MapHTTPClient())
+        try loaded.load()
+        XCTAssertEqual(loaded.pages[0].disabledComponentNames, ["g1", "c1", "c2"])
     }
 
     func testSetAllComponentsRecordsEveryIdAndName() async throws {
@@ -257,14 +258,127 @@ final class ComponentToggleTests: XCTestCase {
     }
 
     private func pageWith(components: [ComponentStatus], unreachable: Bool = false) -> WatchedPage {
-        WatchedPage(
-            url: URL(string: "https://status.openai.com")!,
+        let pageURL = testURL(host: "status.openai.com")
+        return WatchedPage(
+            url: pageURL,
             name: "OpenAI",
             snapshot: PageSnapshot(
                 name: "OpenAI",
-                url: URL(string: "https://status.openai.com")!,
+                url: pageURL,
                 provider: .statuspage,
-                overall: unreachable ? .grey : Aggregator.severity(from: components),
+                overall: unreachable ? .grey : Aggregator.fromSeverities(components.map(\.severity)),
+                components: components,
+                incidents: [],
+                isUnreachable: unreachable
+            )
+        )
+    }
+}
+
+extension ComponentToggleTests {
+    func testEnabledGroupSeverityFollowsRemainingChildren() {
+        var page = pageWith(components: [
+            ComponentStatus(
+                name: "Microsoft 365",
+                severity: .red,
+                statusText: "Major outage",
+                id: "m365",
+                children: [
+                    ComponentStatus(name: "Exchange", severity: .red, statusText: "Major outage", id: "ex"),
+                    ComponentStatus(name: "Teams", severity: .green, statusText: "Operational", id: "teams")
+                ],
+                isGroup: true
+            )
+        ])
+        page.disabledComponentNames = ["ex"]
+        XCTAssertEqual(page.displaySeverity, .green)
+        XCTAssertEqual(page.enabledComponents[0].severity, .green)
+        XCTAssertEqual(page.enabledComponents[0].statusText, "Operational")
+        XCTAssertEqual(page.enabledComponents[0].children.map(\.id), ["teams"])
+    }
+
+    func testMutingEveryChildTurnsGroupGreen() {
+        var page = pageWith(components: [
+            ComponentStatus(
+                name: "Microsoft 365",
+                severity: .red,
+                statusText: "Major outage",
+                id: "m365",
+                children: [
+                    ComponentStatus(name: "Exchange", severity: .red, statusText: "Major outage", id: "ex")
+                ],
+                isGroup: true
+            )
+        ])
+        page.disabledComponentNames = ["ex"]
+        XCTAssertEqual(page.displaySeverity, .green)
+        XCTAssertEqual(page.enabledComponents[0].severity, .green)
+        XCTAssertTrue(page.enabledComponents[0].children.isEmpty)
+    }
+
+    func testToggleDoesNotMuteSameTitleDifferentID() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let feed = """
+        <rss version="2.0"><channel><title>Status</title>
+        <item><guid>g1</guid><title>API</title><status>operational</status></item>
+        <item><guid>g2</guid><title>API</title><status>major_outage</status></item>
+        </channel></rss>
+        """
+        var client = MapHTTPClient()
+        let page = URL(string: "https://status.example.com/feed.xml")!
+        client.byURL[page.absoluteString] = (Data(feed.utf8), 200)
+        let monitor = Monitor(store: PageStore(directory: directory), client: client)
+        try await monitor.add(url: page, name: nil)
+        let id = try XCTUnwrap(monitor.pages.first?.id)
+
+        try monitor.toggleComponent(id: id, name: "g1")
+
+        XCTAssertEqual(monitor.pages[0].disabledComponentNames, ["g1"])
+        XCTAssertEqual(monitor.pages[0].enabledComponents.map(\.id), ["g2"])
+        XCTAssertEqual(monitor.pages[0].displaySeverity, .red)
+    }
+
+    func testMissingSnapshotIsGrey() {
+        let page = WatchedPage(
+            url: testURL(host: "status.openai.com"),
+            name: "OpenAI"
+        )
+
+        XCTAssertEqual(page.displaySeverity, .grey)
+    }
+
+    func testEmptyComponentsUsePageOverall() {
+        for severity in [Severity.red, .yellow] {
+            let page = pageWith(overall: severity)
+            XCTAssertEqual(page.displaySeverity, severity)
+        }
+    }
+
+    func testAllDisabledComponentsRemainGreenWhenPageOverallIsRed() {
+        var page = pageWith(
+            overall: .red,
+            components: [ComponentStatus(name: "API", severity: .red, statusText: "Major outage")]
+        )
+        page.disabledComponentNames = ["API"]
+
+        XCTAssertEqual(page.displaySeverity, .green)
+    }
+
+    private func pageWith(
+        overall: Severity,
+        components: [ComponentStatus] = [],
+        unreachable: Bool = false
+    ) -> WatchedPage {
+        let pageURL = testURL(host: "status.openai.com")
+        return WatchedPage(
+            url: pageURL,
+            name: "OpenAI",
+            snapshot: PageSnapshot(
+                name: "OpenAI",
+                url: pageURL,
+                provider: .statuspage,
+                overall: overall,
                 components: components,
                 incidents: [],
                 isUnreachable: unreachable

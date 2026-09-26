@@ -9,9 +9,7 @@ public enum GreyPulse {
     public static func displayedSeverity(
         persistent: Severity,
         hasUnreachable: Bool,
-        now: Date,
-        interval: TimeInterval = interval,
-        length: TimeInterval = length
+        now: Date
     ) -> Severity {
         if persistent == .grey { return .grey }
         guard hasUnreachable, interval > 0 else { return persistent }
