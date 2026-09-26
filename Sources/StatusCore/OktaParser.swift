@@ -80,7 +80,6 @@ public enum OktaParser {
         let start = html.index(after: open)
         guard let close = html[start...].range(of: "</span>") else { return nil }
         let json = html[start..<close.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
-        guard json.hasPrefix("[") || json.hasPrefix("{") else { return nil }
         return Data(json.utf8)
     }
 }
