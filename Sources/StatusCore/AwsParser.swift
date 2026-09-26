@@ -2,13 +2,10 @@ import Foundation
 
 public enum AwsParser {
     public static func parse(data: Data, sourceURL: URL) throws -> PageSnapshot {
-        guard let events = try JSONSerialization.jsonObject(with: utf8JSONBytes(data)) as? [Any] else {
+        guard let events = try JSONSerialization.jsonObject(with: utf8JSONBytes(data)) as? [[String: Any]] else {
             throw ParserError.notThisProvider
         }
-        let components = events.compactMap { item -> ComponentStatus? in
-            guard let event = item as? [String: Any] else { return nil }
-            return eventGroup(event)
-        }
+        let components = events.compactMap(eventGroup)
         return PageSnapshot(
             name: "AWS",
             url: sourceURL,

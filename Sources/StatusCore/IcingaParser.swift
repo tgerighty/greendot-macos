@@ -105,9 +105,7 @@ public enum IcingaParser {
     }
 
     private static func intValue(_ value: Any?) -> Int? {
-        if let number = value as? NSNumber { return number.intValue }
-        if let value = value as? Int { return value }
-        if let value = value as? Double { return Int(value) }
+        if let number = value as? NSNumber { return Int(exactly: number.doubleValue) }
         if let value = value as? String { return Int(value) }
         return nil
     }

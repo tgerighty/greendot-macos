@@ -6,8 +6,8 @@ public enum OktaParser {
         guard let incidentJSON = embeddedJSON(named: "incidents", in: html) else {
             throw ParserError.notThisProvider
         }
-        let incidents = array(incidentJSON)
-        let outages = embeddedJSON(named: "planned-outages", in: html).map(array) ?? []
+        let incidents = try array(incidentJSON)
+        let outages = try embeddedJSON(named: "planned-outages", in: html).map(array) ?? []
         let active = incidents.compactMap(incidentGroup)
         let planned = outages.compactMap(outageGroup)
         let components = active + planned
@@ -67,8 +67,11 @@ public enum OktaParser {
             .filter { !$0.isEmpty }
     }
 
-    private static func array(_ data: Data) -> [[String: Any]] {
-        (try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]) ?? []
+    private static func array(_ data: Data) throws -> [[String: Any]] {
+        guard let objects = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            throw ParserError.invalidJSON
+        }
+        return objects
     }
 
     private static func embeddedJSON(named id: String, in html: String) -> Data? {

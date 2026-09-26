@@ -49,7 +49,7 @@ public enum StatusioParser {
 enum JSONScalar {
     static func intValue(_ value: Any?) -> Int? {
         if let number = value as? Int { return number }
-        if let number = value as? NSNumber { return number.intValue }
+        if let number = value as? NSNumber { return Int(exactly: number.doubleValue) }
         return nil
     }
 

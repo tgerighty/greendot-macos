@@ -2,13 +2,10 @@ import Foundation
 
 public enum SalesforceParser {
     public static func parse(data: Data, sourceURL: URL) throws -> PageSnapshot {
-        guard let items = try JSONSerialization.jsonObject(with: data) as? [Any] else {
+        guard let items = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
             throw ParserError.notThisProvider
         }
-        let components = items.compactMap { item -> ComponentStatus? in
-            guard let incident = item as? [String: Any] else { return nil }
-            return incidentGroup(incident)
-        }
+        let components = items.compactMap(incidentGroup)
         return PageSnapshot(
             name: "Salesforce",
             url: sourceURL,
