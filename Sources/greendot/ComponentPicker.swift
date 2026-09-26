@@ -6,6 +6,7 @@ final class ComponentPicker: NSObject {
     private let onToggleComponent: (String) -> Bool
     private let onSetAll: (Bool) -> Bool
     private var disabledNames: Set<String>
+    private var regionTokens: [String]?
     private var checkboxes: [String: NSButton] = [:]
     private var allCheckbox: NSButton?
     private let rootComponents: [ComponentStatus]
@@ -18,8 +19,19 @@ final class ComponentPicker: NSObject {
         self.onToggleComponent = onToggleComponent
         self.onSetAll = onSetAll
         self.disabledNames = page.disabledComponentNames
+        self.regionTokens = page.enabledRegions
         self.rootComponents = page.snapshot?.components ?? []
         super.init()
+    }
+
+    /// Region tokens to write. `nil` means this page does not filter by region.
+    func selectedEnabledRegions() -> [String]? { regionTokens }
+
+    /// Mutes inside an allowed region. Components hidden by the region filter are not included.
+    func selectedDisabledNames() -> Set<String> {
+        guard let regionTokens else { return disabledNames }
+        let allowed = RegionFilter.allowedIDs(in: rootComponents, regions: regionTokens)
+        return disabledNames.filter { allowed.contains($0) }
     }
 
     static func count(_ items: [ComponentStatus]) -> Int {
@@ -97,6 +109,14 @@ final class ComponentPicker: NSObject {
     }
 
     @objc private func allClicked(_: NSButton) {
+        if regionTokens != nil {
+            let allowed = allowedNodes()
+            let allOn = allowed.allSatisfy { !isUserOff($0) }
+            let keys = allowed.flatMap { [$0.id, $0.name] }
+            setEnabled(!allOn, keys: keys)
+            refreshTreeStates()
+            return
+        }
         let nodes = rootComponents.flatMap(ComponentTree.collect)
         let allOn = nodes.allSatisfy { !isOff($0) }
         let enabled = !allOn
@@ -110,6 +130,10 @@ final class ComponentPicker: NSObject {
 
     @objc private func componentClicked(_ sender: NSButton) {
         let key = sender.identifier?.rawValue ?? sender.title
+        if toggleRegion(key) {
+            refreshTreeStates()
+            return
+        }
         guard onToggleComponent(key) else {
             refreshTreeStates()
             return
@@ -142,13 +166,51 @@ final class ComponentPicker: NSObject {
     }
 
     private func isOff(_ component: ComponentStatus) -> Bool {
+        if let regionTokens,
+           !RegionFilter.allowedIDs(in: rootComponents, regions: regionTokens).contains(component.id) {
+            return true
+        }
+        return isUserOff(component)
+    }
+
+    private func isUserOff(_ component: ComponentStatus) -> Bool {
         disabledNames.contains(component.id) || disabledNames.contains(component.name)
     }
 
+    private func allowedNodes() -> [ComponentStatus] {
+        guard let regionTokens else { return rootComponents.flatMap(ComponentTree.collect) }
+        let allowed = RegionFilter.allowedIDs(in: rootComponents, regions: regionTokens)
+        return rootComponents.flatMap(ComponentTree.collect).filter { allowed.contains($0.id) }
+    }
+
+    /// Clicking a top-level row adds or removes that region. Child rows keep the mute list.
+    private func toggleRegion(_ key: String) -> Bool {
+        guard regionTokens != nil else { return false }
+        guard let node = rootComponents.first(where: { $0.id == key || $0.name == key }) else {
+            return false
+        }
+        if RegionFilter.matches(node, regions: regionTokens!) {
+            regionTokens!.removeAll { token in
+                node.name.range(of: token, options: .caseInsensitive) != nil
+                    || node.id.range(of: token, options: .caseInsensitive) != nil
+            }
+        } else {
+            regionTokens!.append(node.name)
+        }
+        return true
+    }
+
     private func refreshTreeStates() {
+        var keys = disabledNames
+        if let regionTokens {
+            let allowed = RegionFilter.allowedIDs(in: rootComponents, regions: regionTokens)
+            for node in rootComponents.flatMap(ComponentTree.collect) where !allowed.contains(node.id) {
+                keys.insert(node.id)
+            }
+        }
         let index = ComponentSelectionIndex(
             components: rootComponents,
-            disabledKeys: disabledNames
+            disabledKeys: keys
         )
         for (id, button) in checkboxes {
             guard let summary = index[id] else { continue }

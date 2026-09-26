@@ -8,6 +8,9 @@ extension ProviderProbe {
         if isMicrosoftLanding(context.base) {
             return try await probeMicrosoftHub(context: context, flags: &flags)
         }
+        if isAzureStatusLanding(context.base) || isAzureStatusLanding(context.pageURL) {
+            return try await fetchFeed(azureHubFeed, context: context, flags: &flags)
+        }
         do {
             let located = try await context.client.getLocated(context.pageURL)
             try Task.checkCancellation()
@@ -104,6 +107,11 @@ extension ProviderProbe {
             }
         }
         return nil
+    }
+
+    static func isAzureStatusLanding(_ url: URL) -> Bool {
+        let host = url.host?.lowercased() ?? ""
+        return host == "azure.status.microsoft" || host == "status.azure.com"
     }
 
     static func isMicrosoftLanding(_ url: URL) -> Bool {

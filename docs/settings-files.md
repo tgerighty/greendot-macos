@@ -133,22 +133,24 @@ a cached result only when its `url` is the same as the `url` of the page in
 `config.json`. A URL that you change by hand starts with no cached result.
 
 A `severity` is `green`, `yellow`, `red`, or `grey`. A `provider` is
-`statuspage`, `statuspal`, `instatus`, `flashduty`, `aws`, `icinga`, `okta`, or
-`rss`. A `grey` severity with `isUnreachable` set to `true` is a page that
-greendot could not read.
+`statuspage`, `statuspal`, `instatus`, `flashduty`, `aws`, `icinga`, `okta`,
+`salesforce`, `statusio`, `slack`, `heroku`, `google`, `apple`, `incidentio`,
+`concur`, `adobe`, `azuredevops`, `n8n`, `zscaler`, or `rss`. A `grey` severity
+with `isUnreachable` set to `true` is a page that greendot could not read.
 
 ## Edit config.json by hand
 
 1. Open the greendot menu. Click Reveal Config File.
 2. Edit the file. Save it.
-3. Open the greendot menu. Click Reload Config.
 
-greendot reads the file again, builds the menu again, starts the poll timer
-again, and polls one time.
+greendot loads the file, builds the menu again, starts the poll timer again,
+and polls one time. If Add, Edit, or Remove is open, greendot waits until that
+window closes, then loads the file. Component choices in that window are written
+when the window closes.
 
-Do not edit the file while greendot writes to it. greendot does not write over a
-`config.json` that changed on disk after it last read or wrote the file. It shows
-an alert instead. Click Reload Config to use your file.
+greendot does not write over a `config.json` that changed on disk after it last
+read or wrote the file. It loads that file instead. Click Reload Config to load
+the file before the next poll.
 
 ### When greendot cannot read the file
 

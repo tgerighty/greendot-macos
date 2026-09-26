@@ -23,22 +23,39 @@ public enum ComponentTree {
 
     static func enabledLeafSeverity(
         in items: [ComponentStatus],
-        disabledKeys: Set<String>
+        disabledKeys: Set<String>,
+        enabledRegions: [String]? = nil,
+        ancestorAllowed: Bool = false
     ) -> Severity {
-        enabledLeafSeverityIfPresent(in: items, disabledKeys: disabledKeys) ?? .green
+        enabledLeafSeverityIfPresent(
+            in: items,
+            disabledKeys: disabledKeys,
+            enabledRegions: enabledRegions,
+            ancestorAllowed: ancestorAllowed
+        ) ?? .green
     }
 
     private static func enabledLeafSeverityIfPresent(
         in items: [ComponentStatus],
-        disabledKeys: Set<String>
+        disabledKeys: Set<String>,
+        enabledRegions: [String]?,
+        ancestorAllowed: Bool
     ) -> Severity? {
         var result: Severity?
         for item in items {
-            guard !disabledKeys.contains(item.id),
+            let allowed = RegionFilter.allows(
+                item,
+                regions: enabledRegions,
+                ancestorAllowed: ancestorAllowed
+            )
+            guard allowed,
+                  !disabledKeys.contains(item.id),
                   !disabledKeys.contains(item.name) else { continue }
             let childSeverity = enabledLeafSeverityIfPresent(
                 in: item.children,
-                disabledKeys: disabledKeys
+                disabledKeys: disabledKeys,
+                enabledRegions: enabledRegions,
+                ancestorAllowed: enabledRegions != nil
             )
             let severity: Severity
             if item.isGroup, !item.children.isEmpty {
@@ -70,5 +87,44 @@ public enum ComponentTree {
         for child in item.children {
             appendKeys(child, to: &result)
         }
+    }
+}
+
+public enum RegionFilter {
+    /// `nil` regions means there is no region filter. An empty list matches nothing.
+    public static func allows(
+        _ component: ComponentStatus,
+        regions: [String]?,
+        ancestorAllowed: Bool
+    ) -> Bool {
+        guard let regions else { return true }
+        if ancestorAllowed { return true }
+        return matches(component, regions: regions)
+    }
+
+    public static func matches(_ component: ComponentStatus, regions: [String]) -> Bool {
+        let name = component.name
+        let id = component.id
+        return regions.contains { token in
+            guard !token.isEmpty else { return false }
+            return name.range(of: token, options: .caseInsensitive) != nil
+                || id.range(of: token, options: .caseInsensitive) != nil
+        }
+    }
+
+    public static func allowedIDs(in components: [ComponentStatus], regions: [String]) -> Set<String> {
+        var ids: Set<String> = []
+        func walk(_ items: [ComponentStatus], ancestorAllowed: Bool) {
+            for item in items {
+                let allowed = allows(item, regions: regions, ancestorAllowed: ancestorAllowed)
+                if allowed {
+                    ids.insert(item.id)
+                    ids.insert(item.name)
+                }
+                walk(item.children, ancestorAllowed: allowed)
+            }
+        }
+        walk(components, ancestorAllowed: false)
+        return ids
     }
 }

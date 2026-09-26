@@ -15,6 +15,11 @@ public enum StatusProvider: String, Codable, Equatable, Sendable {
     case google
     case apple
     case incidentio
+    case concur
+    case adobe
+    case azuredevops
+    case n8n
+    case zscaler
     case rss
 }
 
@@ -103,6 +108,9 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
     public var name: String
     public var notificationsEnabled: Bool
     public var disabledComponentNames: Set<String>
+    /// Regions that count. `nil` keeps the mute list only. An empty list mutes every component.
+    /// A component counts when its name or id contains one of these strings, and so do its children.
+    public var enabledRegions: [String]?
     public var snapshot: PageSnapshot?
 
     public init(
@@ -111,6 +119,7 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
         name: String,
         notificationsEnabled: Bool = true,
         disabledComponentNames: Set<String> = [],
+        enabledRegions: [String]? = nil,
         snapshot: PageSnapshot? = nil
     ) {
         self.id = id
@@ -118,6 +127,7 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
         self.name = name
         self.notificationsEnabled = notificationsEnabled
         self.disabledComponentNames = disabledComponentNames
+        self.enabledRegions = enabledRegions
         self.snapshot = snapshot
     }
 
@@ -131,7 +141,8 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
         if snapshot.components.isEmpty { return snapshot.overall }
         return ComponentTree.enabledLeafSeverity(
             in: snapshot.components,
-            disabledKeys: disabledComponentNames
+            disabledKeys: disabledComponentNames,
+            enabledRegions: enabledRegions
         )
     }
 
@@ -139,11 +150,19 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
         !disabledComponentNames.contains(component.id) && !disabledComponentNames.contains(component.name)
     }
 
-    private func filterEnabled(_ items: [ComponentStatus]) -> [ComponentStatus] {
+    private func filterEnabled(
+        _ items: [ComponentStatus],
+        ancestorAllowed: Bool = false
+    ) -> [ComponentStatus] {
         items.compactMap { item in
-            guard isComponentEnabled(item) else { return nil }
+            let allowed = RegionFilter.allows(
+                item,
+                regions: enabledRegions,
+                ancestorAllowed: ancestorAllowed
+            )
+            guard allowed, isComponentEnabled(item) else { return nil }
             var copy = item
-            copy.children = filterEnabled(item.children)
+            copy.children = filterEnabled(item.children, ancestorAllowed: enabledRegions != nil)
             if !copy.children.isEmpty {
                 copy.severity = ComponentTree.enabledLeafSeverity(
                     in: copy.children,
@@ -162,7 +181,7 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
 
 extension WatchedPage: Codable {
     enum CodingKeys: String, CodingKey {
-        case id, url, name, notificationsEnabled, disabledComponentNames, snapshot
+        case id, url, name, notificationsEnabled, disabledComponentNames, enabledRegions, snapshot
     }
 
     public init(from decoder: Decoder) throws {
@@ -173,6 +192,7 @@ extension WatchedPage: Codable {
         name = try container.decode(String.self, forKey: .name)
         notificationsEnabled = try container.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true
         disabledComponentNames = try container.decodeIfPresent(Set<String>.self, forKey: .disabledComponentNames) ?? []
+        enabledRegions = try container.decodeIfPresent([String].self, forKey: .enabledRegions)
         // Legacy version-1 field. A wrong type is ignored, not fatal.
         snapshot = (try? container.decodeIfPresent(PageSnapshot.self, forKey: .snapshot)) ?? nil
     }
@@ -184,5 +204,8 @@ extension WatchedPage: Codable {
         try container.encode(name, forKey: .name)
         try container.encode(notificationsEnabled, forKey: .notificationsEnabled)
         try container.encode(disabledComponentNames.sorted(), forKey: .disabledComponentNames)
+        if let enabledRegions {
+            try container.encode(enabledRegions.sorted(), forKey: .enabledRegions)
+        }
     }
 }

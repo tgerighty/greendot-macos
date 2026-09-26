@@ -58,7 +58,8 @@ extension ProviderProbe {
             return try await probeIncidentio(context: context, flags: &flags)
         case .rss:
             return try await probeRSS(context: context, flags: &flags)
-        case .aws, .icinga, .okta, .salesforce, .slack, .heroku, .google, .apple:
+        case .aws, .icinga, .okta, .salesforce, .slack, .heroku, .google, .apple,
+             .concur, .adobe, .azuredevops, .n8n, .zscaler:
             return nil
         }
     }

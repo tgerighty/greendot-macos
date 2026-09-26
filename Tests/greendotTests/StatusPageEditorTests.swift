@@ -196,7 +196,7 @@ final class StatusPageEditorTests: XCTestCase {
         addTeardownBlock { await gate.complete(with: false) }
         let panelController = PagePanelController(
             page: nil,
-            onSave: { _, _ in await gate.save() }
+            onSave: { _, _, _, _ in await gate.save() }
         )
         panelController.show()
         defer { panelController.close() }
@@ -226,7 +226,7 @@ final class StatusPageEditorTests: XCTestCase {
         addTeardownBlock { await gate.complete(with: false) }
         let panelController = PagePanelController(
             page: nil,
-            onSave: { _, _ in await gate.save() }
+            onSave: { _, _, _, _ in await gate.save() }
         )
         panelController.show()
         defer { panelController.close() }
@@ -293,7 +293,7 @@ extension StatusPageEditorTests {
         addTeardownBlock { await gate.complete(with: false) }
         let panelController = PagePanelController(
             page: nil,
-            onSave: { _, _ in await gate.save() }
+            onSave: { _, _, _, _ in await gate.save() }
         )
         panelController.show()
         defer { panelController.close() }

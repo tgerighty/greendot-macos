@@ -131,7 +131,8 @@ public enum ProviderProbe {
             endpoint = context.base.appendingPathComponent("api/widget/v1/summary.json")
             parse = { try FlashdutyParser.parse(data: $0, sourceURL: context.base) }
         case .statuspal, .rss, .aws, .icinga, .okta, .salesforce,
-             .statusio, .slack, .heroku, .google, .apple, .incidentio:
+             .statusio, .slack, .heroku, .google, .apple, .incidentio,
+             .concur, .adobe, .azuredevops, .n8n, .zscaler:
             // unreachable: routed elsewhere
             return .miss
         }

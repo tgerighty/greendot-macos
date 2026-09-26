@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var configLoadFailed = false
     private var pulseTimer: Timer?
     var editor: StatusPageEditor?
+    var reloadingConfig = false
     var toastDelivery: any ToastDelivery = SystemToastDelivery()
     private var pollRefreshState = (presentedError: false, latestInvocation: UInt64(0))
     var presentError: @MainActor (Error) -> Void = { error in
@@ -183,13 +184,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.rebuild()
                 },
                 presentError: { [weak self] error in
-                    self?.presentError(error)
+                    self?.handleStoreError(error)
                 },
                 clearToast: { [weak self] pageID in
                     self?.toastDelivery.clear(pageID: pageID)
                 },
                 refreshToast: { [weak self] pageID in
                     self?.refreshToast(pageID: pageID)
+                },
+                onUncommittedClose: { [weak self] in
+                    self?.reloadIfConfigChanged()
                 }
             )
             self.editor = editor
@@ -326,9 +330,28 @@ extension AppDelegate {
             rebuild()
             return true
         } catch {
-            presentError(error)
+            handleStoreError(error)
             return false
         }
+    }
+
+    /// A changed config file is loaded. There is no dialog. An open add, edit, or remove
+    /// window waits until that window closes.
+    @MainActor
+    func handleStoreError(_ error: Error) {
+        guard error as? StoreError == .changedOnDisk else {
+            presentError(error)
+            return
+        }
+        guard editor == nil else { return }
+        reloadConfig()
+    }
+
+    @MainActor
+    func reloadIfConfigChanged() {
+        guard !reloadingConfig else { return }
+        guard store?.hasConfigChangedOnDisk() == true else { return }
+        reloadConfig()
     }
 
     /// The network toast stands in for every page, so its arrival clears the page panels it replaces.
@@ -365,6 +388,10 @@ extension AppDelegate {
         await MainActor.run {
             guard invocation == self.pollRefreshState.latestInvocation else { return }
             if let error = outcome.error {
+                if error as? StoreError == .changedOnDisk {
+                    self.handleStoreError(error)
+                    return
+                }
                 if !self.pollRefreshState.presentedError {
                     self.pollRefreshState.presentedError = true
                     self.presentError(error)
