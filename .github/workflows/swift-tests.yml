@@ -25,6 +25,8 @@ jobs:
         run: swift test --filter 'MenuBuilderTests'
       - name: Isolate StatusMenuController failure
         if: failure()
+        env:
+          SWIFT_BACKTRACE: enable=yes
         run: swift test --filter 'StatusMenuControllerTests/testControllersOwnIndependentMenusAndStableHandlers'
       - name: Capture AppKit test crash report
         if: failure()
