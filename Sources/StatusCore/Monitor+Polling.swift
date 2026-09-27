@@ -71,6 +71,7 @@ extension Monitor {
             let hit = try await ProviderProbe.probeHit(
                 pageURL: page.url,
                 client: client,
+                token: page.token,
                 prefer: page.snapshot?.provider,
                 previousBody: previousBody,
                 previousSnapshot: page.snapshot

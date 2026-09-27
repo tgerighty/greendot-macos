@@ -89,6 +89,7 @@ extension Monitor {
             _ = try await ProviderProbe.probeHit(
                 pageURL: page.url,
                 client: client,
+                token: page.token,
                 prefer: result.snapshot.provider,
                 previousBody: result.body,
                 previousSnapshot: result.snapshot

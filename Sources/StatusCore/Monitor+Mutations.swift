@@ -39,14 +39,16 @@ extension Monitor {
         if didChange { onLaunchAtLoginEnable?() }
     }
 
-    public func add(url: URL, name: String?) async throws {
+    public func add(url: URL, name: String?, token: String? = nil) async throws {
         try Task.checkCancellation()
-        let snapshot = try await ProviderProbe.probe(pageURL: url, client: client)
+        let savedToken = trimmed(token)
+        let snapshot = try await ProviderProbe.probe(pageURL: url, token: savedToken, client: client)
         try Task.checkCancellation()
         let page = WatchedPage(
             url: ProviderProbe.persistedPageURL(url),
             name: trimmed(name) ?? snapshot.name,
             notificationsEnabled: true,
+            token: savedToken,
             snapshot: snapshot
         )
         try commitWatchedPageMutation {
@@ -62,11 +64,33 @@ extension Monitor {
         disabledComponentNames: Set<String>? = nil,
         enabledRegions: [String]? = nil
     ) async throws {
+        let previous = withStateLock { config.pages.first { $0.id == id } }
+        let token = previous.flatMap { RedirectPolicy.allows(url, from: $0.url) ? $0.token : nil }
+        try await edit(
+            id: id, url: url, name: name,
+            disabledComponentNames: disabledComponentNames,
+            enabledRegions: enabledRegions, token: token
+        )
+    }
+
+    public func edit(
+        id: UUID,
+        url: URL,
+        name: String?,
+        disabledComponentNames: Set<String>? = nil,
+        enabledRegions: [String]? = nil,
+        token: String?
+    ) async throws {
         try Task.checkCancellation()
-        guard withStateLock({ config.pages.contains { $0.id == id } }) else {
+        guard let previous = withStateLock({ config.pages.first { $0.id == id } }) else {
             throw MonitorError.pageNotFound(id)
         }
-        let snapshot = try await ProviderProbe.probe(pageURL: url, client: client)
+        let savedToken = trimmed(token)
+        if savedToken != nil, savedToken == previous.token,
+           !RedirectPolicy.allows(url, from: previous.url) {
+            throw MonitorError.tokenRequiresReentry
+        }
+        let snapshot = try await ProviderProbe.probe(pageURL: url, token: savedToken, client: client)
         try Task.checkCancellation()
         try commitWatchedPageMutation(invalidatingBodyFor: id) { next in
             guard let index = next.pages.firstIndex(where: { $0.id == id }) else {
@@ -75,6 +99,7 @@ extension Monitor {
             next.pages[index].url = ProviderProbe.persistedPageURL(url)
             next.pages[index].name = trimmed(name) ?? snapshot.name
             next.pages[index].snapshot = snapshot
+            next.pages[index].token = savedToken
             if let disabledComponentNames {
                 next.pages[index].disabledComponentNames = disabledComponentNames
             }

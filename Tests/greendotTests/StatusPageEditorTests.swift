@@ -69,6 +69,82 @@ final class StatusPageEditorTests: XCTestCase {
         XCTAssertTrue(try store.load().pages.isEmpty)
     }
 
+    func testAddPanelPassesTrimmedTokenToSave() async throws {
+        _ = NSApplication.shared
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PageStore(directory: directory)
+        let client = MapHTTPClient(byPath: [
+            "/api/v2/summary.json": (Data(statuspageJSON.utf8), 200)
+        ])
+        let monitor = Monitor(store: store, client: client)
+        try monitor.load()
+        let saved = expectation(description: "private page is saved")
+        let editor = StatusPageEditor(
+            monitor: monitor,
+            editingPageID: nil,
+            onChange: { saved.fulfill() },
+            presentError: { error in XCTFail("unexpected save error: \(error)") }
+        )
+        editor.show()
+        defer { editor.close() }
+
+        let panel = try XCTUnwrap(Self.visiblePanelWindow())
+        try XCTUnwrap(Self.field("url-field", in: panel.contentView)).stringValue =
+            "https://status.example.com"
+        let tokenField = try XCTUnwrap(Self.field("token-field", in: panel.contentView))
+        XCTAssertTrue(tokenField is NSSecureTextField)
+        tokenField.stringValue = "  page-token  "
+        try XCTUnwrap(Self.button("save-button", in: panel.contentView)).performClick(nil)
+
+        await fulfillment(of: [saved], timeout: 2)
+        XCTAssertEqual(monitor.pages.first?.token, "page-token")
+        XCTAssertEqual(client.lastHeaders, ["Authorization": "Bearer page-token"])
+        let body = try XCTUnwrap(
+            String(data: try Data(contentsOf: store.configURL), encoding: .utf8)
+        )
+        XCTAssertTrue(body.contains("page-token"))
+        let permissions = try FileManager.default.attributesOfItem(atPath: store.configURL.path)[
+            .posixPermissions
+        ] as? NSNumber
+        XCTAssertEqual(permissions?.intValue, 0o600)
+    }
+
+    func testEditPanelClearsUnchangedTokenWhenOriginChanges() async throws {
+        _ = NSApplication.shared
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let client = MapHTTPClient(byPath: [
+            "/api/v2/summary.json": (Data(statuspageJSON.utf8), 200)
+        ])
+        let monitor = Monitor(store: PageStore(directory: directory), client: client)
+        try monitor.load()
+        try await monitor.add(
+            url: URL(string: "https://www.githubstatus.com")!,
+            name: nil,
+            token: "read-token"
+        )
+        let saved = expectation(description: "edited page is saved")
+        let editor = StatusPageEditor(
+            monitor: monitor,
+            editingPageID: monitor.pages[0].id,
+            onChange: { saved.fulfill() },
+            presentError: { error in XCTFail("unexpected save error: \(error)") }
+        )
+        editor.show()
+        defer { editor.close() }
+
+        let panel = try XCTUnwrap(Self.visiblePanelWindow())
+        XCTAssertEqual(Self.field("token-field", in: panel.contentView)?.stringValue, "read-token")
+        try XCTUnwrap(Self.field("url-field", in: panel.contentView)).stringValue =
+            "https://other.example.com"
+        try XCTUnwrap(Self.button("save-button", in: panel.contentView)).performClick(nil)
+
+        await fulfillment(of: [saved], timeout: 2)
+        XCTAssertNil(monitor.pages[0].token)
+        XCTAssertNil(client.lastHeaders["Authorization"])
+    }
+
     func testFailedEditKeepsEditorOpenAndRetainsEnteredValues() async throws {
         _ = NSApplication.shared
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -196,7 +272,7 @@ final class StatusPageEditorTests: XCTestCase {
         addTeardownBlock { await gate.complete(with: false) }
         let panelController = PagePanelController(
             page: nil,
-            onSave: { _, _, _, _ in await gate.save() }
+            onSave: { _, _, _, _, _ in await gate.save() }
         )
         panelController.show()
         defer { panelController.close() }
@@ -226,7 +302,7 @@ final class StatusPageEditorTests: XCTestCase {
         addTeardownBlock { await gate.complete(with: false) }
         let panelController = PagePanelController(
             page: nil,
-            onSave: { _, _, _, _ in await gate.save() }
+            onSave: { _, _, _, _, _ in await gate.save() }
         )
         panelController.show()
         defer { panelController.close() }
@@ -293,7 +369,7 @@ extension StatusPageEditorTests {
         addTeardownBlock { await gate.complete(with: false) }
         let panelController = PagePanelController(
             page: nil,
-            onSave: { _, _, _, _ in await gate.save() }
+            onSave: { _, _, _, _, _ in await gate.save() }
         )
         panelController.show()
         defer { panelController.close() }

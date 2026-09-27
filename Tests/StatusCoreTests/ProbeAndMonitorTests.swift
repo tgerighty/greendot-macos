@@ -266,6 +266,138 @@ final class ProbeAndMonitorTests: XCTestCase {
     func testStoreErrorCorruptHasUserFacingText() {
         XCTAssertEqual(StoreError.corrupt.errorDescription, "The saved status list could not be read.")
     }
+
+    /// FT-44-01: save writes the token into config.json with mode 0600.
+    func testAddPersistsTokenInConfigAndPollSendsBearer() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        let client = MapHTTPClient(byPath: [
+            "/api/v2/summary.json": (Data(statuspageJSON.utf8), 200)
+        ])
+        let monitor = Monitor(store: store, client: client)
+        try monitor.load()
+        try await monitor.add(
+            url: URL(string: "https://www.githubstatus.com")!,
+            name: nil,
+            token: "page-read-token"
+        )
+        XCTAssertEqual(monitor.pages[0].token, "page-read-token")
+        let body = try XCTUnwrap(
+            String(data: try Data(contentsOf: store.configURL), encoding: .utf8)
+        )
+        XCTAssertTrue(body.contains("page-read-token"), body)
+        let attributes = try FileManager.default.attributesOfItem(atPath: store.configURL.path)
+        let mode = attributes[.posixPermissions] as? NSNumber
+        XCTAssertEqual(mode?.intValue, 0o600)
+
+        let loaded = Monitor(store: store, client: client)
+        try loaded.load()
+        XCTAssertEqual(loaded.pages[0].token, "page-read-token")
+        _ = try await loaded.pollAll()
+        XCTAssertEqual(client.lastHeaders, RequestHeaders.authorization(token: "page-read-token"))
+    }
+
+    func testEditReplacesToken() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let client = MapHTTPClient(byPath: [
+            "/api/v2/summary.json": (Data(statuspageJSON.utf8), 200)
+        ])
+        let monitor = Monitor(store: PageStore(directory: dir), client: client)
+        try await monitor.add(
+            url: URL(string: "https://www.githubstatus.com")!,
+            name: nil,
+            token: "old-token"
+        )
+        try await monitor.edit(
+            id: monitor.pages[0].id,
+            url: URL(string: "https://www.githubstatus.com")!,
+            name: "GH",
+            token: "new-token"
+        )
+        XCTAssertEqual(monitor.pages[0].name, "GH")
+        XCTAssertEqual(monitor.pages[0].token, "new-token")
+        XCTAssertEqual(client.lastHeaders, RequestHeaders.authorization(token: "new-token"))
+    }
+
+    func testEditWithoutTokenKeepsItOnlyOnTheSameOrigin() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let client = MapHTTPClient(byPath: [
+            "/api/v2/summary.json": (Data(statuspageJSON.utf8), 200)
+        ])
+        let monitor = Monitor(store: PageStore(directory: dir), client: client)
+        let original = URL(string: "https://www.githubstatus.com")!
+        try await monitor.add(url: original, name: nil, token: "read-token")
+        let id = monitor.pages[0].id
+
+        try await monitor.edit(id: id, url: original, name: "Renamed")
+        XCTAssertEqual(monitor.pages[0].token, "read-token")
+        XCTAssertEqual(client.lastHeaders["Authorization"], "Bearer read-token")
+
+        try await monitor.edit(id: id, url: URL(string: "https://other.example.com")!, name: nil)
+        XCTAssertNil(monitor.pages[0].token)
+        XCTAssertNil(client.lastHeaders["Authorization"])
+    }
+
+    func testEditRejectsStoredTokenOnAnotherOrigin() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let client = MapHTTPClient(byPath: [
+            "/api/v2/summary.json": (Data(statuspageJSON.utf8), 200)
+        ])
+        let monitor = Monitor(store: PageStore(directory: dir), client: client)
+        let original = URL(string: "https://www.githubstatus.com")!
+        try await monitor.add(url: original, name: nil, token: "read-token")
+        let requestsBefore = client.recordedURLs.count
+
+        do {
+            try await monitor.edit(
+                id: monitor.pages[0].id,
+                url: URL(string: "https://other.example.com")!,
+                name: nil,
+                token: "read-token"
+            )
+            XCTFail("expected token reentry error")
+        } catch {
+            XCTAssertEqual(error as? MonitorError, .tokenRequiresReentry)
+        }
+        XCTAssertEqual(client.recordedURLs.count, requestsBefore)
+        XCTAssertEqual(monitor.pages[0].token, "read-token")
+    }
+
+    /// FT-44-02: an empty token is public. The page still loads.
+    func testEmptyTokenIsNilAndPublicProbeWorks() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = PageStore(directory: dir)
+        let client = MapHTTPClient(byPath: [
+            "/api/v2/summary.json": (Data(statuspageJSON.utf8), 200)
+        ])
+        let monitor = Monitor(store: store, client: client)
+        try await monitor.add(
+            url: URL(string: "https://www.githubstatus.com")!,
+            name: nil,
+            token: ""
+        )
+        XCTAssertNil(monitor.pages[0].token)
+        XCTAssertEqual(monitor.pages[0].name, "GitHub")
+        XCTAssertEqual(client.lastHeaders, [:])
+    }
+
+    func testPageStoreLoadWithoutTokenFieldLeavesTokenNil() throws {
+        let json = """
+        {"version":1,"pages":[{"id":"00000000-0000-0000-0000-000000000001",
+        "url":"https://www.githubstatus.com","name":"GitHub","notificationsEnabled":true,
+        "disabledComponentNames":[]}],"didSetLaunchAtLogin":false}
+        """
+        let dir = try writeConfig(Data(json.utf8))
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let config = try PageStore(directory: dir).load()
+        XCTAssertEqual(config.pages.count, 1)
+        XCTAssertNil(config.pages[0].token)
+    }
 }
 
 extension ProbeAndMonitorTests {

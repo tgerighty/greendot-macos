@@ -31,10 +31,11 @@ public enum ProviderProbe {
 
     public static func probe(
         pageURL: URL,
+        token: String? = nil,
         client: HTTPClient,
         prefer: StatusProvider? = nil
     ) async throws -> PageSnapshot {
-        try await probeHit(pageURL: pageURL, client: client, prefer: prefer).snapshot
+        try await probeHit(pageURL: pageURL, client: client, token: token, prefer: prefer).snapshot
     }
 
     static func probeOrder(preferring prefer: StatusProvider?) -> [StatusProvider] {

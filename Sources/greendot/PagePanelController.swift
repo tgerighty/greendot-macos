@@ -11,7 +11,8 @@ final class PagePanelController: NSObject, NSWindowDelegate {
     private let window: NSWindow
     private let urlField = NSTextField(string: "")
     private let nameField = NSTextField(string: "")
-    private let onSave: (URL, String?, Set<String>?, [String]?) async -> Bool
+    private let tokenField = NSSecureTextField(string: "")
+    private let onSave: (URL, String?, Set<String>?, [String]?, String?) async -> Bool
     private let onClose: (Bool) -> Void
     private let onRemove: (() -> Bool)?
     private var committedClose = false
@@ -24,7 +25,7 @@ final class PagePanelController: NSObject, NSWindowDelegate {
 
     init(
         page: WatchedPage?,
-        onSave: @escaping (URL, String?, Set<String>?, [String]?) async -> Bool,
+        onSave: @escaping (URL, String?, Set<String>?, [String]?, String?) async -> Bool,
         onToggleComponent: ((String) -> Bool)? = nil,
         onSetAll: ((Bool) -> Bool)? = nil,
         onRemove: (() -> Bool)? = nil,
@@ -43,7 +44,7 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         let editing = page != nil
         let componentCount = ComponentPicker.count(page?.snapshot?.components ?? [])
         let listHeight = CGFloat(min(max(componentCount, 1), 12) * 24 + 8)
-        let height: CGFloat = editing ? 200 + listHeight + 48 : 160
+        let height: CGFloat = editing ? 256 + listHeight + 48 : 216
         window = KeyablePanel(
             contentRect: NSRect(x: 0, y: 0, width: 440, height: height),
             styleMask: [.titled, .closable],
@@ -95,13 +96,13 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         saveButton = save
         save.keyEquivalent = "\r"
         let cancel = button("Cancel", id: "cancel-button", action: #selector(cancelTapped))
-        [urlField, nameField, save, cancel].forEach {
+        [urlField, nameField, tokenField, save, cancel].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview($0)
         }
         var constraints = fieldConstraints(in: view)
         if page != nil, let picker {
-            constraints.append(contentsOf: picker.install(in: view, below: nameField, listHeight: listHeight))
+            constraints.append(contentsOf: picker.install(in: view, below: tokenField, listHeight: listHeight))
             let remove = button("Remove Status Page", id: "remove-page-button", action: #selector(removeTapped))
             removeButton = remove
             remove.bezelStyle = .rounded
@@ -129,6 +130,10 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         nameField.setAccessibilityIdentifier("name-field")
         nameField.setAccessibilityLabel("name-field")
         nameField.stringValue = page?.name ?? ""
+        tokenField.placeholderString = "Optional token for a private page"
+        tokenField.setAccessibilityIdentifier("token-field")
+        tokenField.setAccessibilityLabel("token-field")
+        tokenField.stringValue = page?.token ?? ""
     }
 
     private func button(_ title: String, id: String, action: Selector) -> NSButton {
@@ -140,10 +145,13 @@ final class PagePanelController: NSObject, NSWindowDelegate {
     private func fieldConstraints(in view: NSView) -> [NSLayoutConstraint] {
         let urlLabel = NSTextField(labelWithString: "Status page URL")
         let nameLabel = NSTextField(labelWithString: "Name")
+        let tokenLabel = NSTextField(labelWithString: "Token")
         urlLabel.translatesAutoresizingMaskIntoConstraints = false
         nameLabel.translatesAutoresizingMaskIntoConstraints = false
+        tokenLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(urlLabel)
         view.addSubview(nameLabel)
+        view.addSubview(tokenLabel)
         return [
             urlLabel.topAnchor.constraint(equalTo: view.topAnchor, constant: 16),
             urlLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
@@ -154,7 +162,12 @@ final class PagePanelController: NSObject, NSWindowDelegate {
             nameLabel.leadingAnchor.constraint(equalTo: urlField.leadingAnchor),
             nameField.topAnchor.constraint(equalTo: nameLabel.bottomAnchor, constant: 4),
             nameField.leadingAnchor.constraint(equalTo: urlField.leadingAnchor),
-            nameField.trailingAnchor.constraint(equalTo: urlField.trailingAnchor)
+            nameField.trailingAnchor.constraint(equalTo: urlField.trailingAnchor),
+            tokenLabel.topAnchor.constraint(equalTo: nameField.bottomAnchor, constant: 12),
+            tokenLabel.leadingAnchor.constraint(equalTo: urlField.leadingAnchor),
+            tokenField.topAnchor.constraint(equalTo: tokenLabel.bottomAnchor, constant: 4),
+            tokenField.leadingAnchor.constraint(equalTo: urlField.leadingAnchor),
+            tokenField.trailingAnchor.constraint(equalTo: urlField.trailingAnchor)
         ]
     }
 
@@ -171,12 +184,13 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         }
         let generation = operationGeneration
         let name = nameField.stringValue
+        let token = tokenField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let disabled = picker?.selectedDisabledNames()
         let regions = picker?.selectedEnabledRegions()
         setOperationInFlight(true)
         let save = onSave
         saveTask = Task { [weak self] in
-            let saved = await save(url, name, disabled, regions)
+            let saved = await save(url, name, disabled, regions, token.isEmpty ? nil : token)
             await MainActor.run { [weak self] in
                 guard let self, self.operationGeneration == generation else { return }
                 self.saveTask = nil
@@ -215,6 +229,7 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         operationInFlight = inFlight
         urlField.isEnabled = !inFlight
         nameField.isEnabled = !inFlight
+        tokenField.isEnabled = !inFlight
         saveButton?.isEnabled = !inFlight
         removeButton?.isEnabled = !inFlight
     }

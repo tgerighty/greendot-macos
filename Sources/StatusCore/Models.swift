@@ -111,6 +111,7 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
     /// Regions that count. `nil` keeps the mute list only. An empty list mutes every component.
     /// A component counts when its name or id contains one of these strings, and so do its children.
     public var enabledRegions: [String]?
+    public var token: String?
     public var snapshot: PageSnapshot?
 
     public init(
@@ -120,6 +121,7 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
         notificationsEnabled: Bool = true,
         disabledComponentNames: Set<String> = [],
         enabledRegions: [String]? = nil,
+        token: String? = nil,
         snapshot: PageSnapshot? = nil
     ) {
         self.id = id
@@ -128,6 +130,7 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
         self.notificationsEnabled = notificationsEnabled
         self.disabledComponentNames = disabledComponentNames
         self.enabledRegions = enabledRegions
+        self.token = token
         self.snapshot = snapshot
     }
 
@@ -181,7 +184,7 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
 
 extension WatchedPage: Codable {
     enum CodingKeys: String, CodingKey {
-        case id, url, name, notificationsEnabled, disabledComponentNames, enabledRegions, snapshot
+        case id, url, name, notificationsEnabled, disabledComponentNames, enabledRegions, token, snapshot
     }
 
     public init(from decoder: Decoder) throws {
@@ -193,6 +196,9 @@ extension WatchedPage: Codable {
         notificationsEnabled = try container.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true
         disabledComponentNames = try container.decodeIfPresent(Set<String>.self, forKey: .disabledComponentNames) ?? []
         enabledRegions = try container.decodeIfPresent([String].self, forKey: .enabledRegions)
+        token = try container.decodeIfPresent(String.self, forKey: .token)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .flatMap { $0.isEmpty ? nil : $0 }
         // Legacy version-1 field. A wrong type is ignored, not fatal.
         snapshot = (try? container.decodeIfPresent(PageSnapshot.self, forKey: .snapshot)) ?? nil
     }
@@ -207,5 +213,6 @@ extension WatchedPage: Codable {
         if let enabledRegions {
             try container.encode(enabledRegions.sorted(), forKey: .enabledRegions)
         }
+        try container.encodeIfPresent(token, forKey: .token)
     }
 }

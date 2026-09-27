@@ -4,14 +4,21 @@ extension ProviderProbe {
     static func probeHit(
         pageURL: URL,
         client: HTTPClient,
+        token: String? = nil,
         prefer: StatusProvider? = nil,
         previousBody: Data? = nil,
         previousSnapshot: PageSnapshot? = nil
     ) async throws -> ProbeHit {
+        let headers = RequestHeaders.authorization(token: token)
+        let requestClient = headers.isEmpty ? client : RequestHeaderHTTPClient(
+            base: client,
+            headers: headers,
+            pageURL: pageURL
+        )
         let context = ProbeContext(
             base: normalizedBase(pageURL),
             pageURL: pageURL,
-            client: client,
+            client: requestClient,
             previousBody: previousBody,
             previousSnapshot: previousSnapshot
         )

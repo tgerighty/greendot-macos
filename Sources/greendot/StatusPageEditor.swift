@@ -49,14 +49,15 @@ final class StatusPageEditor {
         let currentPageID = page?.id
         let currentPanel = PagePanelController(
             page: page,
-            onSave: { [weak self] url, name, disabled, regions in
+            onSave: { [weak self] url, name, disabled, regions, token in
                 guard let self else { return false }
                 return await self.save(
                     pageID: currentPageID,
                     url: url,
                     name: name,
                     disabledComponentNames: disabled,
-                    enabledRegions: regions
+                    enabledRegions: regions,
+                    token: token
                 )
             },
             onToggleComponent: { _ in true },
@@ -95,18 +96,25 @@ private extension StatusPageEditor {
         url: URL,
         name: String?,
         disabledComponentNames: Set<String>?,
-        enabledRegions: [String]?
+        enabledRegions: [String]?,
+        token: String?
     ) async -> Bool {
         do {
             if let pageID {
                 let previous = monitor.pages.first { $0.id == pageID }
-                try await monitor.edit(
-                    id: pageID,
-                    url: url,
-                    name: name,
-                    disabledComponentNames: disabledComponentNames,
-                    enabledRegions: enabledRegions
-                )
+                if token == previous?.token {
+                    try await monitor.edit(
+                        id: pageID, url: url, name: name,
+                        disabledComponentNames: disabledComponentNames,
+                        enabledRegions: enabledRegions
+                    )
+                } else {
+                    try await monitor.edit(
+                        id: pageID, url: url, name: name,
+                        disabledComponentNames: disabledComponentNames,
+                        enabledRegions: enabledRegions, token: token
+                    )
+                }
                 let current = monitor.pages.first { $0.id == pageID }
                 if current?.displaySeverity == .green {
                     clearToast(pageID)
@@ -115,7 +123,7 @@ private extension StatusPageEditor {
                     refreshToast(pageID)
                 }
             } else {
-                try await monitor.add(url: url, name: name)
+                try await monitor.add(url: url, name: name, token: token)
             }
             onChange()
             return true

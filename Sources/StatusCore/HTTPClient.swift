@@ -41,12 +41,29 @@ enum RedirectPolicy {
 
 public protocol HTTPClient: Sendable {
     func get(_ url: URL) async throws -> (Data, Int)
+    func get(_ url: URL, headers: [String: String]) async throws -> (Data, Int)
     func getLocated(_ url: URL) async throws -> HTTPGet
+    func getLocated(_ url: URL, headers: [String: String]) async throws -> HTTPGet
+}
+
+public enum HTTPClientError: Error {
+    case headersUnsupported
 }
 
 extension HTTPClient {
+    /// Legacy clients must reject headers. Token-aware clients override this method.
+    public func get(_ url: URL, headers: [String: String]) async throws -> (Data, Int) {
+        if !headers.isEmpty { throw HTTPClientError.headersUnsupported }
+        return try await get(url)
+    }
+
     public func getLocated(_ url: URL) async throws -> HTTPGet {
         let (data, status) = try await get(url)
+        return HTTPGet(data: data, status: status, url: url)
+    }
+
+    public func getLocated(_ url: URL, headers: [String: String]) async throws -> HTTPGet {
+        let (data, status) = try await get(url, headers: headers)
         return HTTPGet(data: data, status: status, url: url)
     }
 }
@@ -77,9 +94,19 @@ public struct URLSessionHTTPClient: HTTPClient {
         return (hit.data, hit.status)
     }
 
+    public func get(_ url: URL, headers: [String: String]) async throws -> (Data, Int) {
+        let hit = try await getLocated(url, headers: headers)
+        return (hit.data, hit.status)
+    }
+
     public func getLocated(_ url: URL) async throws -> HTTPGet {
+        try await getLocated(url, headers: [:])
+    }
+
+    public func getLocated(_ url: URL, headers: [String: String]) async throws -> HTTPGet {
         var request = URLRequest(url: HTTPAuth.requestURL(url))
-        for (field, value) in HTTPAuth.headers(for: url) {
+        let requestHeaders = HTTPAuth.headers(for: url).merging(headers) { _, requested in requested }
+        for (field, value) in requestHeaders {
             request.setValue(value, forHTTPHeaderField: field)
         }
         let (data, response) = try await session.data(for: request)
@@ -89,6 +116,32 @@ public struct URLSessionHTTPClient: HTTPClient {
             return HTTPGet(data: data, status: status, url: final)
         }
         return HTTPGet(data: Data(), status: 0, url: url)
+    }
+}
+
+struct RequestHeaderHTTPClient: HTTPClient {
+    let base: HTTPClient
+    let headers: [String: String]
+    let pageURL: URL
+
+    private func scopedHeaders(for url: URL) -> [String: String] {
+        RedirectPolicy.allows(url, from: pageURL) ? headers : [:]
+    }
+
+    func get(_ url: URL) async throws -> (Data, Int) {
+        try await base.get(url, headers: scopedHeaders(for: url))
+    }
+
+    func get(_ url: URL, headers additional: [String: String]) async throws -> (Data, Int) {
+        try await base.get(url, headers: scopedHeaders(for: url).merging(additional) { _, next in next })
+    }
+
+    func getLocated(_ url: URL) async throws -> HTTPGet {
+        try await base.getLocated(url, headers: scopedHeaders(for: url))
+    }
+
+    func getLocated(_ url: URL, headers additional: [String: String]) async throws -> HTTPGet {
+        try await base.getLocated(url, headers: scopedHeaders(for: url).merging(additional) { _, next in next })
     }
 }
 
