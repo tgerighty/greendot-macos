@@ -47,6 +47,7 @@ public protocol HTTPClient: Sendable {
 }
 
 extension HTTPClient {
+    /// Legacy clients ignore headers. Token-aware clients must override this method.
     public func get(_ url: URL, headers: [String: String]) async throws -> (Data, Int) {
         try await get(url)
     }
