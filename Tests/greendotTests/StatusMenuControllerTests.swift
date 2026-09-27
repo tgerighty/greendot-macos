@@ -196,13 +196,9 @@ final class StatusMenuControllerTests: XCTestCase {
     }
 
     func testControllersOwnIndependentMenusAndStableHandlers() throws {
-        diagnostic("entered independent-menus test")
         _ = NSApplication.shared
-        diagnostic("created shared application")
         let firstStatusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        diagnostic("created first status item")
         let secondStatusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        diagnostic("created second status item")
         defer {
             NSStatusBar.system.removeStatusItem(firstStatusItem)
             NSStatusBar.system.removeStatusItem(secondStatusItem)
@@ -220,20 +216,12 @@ final class StatusMenuControllerTests: XCTestCase {
             handlers: Self.handlers(onEdit: { secondEdits.append($0) }),
             statusItem: secondStatusItem
         )
-        diagnostic("created both controllers")
 
         XCTAssertFalse(firstStatusItem.menu === secondStatusItem.menu)
-        diagnostic("checked menus are independent")
         XCTAssertTrue(first.performMenuPath("Shared State/Edit…"))
-        diagnostic("invoked first handler")
         XCTAssertTrue(second.performMenuPath("Shared State/Edit…"))
-        diagnostic("invoked second handler")
         XCTAssertEqual(firstEdits, [page.id])
         XCTAssertEqual(secondEdits, [page.id])
-    }
-
-    private func diagnostic(_ point: String) {
-        FileHandle.standardError.write(Data("STATUS_ITEM_TEST: \(point)\n".utf8))
     }
 
     private static func state(

@@ -15,8 +15,9 @@ final class MenuClickOpener: NSObject, NSMenuDelegate {
         super.init()
     }
 
-    isolated deinit {
-        removeMonitor()
+    deinit {
+        // Keep deinit nonisolated: Swift 6.2 crashes in task-local scopes during actor-isolated deinit.
+        // menuDidClose removes the monitor; AppDelegate retains this opener until process exit.
     }
 
     func attach(_ menu: NSMenu) {
