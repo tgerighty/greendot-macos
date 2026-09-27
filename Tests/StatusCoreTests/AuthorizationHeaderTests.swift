@@ -61,10 +61,8 @@ final class AuthorizationHeaderTests: XCTestCase {
         )
         let requests = zip(client.recordedURLs, client.recordedHeaders)
         XCTAssertTrue(requests.contains { $0.0.host == "rssfeed.azure.status.microsoft" })
-        for (url, headers) in requests {
-            if url.host == "rssfeed.azure.status.microsoft" {
-                XCTAssertNil(headers["Authorization"])
-            }
+        for (url, headers) in requests where url.host == "rssfeed.azure.status.microsoft" {
+            XCTAssertNil(headers["Authorization"])
         }
     }
 
