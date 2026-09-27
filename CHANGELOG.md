@@ -28,6 +28,7 @@
 
 ### Changed
 
+- A click on a region-filtered component group scans that tree once. On a fixed 800-leaf tree, the median time was 75.615 ms (range 74.917–80.838). It is now 1.912 ms (range 1.831–2.204).
 - greendot does not show a dialog when `config.json` changes on disk. It loads the file. An open Add, Edit, or Remove window waits until that window closes. Component choices in that window are written when the window closes, not on each click.
 - About greendot shows the number of merges into `main` as the version, and the short Git commit of `main` as the build number.
 - A page gives one notification for each unhealthy period. greendot shows the notification with a sound when the page stops being green. While the page stays unhealthy, a change of colour rewrites the notification on screen. That change makes no sound, and it does not open a notification you clicked away. greendot uses a sound again when the page becomes green. A page that goes out of reach for one poll and comes back to the same colour thus gives one notification, not three.

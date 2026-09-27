@@ -99,6 +99,57 @@ final class ComponentPickerStateTests: XCTestCase {
         }
     }
 
+    func testGroupClickEnablesEveryAllowedDescendantWhenOneLeafIsMuted() throws {
+        let east = ComponentStatus(
+            name: "us-east-1",
+            severity: .red,
+            statusText: "Major outage",
+            id: "us-east-1",
+            children: [
+                ComponentStatus(name: "EC2", severity: .red, statusText: "Major outage", id: "ec2"),
+                ComponentStatus(name: "S3", severity: .green, statusText: "Operational", id: "s3")
+            ],
+            isGroup: true
+        )
+        let west = ComponentStatus(
+            name: "eu-west-1",
+            severity: .red,
+            statusText: "Major outage",
+            id: "eu-west-1",
+            children: [
+                ComponentStatus(name: "RDS", severity: .red, statusText: "Major outage", id: "rds")
+            ],
+            isGroup: true
+        )
+        let root = ComponentStatus(
+            name: "Cloud",
+            severity: .red,
+            statusText: "Major outage",
+            id: "cloud",
+            children: [east, west],
+            isGroup: true
+        )
+        var page = Self.page(components: [root], disabledKeys: ["ec2"])
+        page.enabledRegions = ["us-east-1"]
+        let (picker, view) = installPicker(page: page)
+        defer { _ = picker }
+
+        XCTAssertEqual(picker.selectedDisabledNames(), Set(["ec2"]))
+        XCTAssertEqual(try Self.state("ec2", in: view), .off)
+        XCTAssertEqual(try Self.state("s3", in: view), .on)
+        XCTAssertEqual(try Self.state("eu-west-1", in: view), .off)
+
+        try XCTUnwrap(Self.button("us-east-1", in: view)).performClick(nil)
+
+        XCTAssertEqual(picker.selectedDisabledNames(), [])
+        XCTAssertEqual(try Self.state("ec2", in: view), .on)
+        XCTAssertEqual(try Self.state("s3", in: view), .on)
+        XCTAssertEqual(try Self.state("us-east-1", in: view), .on)
+        XCTAssertEqual(try Self.state("eu-west-1", in: view), .off)
+        XCTAssertFalse(picker.selectedDisabledNames().contains("eu-west-1"))
+        XCTAssertFalse(picker.selectedDisabledNames().contains("rds"))
+    }
+
     func testDuplicateIDUsesTheLastCheckboxSubtreeState() throws {
         let duplicateLeaf = ComponentStatus(
             name: "Duplicate leaf",

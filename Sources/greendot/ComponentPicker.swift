@@ -118,7 +118,7 @@ final class ComponentPicker: NSObject {
             return
         }
         let nodes = rootComponents.flatMap(ComponentTree.collect)
-        let allOn = nodes.allSatisfy { !isOff($0) }
+        let allOn = nodes.allSatisfy { !isOff($0, regionAllowed: nil) }
         let enabled = !allOn
         guard onSetAll(enabled) else {
             refreshTreeStates()
@@ -140,7 +140,11 @@ final class ComponentPicker: NSObject {
         }
         let node = ComponentTree.find(key, in: rootComponents)
         let nodes = node.map(ComponentTree.collect) ?? []
-        let allOn = nodes.isEmpty ? !disabledNames.contains(key) : nodes.allSatisfy { !isOff($0) }
+        // One region scan for this click. A scan per descendant repeats the same tree walk.
+        let regionAllowed = regionAllowedIDs()
+        let allOn = nodes.isEmpty
+            ? !disabledNames.contains(key)
+            : nodes.allSatisfy { !isOff($0, regionAllowed: regionAllowed) }
         if nodes.isEmpty {
             setEnabled(!allOn, keys: [key])
         } else {
@@ -165,9 +169,13 @@ final class ComponentPicker: NSObject {
         }
     }
 
-    private func isOff(_ component: ComponentStatus) -> Bool {
-        if let regionTokens,
-           !RegionFilter.allowedIDs(in: rootComponents, regions: regionTokens).contains(component.id) {
+    private func regionAllowedIDs() -> Set<String>? {
+        guard let regionTokens else { return nil }
+        return RegionFilter.allowedIDs(in: rootComponents, regions: regionTokens)
+    }
+
+    private func isOff(_ component: ComponentStatus, regionAllowed: Set<String>?) -> Bool {
+        if let regionAllowed, !regionAllowed.contains(component.id) {
             return true
         }
         return isUserOff(component)

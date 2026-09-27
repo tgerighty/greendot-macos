@@ -35,6 +35,8 @@ final class PerformanceHarnessTests: XCTestCase {
         let componentPicker80 = measureComponentPickerClick(depth: 80)
         let componentPicker160 = measureComponentPickerClick(depth: 160)
         let displaySeverity = measureDisplaySeverity()
+        let regionFilter400 = measureRegionFilterScan(leaves: 400)
+        let regionFilter800 = measureRegionFilterScan(leaves: 800)
         let icon = measureStatusDot()
         let save = measureStoreSave()
         let unchangedWrites = try await measureUnchangedPollWrites()
@@ -47,6 +49,8 @@ final class PerformanceHarnessTests: XCTestCase {
             componentPicker80: componentPicker80,
             componentPicker160: componentPicker160,
             displaySeverity: displaySeverity,
+            regionFilter400: regionFilter400,
+            regionFilter800: regionFilter800,
             iconElapsedMs: icon.elapsedMs,
             iconUniqueCount: icon.uniqueCount,
             storeSaveMs: save,
@@ -91,8 +95,27 @@ private extension PerformanceHarnessTests {
             },
             statuspal: elapsedMs(iterations: 400) {
                 _ = try StatuspalParser.parse(data: statuspal, sourceURL: statuspalURL)
-            }
+            },
+            awsLarge: measureAwsLargeParse()
         )
+    }
+
+    /// AWS Health events added after the 2026-08-29 harness. The last service is red.
+    func measureAwsLargeParse() -> Double {
+        let events = 200
+        let servicesPerEvent = 8
+        let iterations = 30
+        let payload = Self.awsEventsJSON(events: events, servicesPerEvent: servicesPerEvent)
+        let sourceURL = URL(string: "https://health.aws.amazon.com/health/status")!
+        var parsed = 0
+        let duration = elapsedMs(iterations: iterations) {
+            let snapshot = try AwsParser.parse(data: payload, sourceURL: sourceURL)
+            if snapshot.components.count == events, snapshot.overall == .red {
+                parsed += 1
+            }
+        }
+        XCTAssertEqual(parsed, iterations, "Large AWS payload must parse every event")
+        return duration
     }
 
     func measurePoll() async throws -> PollMetrics {
@@ -296,6 +319,27 @@ private extension PerformanceHarnessTests {
         let after = try FileManager.default.attributesOfItem(atPath: path)
         let afterInode = after[.systemFileNumber] as? NSNumber
         return beforeInode == afterInode ? 0 : 1
+    }
+
+    static func awsEventsJSON(events: Int, servicesPerEvent: Int) -> Data {
+        var rows: [String] = []
+        rows.reserveCapacity(events)
+        for event in 0..<events {
+            var services: [String] = []
+            services.reserveCapacity(servicesPerEvent)
+            for service in 0..<servicesPerEvent {
+                let current = event == events - 1 && service == servicesPerEvent - 1 ? "3" : "1"
+                services.append(
+                    #""svc-\#(event)-\#(service)":{"service_name":"Service \#(service)","current":"\#(current)"}"#
+                )
+            }
+            let joined = services.joined(separator: ",")
+            rows.append(
+                #"{"arn":"arn:aws:health:us-east-1::event/\#(event)","region_name":"N. Virginia","# +
+                    #""status":"1","service_name":"Amazon EC2","impacted_services":{\#(joined)}}"#
+            )
+        }
+        return Data("[\(rows.joined(separator: ","))]".utf8)
     }
 
     static func statuspageJSON(name: String, components: Int) -> Data {
