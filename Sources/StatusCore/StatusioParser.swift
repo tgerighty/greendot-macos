@@ -2,13 +2,13 @@ import Foundation
 
 public enum StatusioParser {
     public static func parse(data: Data, sourceURL: URL) throws -> PageSnapshot {
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let result = json["result"] as? [String: Any],
-              let overall = result["status_overall"] as? [String: Any] else {
+        guard let document = try? JSONDecoder().decode(StatusioDocument.self, from: data),
+              let result = document.result,
+              let overall = result.statusOverall else {
             throw ParserError.notThisProvider
         }
-        let mapped = StatusMapping.statusio(JSONScalar.intValue(overall["status_code"]))
-        let components = (result["status"] as? [[String: Any]] ?? []).compactMap(component)
+        let mapped = StatusMapping.statusio(JSONScalar.intValue(overall.code))
+        let components = (result.status ?? []).compactMap(component)
         let leaves = ComponentTree.enabledLeafSeverity(in: components, disabledKeys: [])
         let overallSeverity = Aggregator.fromSeverities([mapped.severity, leaves])
         return PageSnapshot(
@@ -22,31 +22,120 @@ public enum StatusioParser {
         )
     }
 
-    private static func component(_ item: [String: Any]) -> ComponentStatus? {
-        guard let name = JSONScalar.nonempty(item["name"] as? String) else { return nil }
-        let mapped = StatusMapping.statusio(JSONScalar.intValue(item["status_code"]))
-        let children = (item["containers"] as? [[String: Any]] ?? []).compactMap { child -> ComponentStatus? in
-            guard let childName = JSONScalar.nonempty(child["name"] as? String) else { return nil }
-            let childMapped = StatusMapping.statusio(JSONScalar.intValue(child["status_code"]))
+    private static func component(_ item: StatusioComponent) -> ComponentStatus? {
+        guard let name = JSONScalar.nonempty(item.name) else { return nil }
+        let mapped = StatusMapping.statusio(JSONScalar.intValue(item.code))
+        let children = (item.containers ?? []).compactMap { child -> ComponentStatus? in
+            guard let childName = JSONScalar.nonempty(child.name) else { return nil }
+            let childMapped = StatusMapping.statusio(JSONScalar.intValue(child.code))
             return ComponentStatus(
                 name: childName,
                 severity: childMapped.severity,
                 statusText: childMapped.text,
-                id: JSONScalar.stringID(child["id"]) ?? childName
+                id: child.id?.stringValue ?? childName
             )
         }
         return ComponentStatus(
             name: name,
             severity: mapped.severity,
             statusText: mapped.text,
-            id: JSONScalar.stringID(item["id"]) ?? name,
+            id: item.id?.stringValue ?? name,
             children: children,
             isGroup: true
         )
     }
 }
 
+private struct StatusioDocument: Decodable {
+    let result: StatusioResult?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: Key.self)
+        result = try? container.decode(StatusioResult.self, forKey: .result)
+    }
+
+    private enum Key: String, CodingKey { case result }
+}
+
+private struct StatusioResult: Decodable {
+    let statusOverall: StatusioCode?
+    let status: [StatusioComponent]?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: Key.self)
+        statusOverall = try? container.decode(StatusioCode.self, forKey: .statusOverall)
+        status = try? container.decode([StatusioComponent].self, forKey: .status)
+    }
+
+    private enum Key: String, CodingKey {
+        case statusOverall = "status_overall"
+        case status
+    }
+}
+
+private struct StatusioCode: Decodable {
+    let code: Decimal?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: Key.self)
+        code = try? container.decode(Decimal.self, forKey: .statusCode)
+    }
+
+    private enum Key: String, CodingKey { case statusCode = "status_code" }
+}
+
+private struct StatusioComponent: Decodable {
+    let id: StatusioID?
+    let name: String?
+    let code: Decimal?
+    let containers: [StatusioComponent]?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: Key.self)
+        id = try? container.decode(StatusioID.self, forKey: .id)
+        name = try? container.decode(String.self, forKey: .name)
+        code = try? container.decode(Decimal.self, forKey: .statusCode)
+        containers = try? container.decode([StatusioComponent].self, forKey: .containers)
+    }
+
+    private enum Key: String, CodingKey { case id, name, statusCode = "status_code", containers }
+}
+
+private enum StatusioID: Decodable {
+    case text(String)
+    case number(Decimal)
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let text = try? container.decode(String.self) {
+            self = .text(text)
+        } else {
+            self = .number(try container.decode(Decimal.self))
+        }
+    }
+
+    var stringValue: String? {
+        switch self {
+        case let .text(text): return text
+        case let .number(number): return JSONScalar.intValue(number).map { String($0) }
+        }
+    }
+}
+
 enum JSONScalar {
+    static func intValue(_ value: Decimal?) -> Int? {
+        guard let value else { return nil }
+        guard isInteger(value) else { return nil }
+        return Int(NSDecimalNumber(decimal: value).stringValue)
+    }
+
+    static func isInteger(_ value: Decimal) -> Bool {
+        var input = value
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &input, 0, .plain)
+        return rounded == value
+    }
+
     static func intValue(_ value: Any?) -> Int? {
         if let number = value as? NSNumber {
             // Prefer the numeric value so integral JSON decimals ("1.0") stay Int.

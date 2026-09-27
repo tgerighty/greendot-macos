@@ -20,3 +20,6 @@ jobs:
           swift --version
       - name: Build and test Swift package
         run: swift test
+      - name: Isolate StatusMenuController failure
+        if: failure()
+        run: swift test --filter 'StatusMenuControllerTests/testControllersOwnIndependentMenusAndStableHandlers'
