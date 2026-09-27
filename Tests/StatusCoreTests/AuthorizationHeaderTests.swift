@@ -25,6 +25,20 @@ final class AuthorizationHeaderTests: XCTestCase {
         )
     }
 
+    func testLegacyClientRejectsBearerHeaders() async {
+        let client = DelayHTTPClient(inner: MapHTTPClient(), nanoseconds: 0)
+        do {
+            _ = try await client.get(
+                URL(string: "https://example.com")!,
+                headers: ["Authorization": "Bearer secret"]
+            )
+            XCTFail("expected unsupported headers")
+        } catch HTTPClientError.headersUnsupported {
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+    }
+
     /// FT-45-01: probe must attach the same header map on each same-origin GET.
     func testProbeHeaderMapMatchesAuthorizationHelper() {
         let token = "page-read-token"

@@ -46,10 +46,15 @@ public protocol HTTPClient: Sendable {
     func getLocated(_ url: URL, headers: [String: String]) async throws -> HTTPGet
 }
 
+public enum HTTPClientError: Error {
+    case headersUnsupported
+}
+
 extension HTTPClient {
-    /// Legacy clients ignore headers. Token-aware clients must override this method.
+    /// Legacy clients must reject headers. Token-aware clients override this method.
     public func get(_ url: URL, headers: [String: String]) async throws -> (Data, Int) {
-        try await get(url)
+        if !headers.isEmpty { throw HTTPClientError.headersUnsupported }
+        return try await get(url)
     }
 
     public func getLocated(_ url: URL) async throws -> HTTPGet {
