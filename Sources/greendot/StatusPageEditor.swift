@@ -102,14 +102,19 @@ private extension StatusPageEditor {
         do {
             if let pageID {
                 let previous = monitor.pages.first { $0.id == pageID }
-                try await monitor.edit(
-                    id: pageID,
-                    url: url,
-                    name: name,
-                    disabledComponentNames: disabledComponentNames,
-                    enabledRegions: enabledRegions,
-                    token: token
-                )
+                if token == previous?.token {
+                    try await monitor.edit(
+                        id: pageID, url: url, name: name,
+                        disabledComponentNames: disabledComponentNames,
+                        enabledRegions: enabledRegions
+                    )
+                } else {
+                    try await monitor.edit(
+                        id: pageID, url: url, name: name,
+                        disabledComponentNames: disabledComponentNames,
+                        enabledRegions: enabledRegions, token: token
+                    )
+                }
                 let current = monitor.pages.first { $0.id == pageID }
                 if current?.displaySeverity == .green {
                     clearToast(pageID)
