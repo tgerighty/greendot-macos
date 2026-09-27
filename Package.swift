@@ -13,8 +13,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "greendot",
-            dependencies: ["StatusCore"],
-            swiftSettings: [.enableExperimentalFeature("IsolatedDeinit")]
+            dependencies: ["StatusCore"]
         ),
         .testTarget(
             name: "StatusCoreTests",
