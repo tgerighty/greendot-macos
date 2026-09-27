@@ -46,7 +46,9 @@ final class ParserBoundaryTests: XCTestCase {
     }
 
     func testStatusioFractionalComponentCodeIsUnknown() throws {
-        let data = Data(#"{"result":{"status_overall":{"status_code":100},"status":[{"name":"API","status_code":100.000000000000001}]}}"#.utf8)
+        let json = #"{"result":{"status_overall":{"status_code":100},"status":["#
+            + #"{"name":"API","status_code":100.000000000000001}]}}"#
+        let data = Data(json.utf8)
         let snapshot = try StatusioParser.parse(data: data, sourceURL: url)
         XCTAssertEqual(snapshot.components[0].severity, .yellow)
     }

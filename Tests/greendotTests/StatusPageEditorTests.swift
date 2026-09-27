@@ -100,7 +100,9 @@ final class StatusPageEditorTests: XCTestCase {
         await fulfillment(of: [saved], timeout: 2)
         XCTAssertEqual(monitor.pages.first?.token, "page-token")
         XCTAssertEqual(client.lastHeaders, ["Authorization": "Bearer page-token"])
-        let body = String(decoding: try Data(contentsOf: store.configURL), as: UTF8.self)
+        let body = try XCTUnwrap(
+            String(data: try Data(contentsOf: store.configURL), encoding: .utf8)
+        )
         XCTAssertTrue(body.contains("page-token"))
         let permissions = try FileManager.default.attributesOfItem(atPath: store.configURL.path)[
             .posixPermissions

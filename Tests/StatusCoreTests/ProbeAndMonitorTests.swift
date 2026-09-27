@@ -283,9 +283,12 @@ final class ProbeAndMonitorTests: XCTestCase {
             token: "page-read-token"
         )
         XCTAssertEqual(monitor.pages[0].token, "page-read-token")
-        let body = String(decoding: try Data(contentsOf: store.configURL), as: UTF8.self)
+        let body = try XCTUnwrap(
+            String(data: try Data(contentsOf: store.configURL), encoding: .utf8)
+        )
         XCTAssertTrue(body.contains("page-read-token"), body)
-        let mode = try FileManager.default.attributesOfItem(atPath: store.configURL.path)[.posixPermissions] as? NSNumber
+        let attributes = try FileManager.default.attributesOfItem(atPath: store.configURL.path)
+        let mode = attributes[.posixPermissions] as? NSNumber
         XCTAssertEqual(mode?.intValue, 0o600)
 
         let loaded = Monitor(store: store, client: client)
@@ -339,7 +342,9 @@ final class ProbeAndMonitorTests: XCTestCase {
 
     func testPageStoreLoadWithoutTokenFieldLeavesTokenNil() throws {
         let json = """
-        {"version":1,"pages":[{"id":"00000000-0000-0000-0000-000000000001","url":"https://www.githubstatus.com","name":"GitHub","notificationsEnabled":true,"disabledComponentNames":[]}],"didSetLaunchAtLogin":false}
+        {"version":1,"pages":[{"id":"00000000-0000-0000-0000-000000000001",
+        "url":"https://www.githubstatus.com","name":"GitHub","notificationsEnabled":true,
+        "disabledComponentNames":[]}],"didSetLaunchAtLogin":false}
         """
         let dir = try writeConfig(Data(json.utf8))
         defer { try? FileManager.default.removeItem(at: dir) }
