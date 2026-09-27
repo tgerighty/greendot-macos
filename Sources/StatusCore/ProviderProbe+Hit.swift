@@ -10,7 +10,11 @@ extension ProviderProbe {
         previousSnapshot: PageSnapshot? = nil
     ) async throws -> ProbeHit {
         let headers = RequestHeaders.authorization(token: token)
-        let requestClient = headers.isEmpty ? client : RequestHeaderHTTPClient(base: client, headers: headers)
+        let requestClient = headers.isEmpty ? client : RequestHeaderHTTPClient(
+            base: client,
+            headers: headers,
+            pageURL: pageURL
+        )
         let context = ProbeContext(
             base: normalizedBase(pageURL),
             pageURL: pageURL,

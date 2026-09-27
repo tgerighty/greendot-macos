@@ -25,7 +25,7 @@ final class AuthorizationHeaderTests: XCTestCase {
         )
     }
 
-    /// FT-45-01: probe must attach the same header map on each GET when a token is set.
+    /// FT-45-01: probe must attach the same header map on each same-origin GET.
     func testProbeHeaderMapMatchesAuthorizationHelper() {
         let token = "page-read-token"
         let expected = RequestHeaders.authorization(token: token)
@@ -49,6 +49,22 @@ final class AuthorizationHeaderTests: XCTestCase {
         let expected = RequestHeaders.authorization(token: "abc")
         for headers in client.recordedHeaders {
             XCTAssertEqual(headers, expected)
+        }
+    }
+
+    func testProbeDoesNotSendPageTokenToAzureFeed() async {
+        let client = MapHTTPClient()
+        _ = try? await ProviderProbe.probe(
+            pageURL: URL(string: "https://status.cloud.microsoft")!,
+            token: "private-page-token",
+            client: client
+        )
+        let requests = zip(client.recordedURLs, client.recordedHeaders)
+        XCTAssertTrue(requests.contains { $0.0.host == "rssfeed.azure.status.microsoft" })
+        for (url, headers) in requests {
+            if url.host == "rssfeed.azure.status.microsoft" {
+                XCTAssertNil(headers["Authorization"])
+            }
         }
     }
 

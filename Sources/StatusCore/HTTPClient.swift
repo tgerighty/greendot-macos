@@ -116,21 +116,26 @@ public struct URLSessionHTTPClient: HTTPClient {
 struct RequestHeaderHTTPClient: HTTPClient {
     let base: HTTPClient
     let headers: [String: String]
+    let pageURL: URL
+
+    private func scopedHeaders(for url: URL) -> [String: String] {
+        RedirectPolicy.allows(url, from: pageURL) ? headers : [:]
+    }
 
     func get(_ url: URL) async throws -> (Data, Int) {
-        try await base.get(url, headers: headers)
+        try await base.get(url, headers: scopedHeaders(for: url))
     }
 
     func get(_ url: URL, headers additional: [String: String]) async throws -> (Data, Int) {
-        try await base.get(url, headers: headers.merging(additional) { _, next in next })
+        try await base.get(url, headers: scopedHeaders(for: url).merging(additional) { _, next in next })
     }
 
     func getLocated(_ url: URL) async throws -> HTTPGet {
-        try await base.getLocated(url, headers: headers)
+        try await base.getLocated(url, headers: scopedHeaders(for: url))
     }
 
     func getLocated(_ url: URL, headers additional: [String: String]) async throws -> HTTPGet {
-        try await base.getLocated(url, headers: headers.merging(additional) { _, next in next })
+        try await base.getLocated(url, headers: scopedHeaders(for: url).merging(additional) { _, next in next })
     }
 }
 
