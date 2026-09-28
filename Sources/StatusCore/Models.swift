@@ -112,6 +112,8 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
     /// A component counts when its name or id contains one of these strings, and so do its children.
     public var enabledRegions: [String]?
     public var token: String?
+    /// Set only for pages supplied by a managed config file.
+    public var required: Bool?
     public var snapshot: PageSnapshot?
 
     public init(
@@ -122,6 +124,7 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
         disabledComponentNames: Set<String> = [],
         enabledRegions: [String]? = nil,
         token: String? = nil,
+        required: Bool? = nil,
         snapshot: PageSnapshot? = nil
     ) {
         self.id = id
@@ -131,6 +134,7 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
         self.disabledComponentNames = disabledComponentNames
         self.enabledRegions = enabledRegions
         self.token = token
+        self.required = required
         self.snapshot = snapshot
     }
 
@@ -184,7 +188,7 @@ public struct WatchedPage: Equatable, Sendable, Identifiable {
 
 extension WatchedPage: Codable {
     enum CodingKeys: String, CodingKey {
-        case id, url, name, notificationsEnabled, disabledComponentNames, enabledRegions, token, snapshot
+        case id, url, name, notificationsEnabled, disabledComponentNames, enabledRegions, token, required, snapshot
     }
 
     public init(from decoder: Decoder) throws {
@@ -199,6 +203,7 @@ extension WatchedPage: Codable {
         token = try container.decodeIfPresent(String.self, forKey: .token)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .flatMap { $0.isEmpty ? nil : $0 }
+        required = try container.decodeIfPresent(Bool.self, forKey: .required)
         // Legacy version-1 field. A wrong type is ignored, not fatal.
         snapshot = (try? container.decodeIfPresent(PageSnapshot.self, forKey: .snapshot)) ?? nil
     }
@@ -214,5 +219,6 @@ extension WatchedPage: Codable {
             try container.encode(enabledRegions.sorted(), forKey: .enabledRegions)
         }
         try container.encodeIfPresent(token, forKey: .token)
+        try container.encodeIfPresent(required, forKey: .required)
     }
 }

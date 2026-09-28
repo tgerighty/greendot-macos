@@ -115,7 +115,21 @@ extension Monitor {
             guard let index = next.pages.firstIndex(where: { $0.id == id }) else {
                 throw MonitorError.pageNotFound(id)
             }
-            next.pages.remove(at: index)
+            let removed = next.pages.remove(at: index)
+            if removed.required == false {
+                next.disabledManagedPageIDs.insert(id)
+                next.disabledManagedPages.append(removed)
+            }
+        }
+    }
+
+    public func enableManagedPage(id: UUID) throws {
+        try commitWatchedPageMutation { next in
+            guard let index = next.disabledManagedPages.firstIndex(where: { $0.id == id }) else {
+                throw MonitorError.pageNotFound(id)
+            }
+            next.pages.append(next.disabledManagedPages.remove(at: index))
+            next.disabledManagedPageIDs.remove(id)
         }
     }
 

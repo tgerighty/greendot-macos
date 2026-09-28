@@ -70,6 +70,10 @@ public final class Monitor: @unchecked Sendable {
         withStateLock { config.pages }
     }
 
+    public var disabledManagedPages: [WatchedPage] {
+        withStateLock { config.disabledManagedPages }
+    }
+
     public var pollSeconds: TimeInterval {
         withStateLock { config.pollSeconds }
     }

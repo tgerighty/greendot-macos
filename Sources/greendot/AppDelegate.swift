@@ -129,6 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func makeStatusMenuState(_ monitor: Monitor) -> StatusMenuState {
         StatusMenuState(
             pages: monitor.pages,
+            disabledManagedPages: monitor.disabledManagedPages,
             severity: monitor.displayedSeverity(at: Date()),
             launchAtLoginEnabled: LaunchAtLogin.isEnabled
         )
@@ -148,6 +149,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onToggleNotifications: { [weak self] id in
                 guard let self, let monitor = self.monitor else { return }
                 self.toggleNotifications(id: id, monitor: monitor)
+            },
+            onEnableManagedPage: { [weak self] id in
+                guard let self, let monitor = self.monitor else { return }
+                _ = self.performStoreChange { try monitor.enableManagedPage(id: id) }
             },
             onOpen: { url in
                 URLOpener.open(url)

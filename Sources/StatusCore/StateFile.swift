@@ -37,7 +37,7 @@ struct StateFile: Codable {
 
 extension AppConfig: Codable {
     enum CodingKeys: String, CodingKey {
-        case version, pollSeconds, pages, didSetLaunchAtLogin
+        case version, pollSeconds, pages, didSetLaunchAtLogin, disabledManagedPageIDs
     }
 
     /// `didSetLaunchAtLogin` is read for version-1 files only. `state.json` wins when it exists.
@@ -52,6 +52,8 @@ extension AppConfig: Codable {
         // Legacy version-1 field. A wrong type is ignored, not fatal.
         let rawLaunchFlag = (try? container.decodeIfPresent(Bool.self, forKey: .didSetLaunchAtLogin)) ?? nil
         didSetLaunchAtLogin = rawLaunchFlag ?? false
+        disabledManagedPageIDs = (try? container.decodeIfPresent(Set<UUID>.self, forKey: .disabledManagedPageIDs)) ?? []
+        disabledManagedPages = []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -59,5 +61,9 @@ extension AppConfig: Codable {
         try container.encode(version, forKey: .version)
         try container.encode(pollSeconds, forKey: .pollSeconds)
         try container.encode(pages, forKey: .pages)
+        if !disabledManagedPageIDs.isEmpty {
+            let pageIDs = disabledManagedPageIDs.sorted { $0.uuidString < $1.uuidString }
+            try container.encode(pageIDs, forKey: .disabledManagedPageIDs)
+        }
     }
 }

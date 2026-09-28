@@ -1,58 +1,27 @@
 import Foundation
-
-public struct AppConfig: Equatable, Sendable {
-    public static let currentVersion = 2
-    public static let defaultPollSeconds: TimeInterval = 60
-    public var version: Int
-    public var pollSeconds: TimeInterval
-    public var pages: [WatchedPage]
-    public var didSetLaunchAtLogin: Bool
-
-    public init(
-        version: Int = currentVersion,
-        pollSeconds: TimeInterval = defaultPollSeconds,
-        pages: [WatchedPage] = [],
-        didSetLaunchAtLogin: Bool = false
-    ) {
-        self.version = version
-        self.pollSeconds = pollSeconds
-        self.pages = pages
-        self.didSetLaunchAtLogin = didSetLaunchAtLogin
-    }
-
-    /// Missing, non-finite, or zero and below becomes the default.
-    public static func validPollSeconds(_ value: TimeInterval?) -> TimeInterval {
-        guard let value, value.isFinite, value > 0 else { return defaultPollSeconds }
-        return value
-    }
-}
-
-public enum StoreError: Error, Equatable, LocalizedError {
-    case corrupt
-    case changedOnDisk
-
-    public var errorDescription: String? {
-        switch self {
-        case .corrupt:
-            return "The saved status list could not be read."
-        case .changedOnDisk:
-            return "config.json changed on disk."
-        }
-    }
-}
+import CryptoKit
 
 public final class PageStore: @unchecked Sendable {
     public let configURL: URL
     public let stateURL: URL
     private let directory: URL
+    private let managedConfigURL: URL
+    private var managedRequiredIDs: Set<UUID> = []
+    private var managedOptionalIDs: Set<UUID> = []
+    private var didLoadManagedConfig = false
     private let knownConfigLock = NSLock()
     /// The config bytes this store last read or wrote. A file that no longer matches them is the user's.
     private var lastKnownConfigData: Data?
 
-    public init(directory: URL) {
+    public init(directory: URL, managedConfigURL: URL? = nil) {
         self.directory = directory
         self.configURL = directory.appendingPathComponent("config.json")
         self.stateURL = directory.appendingPathComponent("state.json")
+        self.managedConfigURL = managedConfigURL ?? Self.defaultManagedConfigURL
+    }
+
+    public static var defaultManagedConfigURL: URL {
+        URL(fileURLWithPath: "/Library/Application Support/greendot/config.json")
     }
 
     public static var defaultDirectory: URL {
@@ -81,6 +50,7 @@ public final class PageStore: @unchecked Sendable {
             }
             // No pages, so no snapshots attach. The launch flag still belongs to the user.
             var config = AppConfig()
+            config = try mergingManagedConfig(config)
             setLastKnownConfigData(nil)
             tightenPermissions()
             applyState(to: &config)
@@ -96,6 +66,7 @@ public final class PageStore: @unchecked Sendable {
         }
         guard decoded.version <= AppConfig.currentVersion else { throw StoreError.corrupt }
         var config = Self.uniquingPageIDs(Self.strippingLegacyState(decoded))
+        config = try mergingManagedConfig(config)
         config.version = AppConfig.currentVersion
         applyState(to: &config)
         if Self.needsIDNormalisation(data) {
@@ -192,7 +163,22 @@ public final class PageStore: @unchecked Sendable {
     }
 
     public func save(_ config: AppConfig) throws {
+        let previousManagedIDs = managedPageIDs()
+        let managedIDsFromConfig = Set(config.pages.filter { $0.required != nil }.map(\.id))
+        let managedPages = (try? readManagedPages()) ?? []
+        let currentPolicyIDs = Self.managedPageIDs(from: managedPages)
+        let requiredIDs = previousManagedIDs.required.union(currentPolicyIDs.required)
+        let optionalIDs = previousManagedIDs.optional.union(currentPolicyIDs.optional).subtracting(requiredIDs)
         try validate(config)
+        let currentIDs = Set(config.pages.map(\.id))
+        let knownIDs = currentIDs.union(previousManagedIDs.required).union(previousManagedIDs.optional)
+            .union(config.disabledManagedPageIDs.union(config.disabledManagedPages.map(\.id)))
+        let loadedManagedConfig = managedConfigWasLoaded()
+        let currentRequiredIDs = loadedManagedConfig
+            ? currentPolicyIDs.required.intersection(knownIDs)
+            : currentPolicyIDs.required
+        let requiredToKeep = previousManagedIDs.required.union(currentRequiredIDs)
+        guard requiredToKeep.isSubset(of: currentIDs) else { throw StoreError.requiredManagedPage }
         let previousConfig: Data?
         do {
             previousConfig = try Data(contentsOf: configURL)
@@ -204,7 +190,12 @@ public final class PageStore: @unchecked Sendable {
         try refuseWhenConfigChangedOnDisk(previousConfig)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         clearDirectoryAtStatePath()
-        let configData = try Self.encoder.encode(config)
+        var localConfig = config
+        let allManagedIDs = requiredIDs.union(optionalIDs).union(managedIDsFromConfig)
+        let knownOptionalIDs = previousManagedIDs.optional.union(knownIDs)
+        localConfig.disabledManagedPageIDs.formUnion(optionalIDs.subtracting(currentIDs).intersection(knownOptionalIDs))
+        localConfig.pages = config.pages.filter { !allManagedIDs.contains($0.id) }
+        let configData = try Self.encoder.encode(localConfig)
         try writeIfChanged(configData, to: configURL)
         let state = StateFile(
             didSetLaunchAtLogin: config.didSetLaunchAtLogin,
@@ -274,5 +265,113 @@ public final class PageStore: @unchecked Sendable {
         guard config.version <= AppConfig.currentVersion else { throw StoreError.corrupt }
         let pageIDs = config.pages.map(\.id)
         guard Set(pageIDs).count == pageIDs.count else { throw StoreError.corrupt }
+    }
+
+    private func mergingManagedConfig(_ local: AppConfig) throws -> AppConfig {
+        let localPages = local.pages.map { page -> WatchedPage in
+            var page = page
+            page.required = nil
+            return page
+        }
+        var result = local
+        result.pages = localPages
+        guard FileManager.default.fileExists(atPath: managedConfigURL.path) else {
+            setManagedPageIDs(from: [])
+            return result
+        }
+        let managedPages = try readManagedPages()
+        setManagedPageIDs(from: managedPages)
+        let (requiredIDs, optionalIDs) = managedPageIDs()
+        result.pages = managedPages.filter {
+            $0.required == true || !local.disabledManagedPageIDs.contains($0.id)
+        }
+        result.disabledManagedPages = managedPages.filter {
+            $0.required == false && local.disabledManagedPageIDs.contains($0.id)
+        }
+        result.pages.append(contentsOf: localPages.filter {
+            !requiredIDs.contains($0.id) && !optionalIDs.contains($0.id)
+        })
+        return result
+    }
+
+    private func readManagedPages() throws -> [WatchedPage] {
+        guard FileManager.default.fileExists(atPath: managedConfigURL.path) else { return [] }
+        let data: Data
+        do { data = try Data(contentsOf: managedConfigURL) } catch { throw StoreError.corrupt }
+        let managed: AppConfig
+        do {
+            managed = try JSONDecoder().decode(AppConfig.self, from: data)
+        } catch { throw StoreError.corrupt }
+        guard managed.version <= AppConfig.currentVersion else { throw StoreError.corrupt }
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw StoreError.corrupt
+        }
+        let rawPages = root["pages"] as? [[String: Any]] ?? []
+        guard rawPages.count == managed.pages.count else { throw StoreError.corrupt }
+        let explicitIDs = rawPages.compactMap { rawPage -> UUID? in
+            guard let rawID = rawPage["id"] as? String else { return nil }
+            return UUID(uuidString: rawID)
+        }
+        guard Set(explicitIDs).count == explicitIDs.count else { throw StoreError.corrupt }
+        var usedIDs = Set(explicitIDs)
+        var occurrences: [String: Int] = [:]
+        return managed.pages.enumerated().map { index, page in
+            let rawID = rawPages[index]["id"] as? String
+            guard rawID.flatMap(UUID.init(uuidString:)) == nil else {
+                var page = page
+                page.required = page.required != false
+                return page
+            }
+            let identity = "\(page.url.absoluteString)\u{0}\(page.name)"
+            let occurrence = occurrences[identity, default: 0]
+            occurrences[identity] = occurrence + 1
+            var candidate = Self.stableManagedPageID("\(identity)\u{0}\(occurrence)")
+            while !usedIDs.insert(candidate).inserted {
+                candidate = Self.stableManagedPageID("\(identity)\u{0}\(occurrence)\u{0}\(candidate.uuidString)")
+            }
+            var page = page
+            page.id = candidate
+            page.required = page.required != false
+            return page
+        }
+    }
+
+    private static func stableManagedPageID(_ identity: String) -> UUID {
+        var bytes = Array(SHA256.hash(data: Data(identity.utf8)).prefix(16))
+        bytes[6] = (bytes[6] & 0x0f) | 0x80
+        bytes[8] = (bytes[8] & 0x3f) | 0x80
+        let uuid: uuid_t = (
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
+        )
+        return UUID(uuid: uuid)
+    }
+
+    private func setManagedPageIDs(from pages: [WatchedPage]) {
+        let ids = Self.managedPageIDs(from: pages)
+        knownConfigLock.lock()
+        defer { knownConfigLock.unlock() }
+        managedRequiredIDs = ids.required
+        managedOptionalIDs = ids.optional
+        didLoadManagedConfig = true
+    }
+
+    private func managedConfigWasLoaded() -> Bool {
+        knownConfigLock.lock()
+        defer { knownConfigLock.unlock() }
+        return didLoadManagedConfig
+    }
+
+    private static func managedPageIDs(from pages: [WatchedPage]) -> (required: Set<UUID>, optional: Set<UUID>) {
+        (
+            Set(pages.filter { $0.required == true }.map(\.id)),
+            Set(pages.filter { $0.required == false }.map(\.id))
+        )
+    }
+
+    private func managedPageIDs() -> (required: Set<UUID>, optional: Set<UUID>) {
+        knownConfigLock.lock()
+        defer { knownConfigLock.unlock() }
+        return (managedRequiredIDs, managedOptionalIDs)
     }
 }

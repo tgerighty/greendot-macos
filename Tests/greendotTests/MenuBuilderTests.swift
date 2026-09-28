@@ -70,21 +70,8 @@ final class MenuBuilderTests: XCTestCase {
 
     func testAboutInvokesCallback() {
         var aboutCount = 0
-        let menu = MenuBuilder(
-            handlers: StatusMenuHandlers(
-                onAdd: {},
-                onEdit: { _ in },
-                onRemove: { _ in },
-                onToggleNotifications: { _ in },
-                onOpen: { _ in },
-                onRefresh: {},
-                onRevealConfig: {},
-                onReloadConfig: {},
-                onToggleLaunchAtLogin: {},
-                onAbout: { aboutCount += 1 },
-                onQuit: {}
-            )
-        ).build(for: Self.state(pages: []))
+        let menu = MenuBuilder(handlers: Self.handlers(onAbout: { aboutCount += 1 }))
+            .build(for: Self.state(pages: []))
         Self.invoke(menu.item(withTitle: "About greendot"))
         XCTAssertEqual(aboutCount, 1)
     }
@@ -105,21 +92,8 @@ final class MenuBuilderTests: XCTestCase {
         XCTAssertEqual(toasts.first?.body, "Degraded")
 
         var opened: [URL] = []
-        let menu = MenuBuilder(
-            handlers: StatusMenuHandlers(
-                onAdd: {},
-                onEdit: { _ in },
-                onRemove: { _ in },
-                onToggleNotifications: { _ in },
-                onOpen: { opened.append($0) },
-                onRefresh: {},
-                onRevealConfig: {},
-                onReloadConfig: {},
-                onToggleLaunchAtLogin: {},
-                onAbout: {},
-                onQuit: {}
-            )
-        ).build(for: Self.state(pages: monitor.pages))
+        let menu = MenuBuilder(handlers: Self.handlers(onOpen: { opened.append($0) }))
+            .build(for: Self.state(pages: monitor.pages))
         XCTAssertEqual(menu.item(at: 0)?.title, "GitHub")
         XCTAssertEqual(menu.item(at: 1)?.title, "Instatus")
         XCTAssertEqual(menu.item(at: 2)?.title, "Acme")
@@ -137,21 +111,9 @@ final class MenuBuilderTests: XCTestCase {
         var edited: [UUID] = []
         var opened: [URL] = []
         let page = Self.nestedPage()
-        let menu = MenuBuilder(
-            handlers: StatusMenuHandlers(
-                onAdd: {},
-                onEdit: { edited.append($0) },
-                onRemove: { _ in },
-                onToggleNotifications: { _ in },
-                onOpen: { opened.append($0) },
-                onRefresh: {},
-                onRevealConfig: {},
-                onReloadConfig: {},
-                onToggleLaunchAtLogin: {},
-                onAbout: {},
-                onQuit: {}
-            )
-        ).build(for: Self.state(page: page))
+        let menu = MenuBuilder(handlers: Self.handlers(
+            onEdit: { edited.append($0) }, onOpen: { opened.append($0) }
+        )).build(for: Self.state(page: page))
         XCTAssertTrue(MenuCommands.perform(path: "Box/Edit…", in: menu))
         XCTAssertEqual(edited, [page.id])
         XCTAssertTrue(MenuCommands.perform(path: "API    Operational", in: menu) == false)
@@ -168,8 +130,9 @@ final class MenuBuilderTests: XCTestCase {
         MenuBuilder(handlers: handlers(onOpen: onOpen)).build(for: state(page: page))
     }
 
-    private static func state(pages: [WatchedPage]) -> StatusMenuState {
-        StatusMenuState(pages: pages, severity: .green, launchAtLoginEnabled: false)
+    static func state(pages: [WatchedPage], disabledManagedPages: [WatchedPage] = []) -> StatusMenuState {
+        StatusMenuState(pages: pages, disabledManagedPages: disabledManagedPages,
+                        severity: .green, launchAtLoginEnabled: false)
     }
 
     private static func state(page: WatchedPage) -> StatusMenuState {
@@ -261,20 +224,37 @@ final class MenuBuilderTests: XCTestCase {
 
 /// Kept out of the class body to stay inside the SwiftLint `type_body_length` limit.
 extension MenuBuilderTests {
-    private static func handlers(onOpen: @escaping (URL) -> Void) -> StatusMenuHandlers {
+    static func handlers(
+        onEdit: ((UUID) -> Void)? = nil,
+        onEnableManagedPage: ((UUID) -> Void)? = nil,
+        onOpen: ((URL) -> Void)? = nil,
+        onRevealConfig: (() -> Void)? = nil,
+        onReloadConfig: (() -> Void)? = nil,
+        onAbout: (() -> Void)? = nil
+    ) -> StatusMenuHandlers {
         StatusMenuHandlers(
-            onAdd: {},
-            onEdit: { _ in },
-            onRemove: { _ in },
-            onToggleNotifications: { _ in },
-            onOpen: onOpen,
-            onRefresh: {},
-            onRevealConfig: {},
-            onReloadConfig: {},
-            onToggleLaunchAtLogin: {},
-            onAbout: {},
-            onQuit: {}
+            onAdd: noOp,
+            onEdit: onEdit ?? ignore,
+            onRemove: ignore,
+            onToggleNotifications: ignore,
+            onEnableManagedPage: onEnableManagedPage ?? ignore,
+            onOpen: onOpen ?? ignore,
+            onRefresh: noOp,
+            onRevealConfig: onRevealConfig ?? noOp,
+            onReloadConfig: onReloadConfig ?? noOp,
+            onToggleLaunchAtLogin: noOp,
+            onAbout: onAbout ?? noOp,
+            onQuit: noOp
         )
+    }
+
+    private static let noOp: () -> Void = {}
+    private static func ignore<T>(_: T) { _ = T.self }
+
+    static func managedMenu(pages: [WatchedPage] = [], disabledManagedPages: [WatchedPage] = [],
+                            onEnableManagedPage: ((UUID) -> Void)? = nil) -> NSMenu {
+        MenuBuilder(handlers: handlers(onEnableManagedPage: onEnableManagedPage))
+            .build(for: state(pages: pages, disabledManagedPages: disabledManagedPages))
     }
 
     func testRevealAndReloadConfigFollowRefresh() throws {
@@ -290,21 +270,9 @@ extension MenuBuilderTests {
     func testRevealAndReloadConfigInvokeCallbacks() {
         var revealCount = 0
         var reloadCount = 0
-        let menu = MenuBuilder(
-            handlers: StatusMenuHandlers(
-                onAdd: {},
-                onEdit: { _ in },
-                onRemove: { _ in },
-                onToggleNotifications: { _ in },
-                onOpen: { _ in },
-                onRefresh: {},
-                onRevealConfig: { revealCount += 1 },
-                onReloadConfig: { reloadCount += 1 },
-                onToggleLaunchAtLogin: {},
-                onAbout: {},
-                onQuit: {}
-            )
-        ).build(for: Self.state(pages: []))
+        let menu = MenuBuilder(handlers: Self.handlers(
+            onRevealConfig: { revealCount += 1 }, onReloadConfig: { reloadCount += 1 }
+        )).build(for: Self.state(pages: []))
         Self.invoke(menu.item(withTitle: "Reveal Config File"))
         Self.invoke(menu.item(withTitle: "Reload Config"))
         XCTAssertEqual(revealCount, 1)

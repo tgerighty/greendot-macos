@@ -4,16 +4,18 @@ import StatusCore
 struct StatusMenuState: Equatable {
     struct Content: Equatable {
         let pages: [WatchedPage]
+        let disabledManagedPages: [WatchedPage]
         let launchAtLoginEnabled: Bool
     }
 
     var pages: [WatchedPage]
+    var disabledManagedPages: [WatchedPage] = []
     var severity: Severity
     var launchAtLoginEnabled: Bool
 
     /// Values that affect the built menu. Severity only affects the status-item image.
     var content: Content {
-        Content(pages: pages, launchAtLoginEnabled: launchAtLoginEnabled)
+        Content(pages: pages, disabledManagedPages: disabledManagedPages, launchAtLoginEnabled: launchAtLoginEnabled)
     }
 }
 
@@ -22,6 +24,7 @@ struct StatusMenuHandlers {
     var onEdit: (UUID) -> Void
     var onRemove: (UUID) -> Void
     var onToggleNotifications: (UUID) -> Void
+    var onEnableManagedPage: (UUID) -> Void = { _ in }
     var onOpen: (URL) -> Void
     var onRefresh: () -> Void
     var onRevealConfig: () -> Void
@@ -57,6 +60,18 @@ final class MenuBuilder {
             for page in state.pages {
                 menu.addItem(pageItem(page))
             }
+        }
+
+        if !state.disabledManagedPages.isEmpty {
+            let parent = NSMenuItem(title: "Optional Managed Pages", action: nil, keyEquivalent: "")
+            let submenu = NSMenu()
+            for page in state.disabledManagedPages {
+                submenu.addItem(actionItem("Enable \(page.name)", identifier: "enable-managed-\(page.id.uuidString)") {
+                    self.handlers.onEnableManagedPage(page.id)
+                })
+            }
+            parent.submenu = submenu
+            menu.addItem(parent)
         }
 
         menu.addItem(.separator())
@@ -132,15 +147,21 @@ final class MenuBuilder {
 
         addIncidents(snapshot?.incidents ?? [], pageURL: snapshot?.url, onOpen: handlers.onOpen, to: menu)
         menu.addItem(.separator())
-        let notify = actionItem("Notifications", identifier: "notify-\(page.id.uuidString)") {
-            handlers.onToggleNotifications(page.id)
+        if page.required == nil {
+            let notify = actionItem("Notifications", identifier: "notify-\(page.id.uuidString)") {
+                handlers.onToggleNotifications(page.id)
+            }
+            notify.state = page.notificationsEnabled ? .on : .off
+            menu.addItem(notify)
+            menu.addItem(actionItem("Edit…", identifier: "edit-\(page.id.uuidString)") { handlers.onEdit(page.id) })
         }
-        notify.state = page.notificationsEnabled ? .on : .off
-        menu.addItem(notify)
-        menu.addItem(actionItem("Edit…", identifier: "edit-\(page.id.uuidString)") { handlers.onEdit(page.id) })
-        menu.addItem(actionItem("Remove", identifier: "remove-\(page.id.uuidString)") {
-            handlers.onRemove(page.id)
-        })
+        if page.required != true {
+            let action = page.required == false ? "Disable" : "Remove"
+            let identifier = "remove-\(page.id.uuidString)"
+            menu.addItem(actionItem(action, identifier: identifier) {
+                handlers.onRemove(page.id)
+            })
+        }
         menu.addItem(actionItem("Open Status Page", identifier: "open-\(page.id.uuidString)") {
             handlers.onOpen(snapshot?.url ?? page.url)
         })
