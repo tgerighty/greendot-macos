@@ -70,6 +70,7 @@ extension HTTPClient {
 
 public struct URLSessionHTTPClient: HTTPClient {
     private let session: URLSession
+    let rateLimit = RateLimitGate()
 
     public init(session: URLSession) {
         let delegate = SameOriginRedirectDelegate()
@@ -104,18 +105,28 @@ public struct URLSessionHTTPClient: HTTPClient {
     }
 
     public func getLocated(_ url: URL, headers: [String: String]) async throws -> HTTPGet {
-        var request = URLRequest(url: HTTPAuth.requestURL(url))
+        let requested = HTTPAuth.requestURL(url)
+        if let held = rateLimit.cached(requested) {
+            return held
+        }
+        var request = URLRequest(url: requested)
         let requestHeaders = HTTPAuth.headers(for: url).merging(headers) { _, requested in requested }
         for (field, value) in requestHeaders {
             request.setValue(value, forHTTPHeaderField: field)
         }
         let (data, response) = try await session.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        let final = response.url ?? HTTPAuth.requestURL(url)
-        if RedirectPolicy.allows(final, from: HTTPAuth.requestURL(url)) {
-            return HTTPGet(data: data, status: status, url: final)
+        let http = response as? HTTPURLResponse
+        let status = http?.statusCode ?? 0
+        let final = response.url ?? requested
+        guard RedirectPolicy.allows(final, from: requested) else {
+            return HTTPGet(data: Data(), status: 0, url: url)
         }
-        return HTTPGet(data: Data(), status: 0, url: url)
+        let hit = HTTPGet(data: data, status: status, url: final)
+        return rateLimit.receive(
+            requested,
+            response: hit,
+            retryAfter: http?.value(forHTTPHeaderField: "Retry-After")
+        )
     }
 }
 

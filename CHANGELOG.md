@@ -26,6 +26,10 @@
 - `state.json` holds the cached poll results and the launch-at-login flag. `config.json` holds only your settings, so you can copy it to another machine or send it to a colleague. greendot reads a version 1 file and splits it on the next save.
 - `pollSeconds` in `config.json` sets the time between polls. The default is 60 seconds. `GREENDOT_POLL_SECONDS` still overrides the file.
 
+### Fixed
+
+- A feed that answers HTTP 429 keeps its last reading. greendot waits for the Retry-After time, or 60 seconds when the response gives no time, before it requests that feed again. Any watched page no longer flips between unreachable and operational on each poll.
+
 ### Changed
 
 - A click on a region-filtered component group scans that tree once. On a fixed 800-leaf tree, the median time was 75.615 ms (range 74.917–80.838). It is now 1.912 ms (range 1.831–2.204).
