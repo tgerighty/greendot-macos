@@ -71,6 +71,7 @@ extension HTTPClient {
 public struct URLSessionHTTPClient: HTTPClient {
     private let session: URLSession
     let rateLimit = RateLimitGate()
+    private let inFlight = InFlightGate()
 
     public init(session: URLSession) {
         let delegate = SameOriginRedirectDelegate()
@@ -109,8 +110,15 @@ public struct URLSessionHTTPClient: HTTPClient {
         if let held = rateLimit.cached(requested) {
             return held
         }
+        let key = flightKey(requested, headers: HTTPAuth.headers(for: url).merging(headers) { _, new in new })
+        return try await inFlight.run(key) {
+            try await self.load(original: url, requested: requested, headers: headers)
+        }
+    }
+
+    private func load(original: URL, requested: URL, headers: [String: String]) async throws -> HTTPGet {
         var request = URLRequest(url: requested)
-        let requestHeaders = HTTPAuth.headers(for: url).merging(headers) { _, requested in requested }
+        let requestHeaders = HTTPAuth.headers(for: original).merging(headers) { _, new in new }
         for (field, value) in requestHeaders {
             request.setValue(value, forHTTPHeaderField: field)
         }
@@ -119,7 +127,7 @@ public struct URLSessionHTTPClient: HTTPClient {
         let status = http?.statusCode ?? 0
         let final = response.url ?? requested
         guard RedirectPolicy.allows(final, from: requested) else {
-            return HTTPGet(data: Data(), status: 0, url: url)
+            return HTTPGet(data: Data(), status: 0, url: requested)
         }
         let hit = HTTPGet(data: data, status: status, url: final)
         return rateLimit.receive(
@@ -127,6 +135,11 @@ public struct URLSessionHTTPClient: HTTPClient {
             response: hit,
             retryAfter: http?.value(forHTTPHeaderField: "Retry-After")
         )
+    }
+
+    private func flightKey(_ url: URL, headers: [String: String]) -> String {
+        let fields = headers.keys.sorted().map { "\($0)=\(headers[$0] ?? "")" }.joined(separator: "\n")
+        return url.absoluteString + "\n" + fields
     }
 }
 

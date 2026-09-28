@@ -9,7 +9,10 @@ extension ProviderProbe {
             return try await probeMicrosoftHub(context: context, flags: &flags)
         }
         if isAzureStatusLanding(context.base) || isAzureStatusLanding(context.pageURL) {
-            return try await fetchFeed(azureHubFeed, context: context, flags: &flags)
+            if let hit = try await fetchFeed(azureHubFeed, context: context, flags: &flags) {
+                return hit
+            }
+            return carriedReading(context)
         }
         do {
             let located = try await context.client.getLocated(context.pageURL)
@@ -186,9 +189,12 @@ private extension ProviderProbe {
         var parsedAny = false
         for (index, feed) in feeds.enumerated() {
             let status = index < statuses.count ? statuses[index] : 0
-            groups.append(
-                parseHubGroup(feed, data: parts[index], status: status, parsedAny: &parsedAny)
-            )
+            var group = parseHubGroup(feed, data: parts[index], status: status, parsedAny: &parsedAny)
+            if group.severity == .grey, let kept = keptHubGroup(feed, previous: context.previousSnapshot) {
+                group = kept
+                parsedAny = true
+            }
+            groups.append(group)
         }
         guard parsedAny else { return nil }
         return ProbeHit(
@@ -229,6 +235,19 @@ private extension ProviderProbe {
         } catch {
             return greyGroup(feed)
         }
+    }
+
+    /// A failed feed must not replace a reading that already succeeded.
+    static func keptHubGroup(_ feed: RSSHubFeed, previous: PageSnapshot?) -> ComponentStatus? {
+        guard let previous, !previous.isUnreachable else { return nil }
+        guard let group = previous.components.first(where: { $0.id == feed.id }) else { return nil }
+        guard group.severity != .grey else { return nil }
+        return group
+    }
+
+    static func carriedReading(_ context: ProbeContext) -> ProbeHit? {
+        guard let previous = context.previousSnapshot, !previous.isUnreachable else { return nil }
+        return ProbeHit(snapshot: previous, body: Data("carried\n".utf8))
     }
 
     static func greyGroup(_ feed: RSSHubFeed) -> ComponentStatus {

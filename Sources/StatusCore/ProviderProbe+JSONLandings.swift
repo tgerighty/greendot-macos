@@ -49,6 +49,12 @@ extension ProviderProbe {
         if let hit = try await probeBitBarIfLanding(context: context, flags: &flags) {
             return hit
         }
+        if let hit = try await probeZoomIfLanding(context: context, flags: &flags) {
+            return hit
+        }
+        if let hit = try await probeClaudeIfLanding(context: context, flags: &flags) {
+            return hit
+        }
         if let hit = try await probeConcurIfLanding(context: context, flags: &flags) {
             return hit
         }
@@ -221,6 +227,60 @@ extension ProviderProbe {
         return url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).isEmpty
     }
 
+    static func probeZoomIfLanding(
+        context: ProbeContext,
+        flags: inout ProbeFlags
+    ) async throws -> ProbeHit? {
+        guard isZoomLanding(context.base) || isZoomLanding(context.pageURL) else { return nil }
+        if let hit = try await probeJSON(
+            zoomStatuspageURL,
+            sourceURL: context.base,
+            context: context,
+            flags: &flags,
+            parse: { data, url in
+                var snap = try StatuspageParser.parse(data: data, sourceURL: url)
+                snap.url = normalizedBase(url)
+                return snap
+            }
+        ) {
+            return hit
+        }
+        throw flags.finalError
+    }
+
+    static func isZoomLanding(_ url: URL) -> Bool {
+        let host = url.host?.lowercased() ?? ""
+        guard host == "status.zoom.us" else { return false }
+        return url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).isEmpty
+    }
+
+    static func probeClaudeIfLanding(
+        context: ProbeContext,
+        flags: inout ProbeFlags
+    ) async throws -> ProbeHit? {
+        guard isClaudeLanding(context.base) || isClaudeLanding(context.pageURL) else { return nil }
+        if let hit = try await probeJSON(
+            claudeStatuspageURL,
+            sourceURL: context.base,
+            context: context,
+            flags: &flags,
+            parse: { data, url in
+                var snap = try StatuspageParser.parse(data: data, sourceURL: url)
+                snap.url = normalizedBase(url)
+                return snap
+            }
+        ) {
+            return hit
+        }
+        throw flags.finalError
+    }
+
+    static func isClaudeLanding(_ url: URL) -> Bool {
+        let host = url.host?.lowercased() ?? ""
+        guard host == "status.claude.com" else { return false }
+        return url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).isEmpty
+    }
+
     static func isStripeLanding(_ url: URL) -> Bool {
         let host = url.host?.lowercased() ?? ""
         guard host == "status.stripe.com" else { return false }
@@ -276,4 +336,6 @@ private extension ProviderProbe {
     static let appleStatusURL = URL(string: "https://www.apple.com/support/systemstatus/data/system_status_en_US.js")!
     static let stripeStatuspageURL = URL(string: "https://www.stripestatus.com/api/v2/summary.json")!
     static let bitBarStatuspageURL = URL(string: "https://bitbar.status.smartbear.com/api/v2/summary.json")!
+    static let zoomStatuspageURL = URL(string: "https://www.zoomstatus.com/api/v2/summary.json")!
+    static let claudeStatuspageURL = URL(string: "https://status.claude.com/api/v2/summary.json")!
 }

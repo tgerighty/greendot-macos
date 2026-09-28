@@ -75,3 +75,62 @@ final class RateLimitGate: @unchecked Sendable {
         return lastOK[key] ?? response
     }
 }
+
+/// Parallel polls of one URL share one request, so a second caller cannot draw a 429.
+final class InFlightGate: @unchecked Sendable {
+    private struct Entry {
+        let entryID: UUID
+        let task: Task<HTTPGet, Error>
+    }
+
+    private let lock = NSLock()
+    private var tasks: [String: Entry] = [:]
+
+    func run(
+        _ key: String,
+        _ work: @escaping @Sendable () async throws -> HTTPGet
+    ) async throws -> HTTPGet {
+        let entryID = UUID()
+        if let existing = currentTask(key) {
+            return try await existing.value
+        }
+        let created = Task { try await work() }
+        if let winner = claim(key, entryID: entryID, task: created) {
+            created.cancel()
+            return try await winner.value
+        }
+        do {
+            let value = try await created.value
+            finish(key, entryID)
+            return value
+        } catch {
+            finish(key, entryID)
+            throw error
+        }
+    }
+
+    private func currentTask(_ key: String) -> Task<HTTPGet, Error>? {
+        lock.lock()
+        defer { lock.unlock() }
+        return tasks[key]?.task
+    }
+
+    /// Stores `task` when the key is free. Returns the task that won when another caller arrived first.
+    private func claim(_ key: String, entryID: UUID, task: Task<HTTPGet, Error>) -> Task<HTTPGet, Error>? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let existing = tasks[key] {
+            return existing.task
+        }
+        tasks[key] = Entry(entryID: entryID, task: task)
+        return nil
+    }
+
+    private func finish(_ key: String, _ entryID: UUID) {
+        lock.lock()
+        if tasks[key]?.entryID == entryID {
+            tasks[key] = nil
+        }
+        lock.unlock()
+    }
+}

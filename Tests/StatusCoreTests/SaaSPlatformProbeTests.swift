@@ -146,6 +146,65 @@ final class SaaSPlatformProbeTests: XCTestCase {
         ])
     }
 
+    func testClaudeLandingReadsComponentsNotIncidentHistory() async throws {
+        let json = """
+        {
+          "page": {"name": "Claude", "url": "https://status.claude.com"},
+          "status": {"indicator": "none"},
+          "components": [
+            {"id": "claude-ai", "name": "claude.ai", "status": "operational"},
+            {"id": "api", "name": "Claude API (api.anthropic.com)", "status": "operational"}
+          ],
+          "incidents": [{"id": "old", "name": "Elevated errors for multiple models", "status": "resolved"}]
+        }
+        """
+        var inner = MapHTTPClient()
+        let incidentFeed = """
+        <rss version="2.0"><channel><item><title>Elevated errors for multiple models</title></item></channel></rss>
+        """
+        inner.byURL["https://status.claude.com/api/v2/summary.json"] = (Data(json.utf8), 200)
+        inner.byURL["https://status.claude.com/history.rss"] = (Data(incidentFeed.utf8), 200)
+        let recording = RecordingHTTPClient(inner)
+        let snap = try await ProviderProbe.probe(
+            pageURL: URL(string: "https://status.claude.com")!,
+            client: recording,
+            prefer: .rss
+        )
+        XCTAssertEqual(snap.provider, .statuspage)
+        XCTAssertEqual(snap.components.map(\.name), [
+            "claude.ai",
+            "Claude API (api.anthropic.com)"
+        ])
+        XCTAssertEqual(recording.requested.map(\.absoluteString), [
+            "https://status.claude.com/api/v2/summary.json"
+        ])
+    }
+
+    func testZoomLandingReadsZoomStatuspage() async throws {
+        let json = """
+        {
+          "page": {"name": "Zoom", "url": "https://www.zoomstatus.com"},
+          "status": {"indicator": "none"},
+          "components": [{"id": "meetings", "name": "Zoom Meetings", "status": "operational"}],
+          "incidents": []
+        }
+        """
+        var inner = MapHTTPClient()
+        inner.byURL["https://www.zoomstatus.com/api/v2/summary.json"] = (Data(json.utf8), 200)
+        let recording = RecordingHTTPClient(inner)
+        let snap = try await ProviderProbe.probe(
+            pageURL: URL(string: "https://status.zoom.us")!,
+            client: recording
+        )
+        XCTAssertEqual(snap.provider, .statuspage)
+        XCTAssertEqual(snap.name, "Zoom")
+        XCTAssertEqual(snap.overall, .green)
+        XCTAssertEqual(snap.url, URL(string: "https://status.zoom.us")!)
+        XCTAssertEqual(recording.requested.map(\.absoluteString), [
+            "https://www.zoomstatus.com/api/v2/summary.json"
+        ])
+    }
+
     func testStripeLandingUsesStatuspageJSON() async throws {
         let json = """
         {

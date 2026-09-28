@@ -96,6 +96,34 @@ final class RateLimitGateTests: XCTestCase {
         XCTAssertEqual(gate.receive(url, response: limited, retryAfter: "60").status, 429)
     }
 
+    func testParallelReadsOfOneURLShareOneRequest() async throws {
+        let url = URL(string: "https://coalesce.test/feed")!
+        ScriptedHTTP.setPaused(true)
+        defer { ScriptedHTTP.setPaused(false) }
+        ScriptedHTTP.serve(host: "coalesce.test", url: url.absoluteString, items: [
+            ScriptedHTTP.Item(status: 200, headers: [:], body: Data("once".utf8))
+        ])
+        let client = scriptedClient()
+        let first = Task { try await client.get(url) }
+        let started = Date()
+        while ScriptedHTTP.hitCount(url.absoluteString) == 0 {
+            if Date().timeIntervalSince(started) > 2 {
+                XCTFail("first request did not start")
+                return
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        let second = Task { try await client.get(url) }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(ScriptedHTTP.hitCount(url.absoluteString), 1)
+        ScriptedHTTP.setPaused(false)
+        let firstResult = try await first.value
+        let secondResult = try await second.value
+        XCTAssertEqual(firstResult.0, Data("once".utf8))
+        XCTAssertEqual(secondResult.0, Data("once".utf8))
+        XCTAssertEqual(ScriptedHTTP.hitCount(url.absoluteString), 1)
+    }
+
     func testClientDoesNotRepeatALimitedURLUntilTheWaitEnds() async throws {
         let url = URL(string: "https://backoff.test/feed")!
         ScriptedHTTP.serve(host: "backoff.test", url: url.absoluteString, items: [
@@ -190,18 +218,27 @@ private final class ScriptedHTTP: URLProtocol, @unchecked Sendable {
         let status: Int
         let headers: [String: String]
         let body: Data
+        var delay: TimeInterval = 0
     }
 
     private static let lock = NSLock()
     private static var hosts: Set<String> = []
     private static var queue: [String: [Item]] = [:]
     private static var hits: [String: Int] = [:]
+    private static var paused = false
+
+    static func setPaused(_ value: Bool) {
+        lock.lock()
+        paused = value
+        lock.unlock()
+    }
 
     static func reset() {
         lock.lock()
         hosts = []
         queue = [:]
         hits = [:]
+        paused = false
         lock.unlock()
     }
 
@@ -217,6 +254,12 @@ private final class ScriptedHTTP: URLProtocol, @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return hits[url] ?? 0
+    }
+
+    static var isPaused: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return paused
     }
 
     override static func canInit(with request: URLRequest) -> Bool {
@@ -240,6 +283,12 @@ private final class ScriptedHTTP: URLProtocol, @unchecked Sendable {
         guard let item else {
             client.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
             return
+        }
+        if item.delay > 0 {
+            Thread.sleep(forTimeInterval: item.delay)
+        }
+        while ScriptedHTTP.isPaused {
+            Thread.sleep(forTimeInterval: 0.01)
         }
         let response = HTTPURLResponse(
             url: url,

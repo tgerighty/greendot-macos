@@ -29,6 +29,9 @@
 ### Fixed
 
 - A feed that answers HTTP 429 keeps its last reading. greendot waits for the Retry-After time, or 60 seconds when the response gives no time, before it requests that feed again. Any watched page no longer flips between unreachable and operational on each poll.
+- https://status.zoom.us/ is read from the Statuspage JSON at https://www.zoomstatus.com/. The public URL redirects to that host, and greendot does not follow a redirect onto a different host.
+- https://status.claude.com/ shows the service components. It no longer lists past incidents as components.
+- A Microsoft or Azure feed that fails keeps its last reading. Parallel polls of the same URL share one request. A 429 no longer flips that page between unreachable and operational.
 
 ### Changed
 

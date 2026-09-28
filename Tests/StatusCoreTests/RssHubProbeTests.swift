@@ -77,7 +77,53 @@ final class RssHubProbeTests: XCTestCase {
             previousBody: first.body,
             previousSnapshot: first.snapshot
         )
-        XCTAssertEqual(second.snapshot.components[2].severity, .grey)
+        XCTAssertEqual(second.snapshot.components[2].severity, .green)
+        XCTAssertFalse(second.snapshot.isUnreachable)
+    }
+
+    func testMicrosoftRefusalKeepsThePreviousGroups() async throws {
+        var client = MapHTTPClient()
+        client.byURL["https://status.cloud.microsoft/api/feed/mac"] = (Data(macFeed.utf8), 200)
+        client.byURL["https://status.cloud.microsoft/api/feed/ppac"] = (Data(ppacFeed.utf8), 200)
+        client.byURL["https://rssfeed.azure.status.microsoft/en-us/status/feed/"] = (Data(azureFeed.utf8), 200)
+        let page = URL(string: "https://status.cloud.microsoft/")!
+        let first = try await ProviderProbe.probeHit(pageURL: page, client: client, prefer: .rss)
+        client.byURL["https://status.cloud.microsoft/api/feed/mac"] = (Data(), 429)
+        client.byURL["https://status.cloud.microsoft/api/feed/ppac"] = (Data(), 429)
+        let second = try await ProviderProbe.probeHit(
+            pageURL: page,
+            client: client,
+            prefer: .rss,
+            previousBody: first.body,
+            previousSnapshot: first.snapshot
+        )
+        XCTAssertEqual(second.snapshot.components[0].severity, first.snapshot.components[0].severity)
+        XCTAssertEqual(second.snapshot.components[1].severity, first.snapshot.components[1].severity)
+        XCTAssertEqual(second.snapshot.components[0].children.map(\.name), ["Microsoft Admin Center"])
+        XCTAssertFalse(second.snapshot.isUnreachable)
+        XCTAssertNotEqual(second.snapshot.overall, .grey)
+    }
+
+    func testAzureFeedFailureKeepsThePreviousReading() async throws {
+        let incident = """
+        <rss version="2.0"><channel><title>Azure Status</title>
+        <item><title>West Europe Storage</title><status>ServiceDegradation</status></item></channel></rss>
+        """
+        var client = MapHTTPClient()
+        let feed = "https://rssfeed.azure.status.microsoft/en-us/status/feed/"
+        client.byURL[feed] = (Data(incident.utf8), 200)
+        let page = URL(string: "https://azure.status.microsoft/en-us/status")!
+        let first = try await ProviderProbe.probeHit(pageURL: page, client: client, prefer: .rss)
+        client.byURL[feed] = (Data(), 503)
+        let second = try await ProviderProbe.probeHit(
+            pageURL: page,
+            client: client,
+            prefer: .rss,
+            previousBody: first.body,
+            previousSnapshot: first.snapshot
+        )
+        XCTAssertFalse(second.snapshot.isUnreachable)
+        XCTAssertEqual(second.snapshot.components.map(\.name), ["West Europe Storage"])
     }
 
     func testUnchangedMicrosoftHubSkipsParse() async throws {
