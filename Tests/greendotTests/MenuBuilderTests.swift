@@ -251,6 +251,50 @@ extension MenuBuilderTests {
     private static let noOp: () -> Void = {}
     private static func ignore<T>(_: T) { _ = T.self }
 
+    static func pageTitles(_ menu: NSMenu) -> [String] {
+        menu.items.prefix { !$0.isSeparatorItem }.map(\.title)
+    }
+
+    private static func pendingPage(_ name: String) -> WatchedPage {
+        WatchedPage(url: URL(string: "https://example.com/\(name)")!, name: name)
+    }
+
+    private static func colouredPage(_ name: String, _ severity: Severity) -> WatchedPage {
+        let url = URL(string: "https://example.com/\(name.replacingOccurrences(of: " ", with: "-"))")!
+        return WatchedPage(
+            url: url,
+            name: name,
+            snapshot: PageSnapshot(
+                name: name,
+                url: url,
+                provider: .statuspage,
+                overall: severity == .grey ? .green : severity,
+                components: [],
+                incidents: [],
+                isUnreachable: severity == .grey
+            )
+        )
+    }
+
+    /// Overall stays green. The row colour comes from the red component.
+    private static func pageWithRedComponent(_ name: String) -> WatchedPage {
+        let url = URL(string: "https://example.com/\(name.replacingOccurrences(of: " ", with: "-"))")!
+        let component = ComponentStatus(name: "API", severity: .red, statusText: "Major outage", id: "api")
+        return WatchedPage(
+            url: url,
+            name: name,
+            snapshot: PageSnapshot(
+                name: name,
+                url: url,
+                provider: .statuspage,
+                overall: .green,
+                components: [component],
+                incidents: [],
+                isUnreachable: false
+            )
+        )
+    }
+
     static func managedMenu(pages: [WatchedPage] = [], disabledManagedPages: [WatchedPage] = [],
                             onEnableManagedPage: ((UUID) -> Void)? = nil) -> NSMenu {
         MenuBuilder(handlers: handlers(onEnableManagedPage: onEnableManagedPage))
@@ -265,6 +309,35 @@ extension MenuBuilderTests {
         XCTAssertEqual(titles[refresh + 2], "Reload Config")
         XCTAssertEqual(menu.items[refresh + 1].identifier?.rawValue, "reveal-config")
         XCTAssertEqual(menu.items[refresh + 2].identifier?.rawValue, "reload-config")
+    }
+
+    func testStatusRowsSortRedThenYellowThenGreyThenGreen() {
+        let pages = [
+            Self.colouredPage("Green A", .green),
+            Self.pendingPage("Pending"),
+            Self.colouredPage("Yellow", .yellow),
+            Self.colouredPage("Unreachable", .grey),
+            Self.colouredPage("Green B", .green),
+            Self.pageWithRedComponent("Red Component")
+        ]
+        let menu = MenuBuilder(handlers: Self.handlers()).build(for: Self.state(pages: pages))
+        XCTAssertEqual(
+            Self.pageTitles(menu),
+            ["Red Component", "Yellow", "Pending", "Unreachable", "Green A", "Green B"]
+        )
+    }
+
+    func testStatusRowOrderFollowsASeverityChange() {
+        let builder = MenuBuilder(handlers: Self.handlers())
+        let green = Self.colouredPage("Was Green", .green)
+        let red = Self.colouredPage("Was Red", .red)
+        let first = builder.build(for: Self.state(pages: [green, red]))
+        XCTAssertEqual(Self.pageTitles(first), ["Was Red", "Was Green"])
+
+        var recovered = red
+        recovered.snapshot = Self.colouredPage("Was Red", .green).snapshot
+        let second = builder.build(for: Self.state(pages: [green, recovered]))
+        XCTAssertEqual(Self.pageTitles(second), ["Was Green", "Was Red"])
     }
 
     func testRevealAndReloadConfigInvokeCallbacks() {

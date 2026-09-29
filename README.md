@@ -7,7 +7,7 @@ On first launch it adds [OpenAI Status](https://status.openai.com/) so you can s
 ## What it does
 
 - Add the public URL of a SaaS or internal status page.
-- The menu lists each page. The submenu lists that page's components.
+- The menu lists each page. Red pages come first, then yellow, then grey, then green. Pages of the same colour stay in the order from the config. The list updates when a page changes colour. The submenu lists that page's components.
 - The app polls every 60 seconds.
 - The menu-bar icon uses the worst real status (red > yellow > green).
 - A fetch failure is grey. If any page is grey, the icon flashes grey for one second every 30 seconds.

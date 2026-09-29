@@ -57,7 +57,7 @@ final class MenuBuilder {
             empty.isEnabled = false
             menu.addItem(empty)
         } else {
-            for page in state.pages {
+            for page in state.pages.sorted(by: Self.comesBeforeInMenu) {
                 menu.addItem(pageItem(page))
             }
         }
@@ -96,6 +96,21 @@ final class MenuBuilder {
         cachedContent = content
         cachedMenu = menu
         return menu
+    }
+
+    /// Menu order is red, yellow, grey, green. Grey is above green here.
+    /// The menu-bar icon still uses `Aggregator`, where grey does not beat green.
+    private static func comesBeforeInMenu(_ lhs: WatchedPage, _ rhs: WatchedPage) -> Bool {
+        menuRank(lhs.displaySeverity) < menuRank(rhs.displaySeverity)
+    }
+
+    private static func menuRank(_ severity: Severity) -> Int {
+        switch severity {
+        case .red: return 0
+        case .yellow: return 1
+        case .grey: return 2
+        case .green: return 3
+        }
     }
 
     private func pageItem(_ page: WatchedPage) -> NSMenuItem {
