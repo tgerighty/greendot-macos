@@ -84,22 +84,17 @@ public enum AdobeParser {
         for incident in incidents.values {
             guard let incident = incident as? [String: Any],
                   let products = incident["products"] as? [String: Any] else { continue }
+            let catalog = ServiceCatalog(incident["services"])
+            let watched = watchedProductIDs(incident["clouds"])
             for (key, value) in products {
-                guard let product = value as? [String: Any],
-                      let latest = latestHistory(product["history"]),
-                      let status = JSONScalar.nonempty(latest["status"] as? String)?.lowercased(),
-                      status != "closed", status != "dismissed" else { continue }
-                let name = JSONScalar.nonempty(product["name"] as? String) ?? key
-                let severity = severity(latest["severity"] as? String)
-                let id = JSONScalar.nonempty(product["id"] as? String) ?? key
-                let component = ComponentStatus(
-                    name: name,
-                    severity: severity.0,
-                    statusText: severity.1,
-                    id: id
-                )
-                if let existing = byID[id], existing.severity == .red { continue }
-                byID[id] = component
+                guard watched.contains(key) || watched.contains(productID(value, key: key)),
+                      let product = value as? [String: Any],
+                      let component = openProduct(product, key: key, catalog: catalog) else { continue }
+                if let existing = byID[component.id] {
+                    byID[component.id] = merge(existing, component)
+                } else {
+                    byID[component.id] = component
+                }
             }
         }
         let components = byID.values.sorted { $0.name < $1.name }
@@ -109,6 +104,125 @@ public enum AdobeParser {
             provider: .adobe,
             components: components
         )
+    }
+
+    private static let watchedCloudNames: Set<String> = ["document cloud", "creative cloud"]
+
+    private static func watchedProductIDs(_ value: Any?) -> Set<String> {
+        guard let clouds = value as? [String: Any] else { return [] }
+        var ids: Set<String> = []
+        for cloudValue in clouds.values {
+            guard let cloud = cloudValue as? [String: Any],
+                  let name = JSONScalar.nonempty(cloud["name"] as? String)?.lowercased(),
+                  watchedCloudNames.contains(name),
+                  let products = cloud["cloudProducts"] as? [Any] else { continue }
+            for product in products {
+                if let id = JSONScalar.stringID(product) {
+                    ids.insert(id)
+                }
+            }
+        }
+        return ids
+    }
+
+    private static func productID(_ value: Any, key: String) -> String {
+        guard let product = value as? [String: Any] else { return key }
+        return JSONScalar.nonempty(product["id"] as? String) ?? JSONScalar.stringID(product["id"]) ?? key
+    }
+
+    private static func openProduct(
+        _ product: [String: Any],
+        key: String,
+        catalog: ServiceCatalog
+    ) -> ComponentStatus? {
+        guard let latest = latestHistory(product["history"]),
+              let status = JSONScalar.nonempty(latest["status"] as? String)?.lowercased(),
+              status != "closed", status != "dismissed" else { return nil }
+        let name = JSONScalar.nonempty(product["name"] as? String) ?? key
+        let mapped = severity(latest["severity"] as? String)
+        let id = JSONScalar.nonempty(product["id"] as? String) ?? JSONScalar.stringID(product["id"]) ?? key
+        let children = serviceChildren(
+            ids: impactedServiceIDs(latest["serviceImpact"]),
+            productID: id,
+            mapped: mapped,
+            catalog: catalog
+        )
+        return ComponentStatus(
+            name: name,
+            severity: mapped.0,
+            statusText: mapped.1,
+            id: id,
+            children: children,
+            isGroup: !children.isEmpty
+        )
+    }
+
+    private static func serviceChildren(
+        ids: [String],
+        productID: String,
+        mapped: (Severity, String),
+        catalog: ServiceCatalog
+    ) -> [ComponentStatus] {
+        var seen: Set<String> = []
+        var children: [ComponentStatus] = []
+        for serviceID in ids {
+            guard seen.insert(serviceID).inserted,
+                  let serviceName = catalog.names[serviceID] else { continue }
+            children.append(ComponentStatus(
+                name: serviceName,
+                severity: mapped.0,
+                statusText: mapped.1,
+                id: productID + "|" + serviceID
+            ))
+        }
+        return children.sorted { $0.name < $1.name }
+    }
+
+    private static func impactedServiceIDs(_ value: Any?) -> [String] {
+        guard let impact = value as? [String: Any],
+              let services = impact["productServices"] as? [Any] else { return [] }
+        return services.compactMap { JSONScalar.stringID($0) }
+    }
+
+    private static func merge(_ lhs: ComponentStatus, _ rhs: ComponentStatus) -> ComponentStatus {
+        let severity = Aggregator.fromSeverities([lhs.severity, rhs.severity])
+        let statusText = lhs.severity == severity ? lhs.statusText : rhs.statusText
+        var childrenByID: [String: ComponentStatus] = [:]
+        for child in lhs.children + rhs.children {
+            if let existing = childrenByID[child.id] {
+                childrenByID[child.id] = merge(existing, child)
+            } else {
+                childrenByID[child.id] = child
+            }
+        }
+        let children = childrenByID.values.sorted { $0.name < $1.name }
+        return ComponentStatus(
+            name: lhs.name,
+            severity: severity,
+            statusText: statusText,
+            id: lhs.id,
+            children: children,
+            isGroup: !children.isEmpty
+        )
+    }
+
+    private struct ServiceCatalog {
+        let names: [String: String]
+
+        init(_ value: Any?) {
+            var names: [String: String] = [:]
+            if let services = value as? [String: Any] {
+                for (key, value) in services {
+                    guard let service = value as? [String: Any] else { continue }
+                    let name = JSONScalar.nonempty(service["name"] as? String) ?? key
+                    names[key] = name
+                    if let id = JSONScalar.stringID(service["id"]) {
+                        names[id] = name
+                    }
+                }
+            }
+            self.names = names
+        }
     }
 
     private static func latestHistory(_ value: Any?) -> [String: Any]? {

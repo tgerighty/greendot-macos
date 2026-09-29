@@ -7,7 +7,7 @@
 - A page can list `enabledRegions`. greendot counts a component only when its name or id contains one of those strings. Children of a matching component count too. An empty list mutes every component. A missing list keeps the component mute list. A vendor region that is not in the list stays muted, including a region added later.
 - Azure has its own status page at https://azure.status.microsoft/en-us/status. greendot reads the Azure RSS feed for that page. The Microsoft page still includes Azure unless that group is muted.
 - SAP Concur at https://open.concur.com/. Each datacenter is a group. A service is a leaf. `normal` is green, `degradation` is yellow, and `disruption` is red.
-- Adobe at https://status.adobe.com/. A product is a leaf only while its latest history entry is not closed or dismissed. Major or critical severity is red. Any other open severity is yellow. No open product is green.
+- Adobe at https://status.adobe.com/. Only Document Cloud and Creative Cloud count. An open product in one of those clouds is a group. Each service named in that product's latest history is a leaf. A product with no named service stays a leaf. Major or critical severity is red. Any other open severity is yellow. A closed or dismissed product is omitted. No open product in those clouds is green.
 - Azure DevOps at https://status.dev.azure.com/. Each service is a group. Each geography is a leaf. `healthy` is green, `degraded` is yellow, and `unhealthy` is red.
 - n8n at https://status.n8n.cloud/. Each monitor is a leaf. `success` is green, `warning` is yellow, and `danger` is red.
 - Zscaler at https://trust.zscaler.com/. The cloud banner is the page status. `none` is green and shows no components. `disruption` is red. Any other severity is yellow.

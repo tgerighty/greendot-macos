@@ -24,8 +24,8 @@ final class DirectStatusParserTests: XCTestCase {
 
     func testAdobeClosedHistoryIsGreen() throws {
         let data = Data("""
-        {"incidentEvent":{"incidents":{"1":{"products":{"9":{"id":"9","name":"Acrobat",\
-        "history":{"10":{"status":"Closed","severity":"Major"}}}}}}}}
+        {"incidentEvent":{"incidents":{"1":{"clouds":{"dc":{"name":"Document Cloud","cloudProducts":["9"]}},\
+        "products":{"9":{"id":"9","name":"Acrobat","history":{"10":{"status":"Closed","severity":"Major"}}}}}}}}
         """.utf8)
         let snap = try AdobeParser.parse(
             data: data,
@@ -39,7 +39,9 @@ final class DirectStatusParserTests: XCTestCase {
 
     func testAdobeOpenMajorIncidentIsRed() throws {
         let data = Data("""
-        {"incidentEvent":{"incidents":{"1":{"products":{"9":{"id":"9","name":"Acrobat","history":{
+        {"incidentEvent":{"incidents":{"1":{
+          "clouds":{"dc":{"name":"Document Cloud","cloudProducts":["9"]}},
+          "products":{"9":{"id":"9","name":"Acrobat","history":{
           "10":{"status":"Closed","severity":"Major"},
           "20":{"status":"Open","severity":"Major"}
         }}}}}}}
@@ -50,6 +52,125 @@ final class DirectStatusParserTests: XCTestCase {
         )
         XCTAssertEqual(snap.overall, .red)
         XCTAssertEqual(snap.components.map(\.name), ["Acrobat"])
+        XCTAssertTrue(snap.components[0].children.isEmpty)
+    }
+
+    func testAdobeOpenProductShowsImpactedServices() throws {
+        let data = Data("""
+        {"incidentEvent":{"incidents":{"202609290028":{
+          "clouds":{"cc":{"name":"Creative Cloud","cloudProducts":["503467"]}},
+          "products":{"503467":{"id":"503467","name":"Adobe Analytics","history":{
+            "1790683755":{"status":"Opened","severity":"Minor","serviceImpact":{
+              "productServices":["318036","999"]
+            }}
+          }}},
+          "services":{
+            "318036":{"id":"318036","name":"Reports and Analytics"},
+            "1":{"id":"1","name":"Analysis Workspace"}
+          }
+        }}}}
+        """.utf8)
+        let snap = try AdobeParser.parse(
+            data: data,
+            sourceURL: URL(string: "https://status.adobe.com")!
+        )
+        XCTAssertEqual(snap.overall, .yellow)
+        XCTAssertEqual(snap.components.map(\.name), ["Adobe Analytics"])
+        XCTAssertTrue(snap.components[0].isGroup)
+        XCTAssertEqual(snap.components[0].children.map(\.name), ["Reports and Analytics"])
+        XCTAssertEqual(snap.components[0].children[0].id, "503467|318036")
+        XCTAssertEqual(snap.components[0].children[0].severity, .yellow)
+        XCTAssertEqual(snap.components[0].children[0].statusText, "Minor")
+    }
+
+    func testAdobeSameProductKeepsWorseSeverityAndBothServices() throws {
+        let data = Data("""
+        {"incidentEvent":{"incidents":{
+          "1":{"clouds":{"cc":{"name":"Creative Cloud","cloudProducts":["9"]}},
+            "products":{"9":{"id":"9","name":"Adobe Analytics","history":{
+            "2":{"status":"Opened","severity":"Minor","serviceImpact":{
+              "productServices":["318036"]
+            }}
+          }}},"services":{"318036":{"id":"318036","name":"Reports and Analytics"}}},
+          "2":{"clouds":{"cc":{"name":"Creative Cloud","cloudProducts":["9"]}},
+            "products":{"9":{"id":"9","name":"Adobe Analytics","history":{
+            "3":{"status":"Opened","severity":"Major","serviceImpact":{
+              "productServices":[100]
+            }}
+          }}},"services":{"100":{"id":100,"name":"Analysis Workspace"}}}
+        }}}
+        """.utf8)
+        let snap = try AdobeParser.parse(
+            data: data,
+            sourceURL: URL(string: "https://status.adobe.com")!
+        )
+        XCTAssertEqual(snap.overall, .red)
+        XCTAssertEqual(snap.components[0].severity, .red)
+        XCTAssertEqual(snap.components[0].statusText, "Major")
+        XCTAssertEqual(
+            snap.components[0].children.map(\.name),
+            ["Analysis Workspace", "Reports and Analytics"]
+        )
+        XCTAssertEqual(snap.components[0].children.map(\.severity), [.red, .yellow])
+    }
+
+    func testAdobeLaterHistoryReplacesEarlierServices() throws {
+        let data = Data("""
+        {"incidentEvent":{"incidents":{"1":{
+          "clouds":{"cc":{"name":"Creative Cloud","cloudProducts":["9"]}},
+          "products":{"9":{"id":"9","name":"Adobe Analytics","history":{
+            "10":{"status":"Opened","severity":"Minor","serviceImpact":{"productServices":["1"]}},
+            "20":{"status":"Opened","severity":"Minor","serviceImpact":{"productServices":["2"]}}
+          }}},
+          "services":{
+            "1":{"id":"1","name":"Reports and Analytics"},
+            "2":{"id":"2","name":"Analysis Workspace"}
+          }
+        }}}}
+        """.utf8)
+        let snap = try AdobeParser.parse(
+            data: data,
+            sourceURL: URL(string: "https://status.adobe.com")!
+        )
+        XCTAssertEqual(snap.components[0].children.map(\.name), ["Analysis Workspace"])
+    }
+
+    func testAdobeCountsOnlyDocumentCloudAndCreativeCloud() throws {
+        let data = Data("""
+        {"incidentEvent":{"incidents":{
+          "1":{"clouds":{"a":{"name":"Experience Cloud","cloudProducts":["1"]}},
+            "products":{"1":{"id":"1","name":"Adobe Analytics","history":{
+              "2":{"status":"Opened","severity":"Minor"}}}}},
+          "2":{"clouds":{"b":{"name":"Document Cloud","cloudProducts":["2"]}},
+            "products":{"2":{"id":"2","name":"Acrobat","history":{
+              "3":{"status":"Opened","severity":"Major"}}}}},
+          "3":{"clouds":{"c":{"name":"Creative Cloud","cloudProducts":["3"]}},
+            "products":{"3":{"id":"3","name":"Photoshop","history":{
+              "4":{"status":"Opened","severity":"Minor","serviceImpact":{"productServices":["9"]}}}}},
+            "services":{"9":{"id":"9","name":"Photoshop API"}}},
+          "4":{"clouds":{
+              "d":{"name":"Document Cloud","cloudProducts":["4"]},
+              "e":{"name":"Experience Cloud","cloudProducts":["5"]}},
+            "products":{
+              "4":{"id":"4","name":"Adobe Acrobat Sign","history":{
+                "5":{"status":"Opened","severity":"Minor"}}},
+              "5":{"id":"5","name":"Adobe Workfront","history":{
+                "6":{"status":"Opened","severity":"Major"}}}}}
+        }}}
+        """.utf8)
+        let snap = try AdobeParser.parse(
+            data: data,
+            sourceURL: URL(string: "https://status.adobe.com")!
+        )
+        XCTAssertEqual(snap.overall, .red)
+        XCTAssertEqual(
+            snap.components.map(\.name),
+            ["Acrobat", "Adobe Acrobat Sign", "Photoshop"]
+        )
+        XCTAssertEqual(
+            snap.components.first { $0.name == "Photoshop" }?.children.map(\.name),
+            ["Photoshop API"]
+        )
     }
 
     func testAzureHealthyGeographyIsGreen() throws {
