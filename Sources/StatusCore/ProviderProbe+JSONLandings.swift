@@ -55,6 +55,9 @@ extension ProviderProbe {
         if let hit = try await probeClaudeIfLanding(context: context, flags: &flags) {
             return hit
         }
+        if let hit = try await probeGitHubIfLanding(context: context, flags: &flags) {
+            return hit
+        }
         if let hit = try await probeConcurIfLanding(context: context, flags: &flags) {
             return hit
         }
@@ -281,6 +284,33 @@ extension ProviderProbe {
         return url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).isEmpty
     }
 
+    static func probeGitHubIfLanding(
+        context: ProbeContext,
+        flags: inout ProbeFlags
+    ) async throws -> ProbeHit? {
+        guard isGitHubLanding(context.base) || isGitHubLanding(context.pageURL) else { return nil }
+        if let hit = try await probeJSON(
+            githubStatuspageURL,
+            sourceURL: context.base,
+            context: context,
+            flags: &flags,
+            parse: { data, url in
+                var snap = try StatuspageParser.parse(data: data, sourceURL: url)
+                snap.url = normalizedBase(url)
+                return snap
+            }
+        ) {
+            return hit
+        }
+        throw flags.finalError
+    }
+
+    static func isGitHubLanding(_ url: URL) -> Bool {
+        let host = url.host?.lowercased() ?? ""
+        guard host == "www.githubstatus.com" || host == "githubstatus.com" else { return false }
+        return url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).isEmpty
+    }
+
     static func isStripeLanding(_ url: URL) -> Bool {
         let host = url.host?.lowercased() ?? ""
         guard host == "status.stripe.com" else { return false }
@@ -338,4 +368,5 @@ private extension ProviderProbe {
     static let bitBarStatuspageURL = URL(string: "https://bitbar.status.smartbear.com/api/v2/summary.json")!
     static let zoomStatuspageURL = URL(string: "https://www.zoomstatus.com/api/v2/summary.json")!
     static let claudeStatuspageURL = URL(string: "https://status.claude.com/api/v2/summary.json")!
+    static let githubStatuspageURL = URL(string: "https://www.githubstatus.com/api/v2/summary.json")!
 }
