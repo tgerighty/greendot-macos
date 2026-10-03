@@ -3,16 +3,17 @@ import XCTest
 
 @MainActor
 final class CopyrightTests: XCTestCase {
-    func testLicenseFileReservesAllRightsToTerryGerighty() throws {
+    func testLicenseIsMIT() throws {
         let body = try String(contentsOf: repoRoot.appendingPathComponent("LICENSE"), encoding: .utf8)
-        XCTAssertTrue(body.contains("Copyright © 2026 Terry Gerighty"), body)
-        XCTAssertTrue(body.contains("All rights reserved"), body)
+        XCTAssertTrue(body.contains("MIT License"), body)
+        XCTAssertTrue(body.contains("Copyright (c) 2026 Terry Gerighty"), body)
+        XCTAssertTrue(body.contains("Permission is hereby granted, free of charge"), body)
     }
 
     func testReadmeLicenseNamesTerryGerighty() throws {
         let body = try String(contentsOf: repoRoot.appendingPathComponent("README.md"), encoding: .utf8)
-        XCTAssertTrue(body.contains("Copyright © 2026 Terry Gerighty"), body)
-        XCTAssertTrue(body.contains("All rights reserved"), body)
+        XCTAssertTrue(body.contains("MIT License"), body)
+        XCTAssertTrue(body.contains("Copyright (c) 2026 Terry Gerighty"), body)
     }
 
     func testInfoPlistHumanReadableCopyright() throws {
@@ -22,7 +23,7 @@ final class CopyrightTests: XCTestCase {
         let dict = try XCTUnwrap(plist as? [String: Any])
         XCTAssertEqual(
             dict["NSHumanReadableCopyright"] as? String,
-            "Copyright © 2026 Terry Gerighty. All rights reserved."
+            "Copyright © 2026 Terry Gerighty. MIT License."
         )
     }
 

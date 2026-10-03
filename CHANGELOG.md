@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The license is the MIT License.
+
 ### Added
 
 - A page can list `enabledRegions`. greendot counts a component only when its name or id contains one of those strings. Children of a matching component count too. An empty list mutes every component. A missing list keeps the component mute list. A vendor region that is not in the list stays muted, including a region added later.

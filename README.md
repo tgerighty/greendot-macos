@@ -68,4 +68,4 @@ rules for a file that is not complete, and the upgrade in full.
 
 ## License
 
-Copyright © 2026 Terry Gerighty. All rights reserved.
+MIT License. Copyright (c) 2026 Terry Gerighty.
