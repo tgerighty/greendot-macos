@@ -4,7 +4,8 @@
 
 ### Changed
 
-- Panels, toasts, and status dots use the greendot.cloud colours.
+- Panels, toasts, and status dots use the greendot.cloud colours. Panels and toasts follow the Mac appearance. The status menu Appearance item can pin Light or Dark.
+- A missing `interfaceStyle` in `state.json` follows the Mac appearance. greendot writes `light` or `dark` only after you choose that item.
 - The license is the MIT License.
 
 ### Added

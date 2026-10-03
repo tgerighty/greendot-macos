@@ -126,6 +126,7 @@ greendot writes an empty array across two lines.
 |---|---|---|
 | `version` | number | The format of the file. greendot writes `2`. |
 | `didSetLaunchAtLogin` | boolean | `true` after greendot set the login item once. It stops greendot from setting the item again. |
+| `interfaceStyle` | string | `light` or `dark` pins the panels and toasts. A missing key follows the Mac appearance. greendot does not write the key for that choice. |
 | `snapshots` | object | The last poll result for each page. The key is the page `id` from `config.json`. |
 
 Each value in `snapshots` holds the page `url` and the `snapshot`. greendot uses

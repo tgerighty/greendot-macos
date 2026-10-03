@@ -42,6 +42,19 @@ final class StatusMenuController {
         applyMenu()
     }
 
+    /// Draws the status image again and drops the cached menu. The system appearance changed.
+    func refreshAppearance() {
+        builder.invalidate()
+        displayedSeverity = nil
+        updateSeverity(state.severity)
+        if clickOpener.isTracking {
+            needsReload = true
+            return
+        }
+        needsReload = false
+        applyMenu()
+    }
+
     func update(_ state: StatusMenuState) {
         let menuContentChanged = self.state.content != state.content
         self.state = state

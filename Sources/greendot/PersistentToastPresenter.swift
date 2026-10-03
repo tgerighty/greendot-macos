@@ -78,7 +78,7 @@ private extension PanelPersistentToastPresenter {
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.isOpaque = false
         window.backgroundColor = .clear
-        window.appearance = NSAppearance(named: .aqua)
+        GreendotStyle.applyAppearance(window)
         window.hasShadow = true
         window.hidesOnDeactivate = false
         window.isReleasedWhenClosed = false
@@ -162,15 +162,15 @@ private extension PanelPersistentToastPresenter {
 
 private final class PersistentToastCard: NSView {
     var onAcknowledge: () -> Void = {}
+    private let dot = NSImageView()
+    private let severity: Severity
 
     init(toast: Toast) {
+        severity = toast.severity
         super.init(frame: NSRect(origin: .zero, size: PersistentToastLayout.size))
         wantsLayer = true
-        layer?.backgroundColor = GreendotStyle.card.cgColor
         layer?.cornerRadius = GreendotStyle.radius
         layer?.borderWidth = 1
-        layer?.borderColor = GreendotStyle.line.cgColor
-        let dot = NSImageView(image: StatusDot.image(toast.severity, size: 18))
         let title = NSTextField(labelWithString: toast.pageName)
         title.font = .boldSystemFont(ofSize: 13)
         title.textColor = GreendotStyle.foreground
@@ -181,6 +181,7 @@ private final class PersistentToastCard: NSView {
             $0.translatesAutoresizingMaskIntoConstraints = false
             addSubview($0)
         }
+        applyChrome()
         NSLayoutConstraint.activate([
             dot.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             dot.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -217,5 +218,20 @@ private final class PersistentToastCard: NSView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        applyChrome()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyChrome()
+    }
+
+    private func applyChrome() {
+        GreendotStyle.applyCardChrome(self)
+        dot.image = StatusDot.image(severity, size: 18, darkChrome: GreendotStyle.usesDarkChrome)
     }
 }

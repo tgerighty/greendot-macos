@@ -6,15 +6,18 @@ enum StatusDot {
     private struct Key: Hashable {
         var severity: Severity
         var size: CGFloat
+        var darkChrome: Bool
     }
 
     private static var cache: [Key: NSImage] = [:]
 
-    static func image(_ severity: Severity, size: CGFloat = 12) -> NSImage {
-        let key = Key(severity: severity, size: size)
+    /// `darkChrome` nil uses the menu bar appearance. A toast passes the panel appearance.
+    static func image(_ severity: Severity, size: CGFloat = 12, darkChrome: Bool? = nil) -> NSImage {
+        let dark = darkChrome ?? GreendotStyle.systemIsDark
+        let key = Key(severity: severity, size: size, darkChrome: dark)
         if let hit = cache[key] { return hit }
+        let fill = GreendotStyle.concrete(severity, darkChrome: dark)
         let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
-            let fill = color(severity)
             fill.withAlphaComponent(0.16).setFill()
             NSBezierPath(ovalIn: rect).fill()
             // The cloud dot is 0.7rem inside a 0.22rem ring. 1.14rem is the full mark.
@@ -30,7 +33,11 @@ enum StatusDot {
         return image
     }
 
+    static func clearCache() {
+        cache.removeAll()
+    }
+
     static func color(_ severity: Severity) -> NSColor {
-        GreendotStyle.color(severity)
+        GreendotStyle.concrete(severity, darkChrome: GreendotStyle.usesDarkChrome)
     }
 }

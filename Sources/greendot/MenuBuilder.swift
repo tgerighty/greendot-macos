@@ -6,16 +6,23 @@ struct StatusMenuState: Equatable {
         let pages: [WatchedPage]
         let disabledManagedPages: [WatchedPage]
         let launchAtLoginEnabled: Bool
+        let interfaceStyle: InterfaceStyle
     }
 
     var pages: [WatchedPage]
     var disabledManagedPages: [WatchedPage] = []
     var severity: Severity
     var launchAtLoginEnabled: Bool
+    var interfaceStyle: InterfaceStyle = .system
 
     /// Values that affect the built menu. Severity only affects the status-item image.
     var content: Content {
-        Content(pages: pages, disabledManagedPages: disabledManagedPages, launchAtLoginEnabled: launchAtLoginEnabled)
+        Content(
+            pages: pages,
+            disabledManagedPages: disabledManagedPages,
+            launchAtLoginEnabled: launchAtLoginEnabled,
+            interfaceStyle: interfaceStyle
+        )
     }
 }
 
@@ -30,6 +37,7 @@ struct StatusMenuHandlers {
     var onRevealConfig: () -> Void
     var onReloadConfig: () -> Void
     var onToggleLaunchAtLogin: () -> Void
+    var onSetInterfaceStyle: (InterfaceStyle) -> Void = { _ in }
     var onAbout: () -> Void
     var onQuit: () -> Void
 }
@@ -42,6 +50,11 @@ final class MenuBuilder {
 
     init(handlers: StatusMenuHandlers) {
         self.handlers = handlers
+    }
+
+    func invalidate() {
+        cachedContent = nil
+        cachedMenu = nil
     }
 
     func build(for state: StatusMenuState) -> NSMenu {
@@ -81,6 +94,7 @@ final class MenuBuilder {
             actionItem("Reveal Config File", identifier: "reveal-config", action: handlers.onRevealConfig)
         )
         menu.addItem(actionItem("Reload Config", identifier: "reload-config", action: handlers.onReloadConfig))
+        menu.addItem(appearanceItem(state.interfaceStyle))
 
         let login = actionItem(
             "Launch at Login",
@@ -233,6 +247,34 @@ final class MenuBuilder {
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         item.identifier = NSUserInterfaceItemIdentifier(identifier)
         TargetAction.install(item, action)
+        return item
+    }
+
+    private func appearanceItem(_ style: InterfaceStyle) -> NSMenuItem {
+        let parent = NSMenuItem(title: "Appearance", action: nil, keyEquivalent: "")
+        parent.identifier = NSUserInterfaceItemIdentifier("appearance")
+        let submenu = NSMenu()
+        submenu.autoenablesItems = false
+        submenu.addItem(appearanceChoice(
+            .system, title: "Match System", identifier: "appearance-system", selected: style
+        ))
+        submenu.addItem(appearanceChoice(
+            .light, title: "Light", identifier: "appearance-light", selected: style
+        ))
+        submenu.addItem(appearanceChoice(
+            .dark, title: "Dark", identifier: "appearance-dark", selected: style
+        ))
+        parent.submenu = submenu
+        return parent
+    }
+
+    private func appearanceChoice(
+        _ choice: InterfaceStyle, title: String, identifier: String, selected: InterfaceStyle
+    ) -> NSMenuItem {
+        let item = actionItem(title, identifier: identifier) { [handlers] in
+            handlers.onSetInterfaceStyle(choice)
+        }
+        item.state = selected == choice ? .on : .off
         return item
     }
 }

@@ -3,7 +3,7 @@ import StatusCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var statusMenu: StatusMenuController?
+    var statusMenu: StatusMenuController?
     var monitor: Monitor?
     var store: PageStore?
     var pollTimer: Timer?
@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var reloadingConfig = false
     var toastDelivery: any ToastDelivery = SystemToastDelivery()
     var pollRefreshState = (presentedError: false, latestInvocation: UInt64(0))
+    var appearanceObservation: NSKeyValueObservation?
     var presentError: @MainActor (Error) -> Void = { error in
         _ = NSAlert(error: error).runModal()
     }
@@ -57,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             state: makeStatusMenuState(monitor),
             handlers: makeStatusMenuHandlers()
         )
+        observeSystemAppearance()
         installUITestHooks()
 
         startupTask = Task {
@@ -85,6 +87,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func loadMonitor(_ monitor: Monitor) -> Bool {
         do {
             try monitor.load()
+            GreendotStyle.choice = monitor.interfaceStyle
+            StatusDot.clearCache()
+            GreendotStyle.refreshOpenWindows()
             return true
         } catch {
             presentError(error)
@@ -131,7 +136,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pages: monitor.pages,
             disabledManagedPages: monitor.disabledManagedPages,
             severity: monitor.displayedSeverity(at: Date()),
-            launchAtLoginEnabled: LaunchAtLogin.isEnabled
+            launchAtLoginEnabled: LaunchAtLogin.isEnabled,
+            interfaceStyle: monitor.interfaceStyle
         )
     }
 
@@ -165,6 +171,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onToggleLaunchAtLogin: { [weak self] in
                 LaunchAtLogin.toggle()
                 self?.rebuild()
+            },
+            onSetInterfaceStyle: { [weak self] style in
+                self?.setInterfaceStyle(style)
             },
             onAbout: { AboutPanel.show() },
             onQuit: { NSApp.terminate(nil) }

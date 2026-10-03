@@ -10,6 +10,8 @@ public struct AppConfig: Equatable, Sendable {
     /// IDs of optional managed pages switched off by this user.
     public var disabledManagedPageIDs: Set<UUID>
     public var disabledManagedPages: [WatchedPage]
+    /// Machine-local. `PageStore` keeps it in `state.json` and omits it from `config.json`.
+    public var interfaceStyle: InterfaceStyle
 
     public init(
         version: Int = currentVersion,
@@ -17,7 +19,8 @@ public struct AppConfig: Equatable, Sendable {
         pages: [WatchedPage] = [],
         didSetLaunchAtLogin: Bool = false,
         disabledManagedPageIDs: Set<UUID> = [],
-        disabledManagedPages: [WatchedPage] = []
+        disabledManagedPages: [WatchedPage] = [],
+        interfaceStyle: InterfaceStyle = .system
     ) {
         self.version = version
         self.pollSeconds = pollSeconds
@@ -25,6 +28,7 @@ public struct AppConfig: Equatable, Sendable {
         self.didSetLaunchAtLogin = didSetLaunchAtLogin
         self.disabledManagedPageIDs = disabledManagedPageIDs
         self.disabledManagedPages = disabledManagedPages
+        self.interfaceStyle = interfaceStyle
     }
 
     /// Missing, non-finite, or zero and below becomes the default.

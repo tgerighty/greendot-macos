@@ -9,21 +9,24 @@ struct PageState: Codable {
 /// `state.json`. The machine-local cache. `config.json` holds settings only.
 struct StateFile: Codable {
     enum CodingKeys: String, CodingKey {
-        case version, didSetLaunchAtLogin, snapshots
+        case version, didSetLaunchAtLogin, snapshots, interfaceStyle
     }
 
     var version: Int
     var didSetLaunchAtLogin: Bool
     var snapshots: [String: PageState]
+    var interfaceStyle: InterfaceStyle
 
     init(
         version: Int = AppConfig.currentVersion,
         didSetLaunchAtLogin: Bool,
-        snapshots: [String: PageState]
+        snapshots: [String: PageState],
+        interfaceStyle: InterfaceStyle = .system
     ) {
         self.version = version
         self.didSetLaunchAtLogin = didSetLaunchAtLogin
         self.snapshots = snapshots
+        self.interfaceStyle = interfaceStyle
     }
 
     init(from decoder: Decoder) throws {
@@ -32,6 +35,22 @@ struct StateFile: Codable {
         // Every state file greendot writes carries this key. A file without it still proves a prior launch.
         didSetLaunchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .didSetLaunchAtLogin) ?? true
         snapshots = try container.decodeIfPresent([String: PageState].self, forKey: .snapshots) ?? [:]
+        // A wrong type must not drop the cached polls. A missing key follows the Mac appearance.
+        if let style = try? container.decodeIfPresent(InterfaceStyle.self, forKey: .interfaceStyle) {
+            interfaceStyle = style
+        } else {
+            interfaceStyle = .system
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(version, forKey: .version)
+        try container.encode(didSetLaunchAtLogin, forKey: .didSetLaunchAtLogin)
+        try container.encode(snapshots, forKey: .snapshots)
+        if interfaceStyle != .system {
+            try container.encode(interfaceStyle, forKey: .interfaceStyle)
+        }
     }
 }
 
@@ -54,6 +73,8 @@ extension AppConfig: Codable {
         didSetLaunchAtLogin = rawLaunchFlag ?? false
         disabledManagedPageIDs = (try? container.decodeIfPresent(Set<UUID>.self, forKey: .disabledManagedPageIDs)) ?? []
         disabledManagedPages = []
+        // Machine-local. `applyState` replaces this from `state.json`.
+        interfaceStyle = .system
     }
 
     public func encode(to encoder: Encoder) throws {

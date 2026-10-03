@@ -108,6 +108,7 @@ public final class PageStore: @unchecked Sendable {
             return
         }
         config.didSetLaunchAtLogin = state.didSetLaunchAtLogin
+        config.interfaceStyle = state.interfaceStyle
         for index in config.pages.indices {
             guard let entry = state.snapshots[config.pages[index].id.uuidString] else { continue }
             // A cached result belongs to the url it was polled from. A hand-edited url drops it.
@@ -199,7 +200,8 @@ public final class PageStore: @unchecked Sendable {
         try writeIfChanged(configData, to: configURL)
         let state = StateFile(
             didSetLaunchAtLogin: config.didSetLaunchAtLogin,
-            snapshots: Self.snapshots(of: config)
+            snapshots: Self.snapshots(of: config),
+            interfaceStyle: config.interfaceStyle
         )
         do {
             try writeIfChanged(try Self.encoder.encode(state), to: stateURL)

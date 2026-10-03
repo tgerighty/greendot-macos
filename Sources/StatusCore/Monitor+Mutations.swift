@@ -24,6 +24,14 @@ extension Monitor {
         try commitWatchedPageMutation { _ in }
     }
 
+    public var interfaceStyle: InterfaceStyle {
+        withStateLock { config.interfaceStyle }
+    }
+
+    public func setInterfaceStyle(_ style: InterfaceStyle) throws {
+        try commitWatchedPageMutation { $0.interfaceStyle = style }
+    }
+
     public func enableLaunchAtLoginOnFirstRun() {
         let didChange: Bool = {
             transitionLock.lock()

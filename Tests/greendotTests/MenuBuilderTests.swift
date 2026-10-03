@@ -68,6 +68,26 @@ final class MenuBuilderTests: XCTestCase {
         XCTAssertEqual(about.map { $0 + 1 }, quit)
     }
 
+    func testAppearanceMenuChecksTheStoredStyleAndReportsTheChoice() {
+        let match = MenuBuilder(handlers: Self.handlers())
+            .build(for: Self.state(pages: []))
+        let matchMenu = match.item(withTitle: "Appearance")?.submenu
+        XCTAssertEqual(matchMenu?.item(withTitle: "Match System")?.state, .on)
+        XCTAssertEqual(matchMenu?.item(withTitle: "Dark")?.state, .off)
+
+        var chosen: InterfaceStyle?
+        var handlers = Self.handlers()
+        handlers.onSetInterfaceStyle = { chosen = $0 }
+        var darkState = Self.state(pages: [])
+        darkState.interfaceStyle = .dark
+        let dark = MenuBuilder(handlers: handlers).build(for: darkState)
+        let darkMenu = dark.item(withTitle: "Appearance")?.submenu
+        XCTAssertEqual(darkMenu?.item(withTitle: "Dark")?.state, .on)
+        XCTAssertEqual(darkMenu?.item(withTitle: "Match System")?.state, .off)
+        Self.invoke(darkMenu?.item(withTitle: "Light"))
+        XCTAssertEqual(chosen, .light)
+    }
+
     func testAboutInvokesCallback() {
         var aboutCount = 0
         let menu = MenuBuilder(handlers: Self.handlers(onAbout: { aboutCount += 1 }))
