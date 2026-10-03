@@ -107,6 +107,16 @@ final class PanelLifecycleTests: XCTestCase {
         panel.close()
     }
 
+    func testStatusDotUsesTheCloudPalette() {
+        let green = StatusDot.color(.green).usingColorSpace(.sRGB)
+        let yellow = StatusDot.color(.yellow).usingColorSpace(.sRGB)
+        let red = StatusDot.color(.red).usingColorSpace(.sRGB)
+        XCTAssertEqual(green?.greenComponent ?? 0, 0.5552, accuracy: 0.01)
+        XCTAssertEqual(yellow?.redComponent ?? 0, 0.8174, accuracy: 0.01)
+        XCTAssertEqual(red?.redComponent ?? 0, 0.7869, accuracy: 0.01)
+        XCTAssertGreaterThan(green?.greenComponent ?? 0, green?.redComponent ?? 1)
+    }
+
     func testStatusDotImageIsNonNilAndHasSize() {
         _ = NSApplication.shared
         let image = StatusDot.image(.green, size: 12)

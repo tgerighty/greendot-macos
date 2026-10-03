@@ -78,6 +78,7 @@ private extension PanelPersistentToastPresenter {
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.isOpaque = false
         window.backgroundColor = .clear
+        window.appearance = NSAppearance(named: .aqua)
         window.hasShadow = true
         window.hidesOnDeactivate = false
         window.isReleasedWhenClosed = false
@@ -165,14 +166,17 @@ private final class PersistentToastCard: NSView {
     init(toast: Toast) {
         super.init(frame: NSRect(origin: .zero, size: PersistentToastLayout.size))
         wantsLayer = true
-        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
-        layer?.cornerRadius = 10
+        layer?.backgroundColor = GreendotStyle.card.cgColor
+        layer?.cornerRadius = GreendotStyle.radius
+        layer?.borderWidth = 1
+        layer?.borderColor = GreendotStyle.line.cgColor
         let dot = NSImageView(image: StatusDot.image(toast.severity, size: 18))
         let title = NSTextField(labelWithString: toast.pageName)
         title.font = .boldSystemFont(ofSize: 13)
+        title.textColor = GreendotStyle.foreground
         let body = NSTextField(labelWithString: toast.body)
         body.font = .systemFont(ofSize: 12)
-        body.textColor = .secondaryLabelColor
+        body.textColor = GreendotStyle.muted
         [dot, title, body].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
             addSubview($0)

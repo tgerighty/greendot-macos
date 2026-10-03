@@ -42,7 +42,7 @@ final class ComponentPicker: NSObject {
         let components = rootComponents
         guard !components.isEmpty else { return [] }
 
-        let label = NSTextField(labelWithString: "Components")
+        let label = GreendotStyle.sectionLabel("Components")
         label.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(label)
 

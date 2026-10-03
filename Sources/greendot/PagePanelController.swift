@@ -54,6 +54,7 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         window.title = editing ? "Edit Status Page" : "Add Status Page"
         window.level = .floating
         window.isReleasedWhenClosed = false
+        GreendotStyle.paint(window)
         super.init()
         window.delegate = self
         window.contentView = buildView(page: page, listHeight: listHeight)
@@ -93,6 +94,7 @@ final class PagePanelController: NSObject, NSWindowDelegate {
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: window.frame.height))
         configureFields(page: page)
         let save = button(page == nil ? "Add" : "Save", id: "save-button", action: #selector(saveTapped))
+        GreendotStyle.primary(save)
         saveButton = save
         save.keyEquivalent = "\r"
         let cancel = button("Cancel", id: "cancel-button", action: #selector(cancelTapped))
@@ -143,9 +145,9 @@ final class PagePanelController: NSObject, NSWindowDelegate {
     }
 
     private func fieldConstraints(in view: NSView) -> [NSLayoutConstraint] {
-        let urlLabel = NSTextField(labelWithString: "Status page URL")
-        let nameLabel = NSTextField(labelWithString: "Name")
-        let tokenLabel = NSTextField(labelWithString: "Token")
+        let urlLabel = GreendotStyle.sectionLabel("Status page URL")
+        let nameLabel = GreendotStyle.sectionLabel("Name")
+        let tokenLabel = GreendotStyle.sectionLabel("Token")
         urlLabel.translatesAutoresizingMaskIntoConstraints = false
         nameLabel.translatesAutoresizingMaskIntoConstraints = false
         tokenLabel.translatesAutoresizingMaskIntoConstraints = false

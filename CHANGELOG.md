@@ -40,6 +40,7 @@
 
 ### Changed
 
+- Panels, toasts, and status dots use the greendot.cloud colours.
 - The status menu lists pages by colour. Red comes first, then yellow, then grey, then green. Pages of the same colour stay in the order from the config. The list updates when a page changes colour.
 - A click on a region-filtered component group scans that tree once. On a fixed 800-leaf tree, the median time was 75.615 ms (range 74.917–80.838). It is now 1.912 ms (range 1.831–2.204).
 - greendot does not show a dialog when `config.json` changes on disk. It loads the file. An open Add, Edit, or Remove window waits until that window closes. Component choices in that window are written when the window closes, not on each click.

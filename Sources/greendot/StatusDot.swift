@@ -14,8 +14,14 @@ enum StatusDot {
         let key = Key(severity: severity, size: size)
         if let hit = cache[key] { return hit }
         let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
-            color(severity).setFill()
-            NSBezierPath(ovalIn: NSRect(x: 1, y: 1, width: rect.width - 2, height: rect.height - 2)).fill()
+            let fill = color(severity)
+            fill.withAlphaComponent(0.16).setFill()
+            NSBezierPath(ovalIn: rect).fill()
+            // The cloud dot is 0.7rem inside a 0.22rem ring. 1.14rem is the full mark.
+            let scale = 0.7 / 1.14
+            let inset = rect.width * (1 - scale) / 2
+            fill.setFill()
+            NSBezierPath(ovalIn: rect.insetBy(dx: inset, dy: inset)).fill()
             return true
         }
         image.isTemplate = false
@@ -25,11 +31,6 @@ enum StatusDot {
     }
 
     static func color(_ severity: Severity) -> NSColor {
-        switch severity {
-        case .green: return NSColor.systemGreen
-        case .yellow: return NSColor.systemYellow
-        case .red: return NSColor.systemRed
-        case .grey: return NSColor.systemGray
-        }
+        GreendotStyle.color(severity)
     }
 }
