@@ -4,6 +4,74 @@ A macOS menu-bar app. You add a status-page URL. The app polls the page and show
 
 On first launch it adds [OpenAI Status](https://status.openai.com/) so you can see it working.
 
+## Use greendot
+
+Click the greendot dot to open the menu.
+
+![Menu when greendot has no status page](docs/images/menu-empty.png)
+
+### Add a status page
+
+1. Click the greendot dot.
+2. Click **Add Status Page…**.
+3. Enter the status page URL.
+4. Enter a name only when you want a name other than the name on the page.
+5. Enter a token only when the page requires a token.
+6. Click **Add**.
+
+![Add Status Page](docs/images/add-status-page.png)
+
+Enter the status page URL. Then click Add.
+
+![Add Status Page with a URL](docs/images/add-status-page-url.png)
+
+greendot reads the page and adds it to the menu. The first time you open greendot, it adds OpenAI Status when you have no pages.
+
+![Menu with a status page](docs/images/menu-page.png)
+
+Click the page name to open the status page in your browser. The submenu lists the parts of that page.
+
+- Each component shows its own colour.
+- The submenu lists an incident when the page has one.
+- Click **Notifications** to allow alerts. Click it again to stop alerts.
+- **Edit…** changes the URL, the name, or the token.
+- Clear a component checkbox to ignore that component. **All** sets every checkbox.
+- **Remove** removes the page from greendot. This does not change the vendor site.
+- **Open Status Page** opens the page in your browser.
+
+![Edit Status Page](docs/images/edit-status-page.png)
+
+A page gives one alert when it leaves green. It gives one alert when it returns to green. A later colour change updates the alert. It does not play a sound.
+
+### Colours
+
+The dot uses the worst colour of the status pages.
+
+| Colour | Meaning |
+|---|---|
+| Green | Every page that greendot can read is healthy. |
+| Yellow | At least one page reports degraded service. No page is down. |
+| Red | At least one page is down. |
+| Grey | greendot cannot read a page. |
+
+Grey does not replace green, yellow, or red. When any page is grey and the dot is another colour, the dot flashes grey for one second every 30 seconds.
+
+In the menu, red pages come first. Yellow pages come next, then grey, then green. Pages of the same colour stay in the order from your settings.
+
+### Commands
+
+| Command | Action |
+|---|---|
+| Refresh | Read every status page now. |
+| Reveal Config File | Show `config.json` in the Finder. |
+| Reload Config | Read `config.json` again. |
+| Appearance | Click Match System, Light, or Dark. |
+| Launch at Login | greendot opens when you log in. A check mark means this is on. |
+| About greendot | Show the version. |
+| Quit greendot | Stop the app. |
+
+Match System follows the Mac appearance. greendot stores Light or Dark only after you click that item.
+
 ## What it does
 
 - Add the public URL of a SaaS or internal status page.
