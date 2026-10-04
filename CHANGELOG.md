@@ -10,6 +10,7 @@
 
 ### Added
 
+- You can download [greendot 29](https://github.com/tgerighty/greendot-macos/releases/tag/v29) as a zip file.
 - The README shows the menu and the steps to add a status page.
 - A page can list `enabledRegions`. greendot counts a component only when its name or id contains one of those strings. Children of a matching component count too. An empty list mutes every component. A missing list keeps the component mute list. A vendor region that is not in the list stays muted, including a region added later.
 - Azure has its own status page at https://azure.status.microsoft/en-us/status. greendot reads the Azure RSS feed for that page. The Microsoft page still includes Azure unless that group is muted.

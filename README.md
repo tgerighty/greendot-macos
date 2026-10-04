@@ -4,6 +4,26 @@ A macOS menu-bar app. You add a status-page URL. The app polls the page and show
 
 On first launch it adds [OpenAI Status](https://status.openai.com/) so you can see it working.
 
+## Download
+
+The current version is greendot 29. [Download the zip](https://github.com/tgerighty/greendot-macos/releases/download/v29/greendot-29.zip).
+
+The zip contains `greendot.app`. greendot 29 requires macOS 13 or later.
+
+1. Unzip the file.
+2. Move `greendot.app` to the Applications folder.
+3. Open greendot.
+
+macOS can block the first open. Control-click `greendot.app`. Click Open.
+
+When macOS still blocks the app, open Terminal. Run this command:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/greendot.app
+```
+
+Open greendot again.
+
 ## Use greendot
 
 Click the greendot dot to open the menu.
